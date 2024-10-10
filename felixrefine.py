@@ -11,6 +11,7 @@ from scipy.constants import c, h, e, m_e, angstrom
 from scipy.linalg import eig, inv
 import matplotlib.pyplot as plt
 from matplotlib.patheffects import withStroke
+import matplotlib.colors as mcolors
 import time
 
 start = time.time()
@@ -301,14 +302,28 @@ atomic_number = np.array([fu.atomic_number_map[name] for name in atom_name])
 n_atoms = len(atom_label)
 print("There are "+str(n_atoms)+" atoms in the unit cell")
 # plot
-# bb = 5
-# fig, ax = plt.subplots(figsize=(bb, bb))
-# plt.scatter(atom_position[:, 0], atom_position[:, 1])
-# plt.xlim(left=0.0, right=1.0)
-# plt.ylim(bottom=0.0, top=1.0)
-# ax.set_axis_off
-# plt.grid(True)
-
+if plot:
+    atom_cvals = mcolors.Normalize(vmin=1, vmax=103)
+    atom_cmap = plt.cm.viridis
+    atom_colours = atom_cmap(atom_cvals(atomic_number))
+    border_cvals = mcolors.Normalize(vmin=0, vmax=1)
+    border_cmap = plt.cm.plasma
+    border_colours = border_cmap(border_cvals(atom_position[:, 2]))
+    bb = 5
+    fig, ax = plt.subplots(figsize=(bb, bb))
+    plt.scatter(atom_position[:, 0], atom_position[:, 1],
+                color=atom_colours, edgecolor=border_colours, linewidth=1, s=100)
+    plt.xlim(left=0.0, right=1.0)
+    plt.ylim(bottom=0.0, top=1.0)
+    ax.set_axis_off
+    plt.grid(True)
+if debug:
+    print("Symmetry operations:")
+    for i in range(len(symmetry_matrix)):
+        print(f"{i+1}: {symmetry_matrix[i]}, {symmetry_vector[i]}")
+    print("atomic coordinates")
+    for i in range(n_atoms):
+        print(f"{atom_label[i]} {atom_name[i]}: {atom_position[i]}")
 # mean inner potential as the sum of scattering factors at g=0 multiplied by
 # h^2/(2pi*m0*e*CellVolume)
 mip = 0.0
@@ -368,7 +383,7 @@ if plot:
     # plots the g-vectors in the pool, colours for different Laue zones
     plt.scatter(g_pool[:,0]/(2*np.pi), g_pool[:,1]/(2*np.pi), s=5, c=-g_pool[:,2])
     # title
-    plt.annotate("Beam pool", xy=(1.2-xm, xm-1.4), size=16)
+    plt.annotate("Beam pool", xy=(5, 5), xycoords='axes pixels', size=16)
     # major grid at 1 1/Å
     plt.grid(True,  which='major', color='grey', linestyle='-', linewidth=0.5)
     plt.gca().set_xticks(np.arange(-xm, xm, 1))

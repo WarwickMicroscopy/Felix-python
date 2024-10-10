@@ -1,4 +1,5 @@
 import ast
+import re
 import numpy as np
 from CifFile import CifFile
 from pylix_modules import pylix_dicts as fu
@@ -217,46 +218,35 @@ def read_cif(filename):
     return cif_dict
 
 
-def symop_part(sym):
-    # Converts part of a symmetry operation into a vector and constant
-    # vector part
-    if ("x" in sym):
-        vec = np.array([1, 0, 0])
-    if ("-x" in sym):
-        vec = np.array([-1, 0, 0])
-    if ("y" in sym):
-        vec = np.array([0, 1, 0])
-    if ("-y" in sym):
-        vec = np.array([0, -1, 0])
-    if ("z" in sym):
-        vec = np.array([0, 0, 1])
-    if ("-z" in sym):
-        vec = np.array([0, 0, -1])
-    # constant - we expect a fraction
-    if (sym.find("/") == -1):  # there is no fraction
-        const = 0
-    else:  # we expect single digit numerator and denominator
-        sign = 1
-        if ("-" in sym[sym.find("/")-2]):
-            sign = -1
-        const = sign * int(sym[sym.find("/")-1])/int(sym[sym.find("/")+1])
-
-    return vec, const
-
-
 def symop_convert(symop_xyz):
     # Converts symmetry operation xyz form into matrix+vector form
     symmetry_count = len(symop_xyz)
     mat = np.zeros((symmetry_count, 3, 3), dtype="float")
     vec = np.zeros((symmetry_count, 3), dtype="float")
+    coord_map = {'x': 0, 'y': 1, 'z': 2}
     # we expect comma-delimited symmetry operations
     for i in range(symmetry_count):
         symop = symop_xyz[i]
-        c1 = symop.find(",")
-        c2 = symop[(c1+1):].find(",")
-        (mat[i, :, 0], vec[i, 0]) = symop_part(symop[0:c1])
-        (mat[i, :, 1], vec[i, 1]) = symop_part(symop[(c1+1):c1+c2+1])
-        (mat[i, :, 2], vec[i, 2]) = symop_part(symop[(c1+c2+2):])
+        # Remove any numbers, extra spaces, and quotation marks
+        symop = re.sub(r'^[^a-zA-Z-]*', '', symop).replace("'", "").replace('"', '').strip()
+        # split into 3 parts
+        parts = symop.split(',')
+        for j, pt in enumerate(parts):
+            pt = pt.strip()  # Remove extra spaces
+            # Regex to capture the k/l/m (x, y, z) and the fractional part
+            match = re.match(r'([+-]?[xyz])?([+-]\d+/\d+)?([+-]?\d+)?', pt)
+            if match:
+                # Extract the variable part (x, y, z)
+                var_part = match.group(1)
+                if var_part:
+                    pm1 = -1 if var_part.startswith('-') else 1
+                    axis = coord_map[var_part[-1]]  # Get the axis from 'x', 'y', or 'z'
+                    mat[i, j, axis] = pm1
+                # Extract the fractional part
+                frac_part = match.group(2)
+                if frac_part:
+                    numerator, denominator = map(int, frac_part.split('/'))
+                    vec[i, j] = numerator / denominator
 
     return mat, vec
 
@@ -281,6 +271,8 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
     
     """
 
+    # tolerance in fractional coordinates to consider atoms to be the same
+    tol = 0.001
     # Determine the size of the all_atom_position array
     n_symmetry_operations = symmetry_vector.shape[0]
     n_basis_atoms = basis_atom_position.shape[0]
@@ -300,11 +292,20 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
     # Normalize positions to be within [0, 1]
     all_atom_position %= 1.0
     # make small values precisely zero
-    all_atom_position[np.abs(all_atom_position) < 1e-05] = 0.0
-    # Reduce to the set of unique fractional atomic positions
-    atom_position, i = np.unique(all_atom_position, axis=0, return_index=True)
+    all_atom_position[np.abs(all_atom_position) < tol] = 0.0
+    # Reduce to the set of unique fractional atomic positions using tol
+    dist_matrix = np.linalg.norm(all_atom_position[:, np.newaxis, :] - 
+                                 all_atom_position[np.newaxis, :, :], axis=-1)
+    unique_mask = np.ones(len(all_atom_position), dtype=bool)
+    i = []  # indices of unique atom positiona
+    for j in range(total_atoms):
+        if unique_mask[j]:  # If this point is still unique
+            i.append(j)
+            # Mark all points within tol as not unique
+            unique_mask &= (dist_matrix[j] > tol)
 
     # Apply the same reduction to the labels, names, occupancies, and B_iso
+    atom_position = all_atom_position[i]
     atom_label = all_atom_label[i]
     atom_name = all_atom_name[i]
     occupancy = all_occupancy[i]
