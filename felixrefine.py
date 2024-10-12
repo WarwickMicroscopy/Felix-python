@@ -17,7 +17,7 @@ import time
 start = time.time()
 # %% Main felix program
 # go to the pylix folder
-path = r"D:\OneDrive - University of Warwick\Pylix"
+path = r"C:\Users\rbean\Documents\GitHub\Felix-python"
 # path = r"C:\Users\rbean\OneDrive - University of Warwick\Pylix"
 os.chdir(path)
 
@@ -150,12 +150,12 @@ if "cell_volume" in cif_dict:
     cell_volume = px.dlst(cell_volume)
 else:
     cell_volume = cell_a*cell_b*cell_c*np.sqrt(1.0-np.cos(cell_alpha)**2
-                - np.cos(cell_beta)**2 - np.cos(cell_gamma)**2
-                + 2.0*np.cos(cell_alpha)*np.cos(cell_beta)*np.cos(cell_gamma))
+                  - np.cos(cell_beta)**2 - np.cos(cell_gamma)**2
+                  + 2.0*np.cos(cell_alpha)*np.cos(cell_beta)*np.cos(cell_gamma))
 
 # Conversion from scattering factor to volts
 scatt_fac_to_volts = ((h**2) /
-                      (2.0*np.pi * m_e * e * cell_volume* (angstrom**2)))
+                      (2.0*np.pi * m_e * e * cell_volume * (angstrom**2)))
 
 # symmetry operations
 if space_group_symop_operation_xyz is not None:
@@ -201,7 +201,7 @@ if atom_site_occupancy is not None:
     basis_occupancy = np.array([tup[0] for tup in atom_site_occupancy])
 else:
     basis_occupancy = np.ones([basis_count])
-    
+
 basis_atom_delta = np.zeros([basis_count, 3])  # ***********what's this
 
 # %% read felix.inp
@@ -233,13 +233,15 @@ if 'S' in refine_mode:
 elif 'A' in refine_mode:
     print("Refining Structure Factors, A")
     # needs error check for any other refinement
-    # raise ValueError("Structure factor refinement incompatible with anything else")
+    # raise ValueError("Structure factor refinement
+    # incompatible with anything else")
 else:
     if 'B' in refine_mode:
         print("Refining Atomic Coordinates, B")
         # redefine the basis if necessary to allow coordinate refinement
         basis_atom_position = px.preferred_basis(space_group_number,
-                                              basis_atom_position, basis_wyckoff)
+                                                 basis_atom_position,
+                                                 basis_wyckoff)
     if 'C' in refine_mode:
         print("Refining Occupancies, C")
     if 'D' in refine_mode:
@@ -273,7 +275,7 @@ else:
 # some setup calculations
 # Electron velocity in metres per second
 electron_velocity = (c * np.sqrt(1.0 - ((m_e * c**2) /
-                    (e * accelerating_voltage_kv*1000.0 + m_e * c**2))**2))
+                     (e * accelerating_voltage_kv*1000.0 + m_e * c**2))**2))
 # Electron wavelength in Angstroms
 electron_wavelength = h / (
     np.sqrt(2.0 * m_e * e * accelerating_voltage_kv*1000.0) *
@@ -312,7 +314,8 @@ if plot:
     bb = 5
     fig, ax = plt.subplots(figsize=(bb, bb))
     plt.scatter(atom_position[:, 0], atom_position[:, 1],
-                color=atom_colours, edgecolor=border_colours, linewidth=1, s=100)
+                color=atom_colours, edgecolor=border_colours,
+                linewidth=1, s=100)
     plt.xlim(left=0.0, right=1.0)
     plt.ylim(bottom=0.0, top=1.0)
     ax.set_axis_off
@@ -354,7 +357,7 @@ a_vec_m, b_vec_m, c_vec_m, ar_vec_m, br_vec_m, cr_vec_m, norm_dir_m = \
     px.reference_frames(cell_a, cell_b, cell_c, cell_alpha, cell_beta,
                         cell_gamma, space_group, x_direction,
                         incident_beam_direction, normal_direction)
-    
+
 # put the crystal in the micrcoscope reference frame, in Å
 atom_coordinate = (atom_position[:, 0, np.newaxis] * a_vec_m +
                    atom_position[:, 1, np.newaxis] * b_vec_m +
@@ -363,11 +366,14 @@ atom_coordinate = (atom_position[:, 0, np.newaxis] * a_vec_m +
 # %% set up beam pool
 setup = time.time()
 # NB g_pool are in reciprocal Angstroms in the microscope reference frame
-hkl, g_pool, g_pool_mag, g_output = px.hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k,
-                                        lattice_type, min_reflection_pool,
-                                        min_strong_beams, g_limit, input_hkls,
-                                        electron_wave_vector_magnitude)
+hkl, g_pool, g_pool_mag, g_output = px.hkl_make(ar_vec_m, br_vec_m, cr_vec_m,
+                                                big_k, lattice_type,
+                                                min_reflection_pool,
+                                                min_strong_beams, g_limit,
+                                                input_hkls,
+                                                electron_wave_vector_magnitude)
 n_hkl = len(g_pool)
+n_out = len(g_output)  # redefined to match things we can actually output
 # outputs
 print(f"Beam pool: {n_hkl} reflexions ({min_strong_beams} strong beams)")
 # we will have larger g-vectors in g_matrix since this has differences g - h
@@ -381,20 +387,23 @@ if plot:
     w_f = 10
     fig.set_size_inches(w_f, w_f)
     # plots the g-vectors in the pool, colours for different Laue zones
-    plt.scatter(g_pool[:,0]/(2*np.pi), g_pool[:,1]/(2*np.pi), s=5, c=-g_pool[:,2])
+    plt.scatter(g_pool[:, 0]/(2*np.pi), g_pool[:, 1]/(2*np.pi),
+                s=5, c=-g_pool[:, 2])
     # title
     plt.annotate("Beam pool", xy=(5, 5), xycoords='axes pixels', size=16)
     # major grid at 1 1/Å
     plt.grid(True,  which='major', color='grey', linestyle='-', linewidth=0.5)
     plt.gca().set_xticks(np.arange(-xm, xm, 1))
     plt.gca().set_yticks(np.arange(-xm, xm, 1))
-    plt.grid(True, which='minor', color='lightgrey', linestyle='--', linewidth=0.5)
+    plt.grid(True, which='minor', color='lightgrey', linestyle='--',
+             linewidth=0.5)
     # minor grid at 0.2 1/Å
     plt.gca().set_xticks(np.arange(-xm, xm, 0.2), minor=True)
     plt.gca().set_yticks(np.arange(-xm, xm, 0.2), minor=True)
     # remove axis labels
-    plt.tick_params(axis='both', which='both', bottom=False, top=False, 
-                    left=False, right=False, labelbottom=False, labelleft=False)
+    plt.tick_params(axis='both', which='both', bottom=False, top=False,
+                    left=False, right=False,
+                    labelbottom=False, labelleft=False)
     plt.show()
 
 # g-vector matrix
@@ -447,8 +456,8 @@ if 'S' not in refine_mode:
     if 'A' in refine_mode:  # Ug refinement
         print("Refining Structure Factors, A")
         # needs error check for any other refinement
-        # raise ValueError("Structure factor refinement incompatible with anything else")
-        
+        # raise ValueError("Structure factor refinement incompatible
+        # with anything else")
         # we refine magnitude and phase for each Ug.  However for space groups
         # with a centre of symmetry phases are fixed at 0 or pi, so only
         # amplitude is refined (1 independent variable per Ug)
@@ -468,7 +477,7 @@ if 'S' not in refine_mode:
             vars_per_ug = 2
 
         # set up Ug refinement
-        # equivalent g's are identified by abs(h)+abs(k)+abs(l)+a*h^2+b*k^2+c*l^2
+        # equivalent g's identified by abs(h)+abs(k)+abs(l)+a*h^2+b*k^2+c*l^2
         g_eqv = (10000*(np.sum(np.abs(g_matrix), axis=2) +
                         g_magnitude**2)).astype(int)
         # we keep track of individual Ug's in a matrix ug_eqv
@@ -536,8 +545,9 @@ if 'S' not in refine_mode:
                              not yet implemented")
 
         if 'F' in refine_mode:  # Lattice parameters
-            # This section needs work to include rhombohedral cells and non-standard settings!!!
-            independent_variable.append(cell_a)  # This is a free parameter for all lattice types
+            # This section needs work to include rhombohedral cells and
+            # non-standard settings!!!
+            independent_variable.append(cell_a)  # is in all lattice types
             independent_variable_type.append(71)
             if space_group_number < 75:  # Triclinic, monoclinic, orthorhombic
                 independent_variable.append(cell_b)
@@ -546,8 +556,10 @@ if 'S' not in refine_mode:
                 independent_variable_type.append(73)
             elif 142 < space_group_number < 168:  # Rhombohedral
                 err = 1  # Need to work out R- vs H- settings!!!
-                print("Rhombohedral R- and H- cells not yet implemented for unit cell refinement")
-            elif (167 < space_group_number < 195) or (74 < space_group_number < 143):  # Hexagonal or Tetragonal
+                print("Rhombohedral R- and H- cells not yet implemented \
+                      for unit cell refinement")
+            elif (167 < space_group_number < 195) or \
+                 (74 < space_group_number < 143):  # Hexagonal or Tetragonal
                 independent_variable.append(cell_c)
                 independent_variable_type.append(73)
 
@@ -569,7 +581,8 @@ if 'S' not in refine_mode:
     n_variables = len(independent_variable)
     if n_variables == 0:
         raise ValueError("No refinement variables! \
-        Check refine_mode flag in felix.inp. Valid refine modes are A,B,C,D,F,H,S")
+        Check refine_mode flag in felix.inp. \
+            Valid refine modes are A,B,C,D,F,H,S")
     if n_variables == 1:
         print("Only one independent variable")
     else:
@@ -581,12 +594,12 @@ if 'S' not in refine_mode:
     independent_variable_atom = np.array(atom_refine_flag[:n_variables])
 
 
-
 # %% deviation parameter for each pixel and g-vector
 # s_g [n_hkl, image diameter, image diameter]
 # and k vector for each pixel, tilted_k [image diameter, image diameter, 3]
 s_g, tilted_k = px.deviation_parameter(convergence_angle, image_radius,
-                                      big_k_mag, g_pool, g_pool_mag)
+                                       big_k_mag, g_pool, g_pool_mag)
+
 
 # %% choose strong beams and do the Bloch wave calculation
 pool = time.time()
@@ -594,7 +607,7 @@ pool = time.time()
 k_dot_n = np.tensordot(tilted_k, norm_dir_m, axes=([2], [0]))
 
 # output LACBED patterns
-lacbed = np.zeros([image_radius*2,image_radius*2, len(g_output)], dtype=float)
+lacbed = np.zeros([image_radius*2, image_radius*2, len(g_output)], dtype=float)
 
 print("Bloch wave calculation...", end=' ')
 if debug:
@@ -602,7 +615,7 @@ if debug:
     print("output indices")
     print(g_output[:15])
 # pixel by pixel calculations from here
-bf = np.zeros([image_radius*2,image_radius*2], dtype=float)
+bf = np.zeros([image_radius*2, image_radius*2], dtype=float)
 for pix_x in range(image_radius*2):
     for pix_y in range(image_radius*2):
         s_g_pix = np.squeeze(s_g[pix_x, pix_y, :])
@@ -619,28 +632,29 @@ for pix_x in range(image_radius*2):
 
         # Make a Ug matrix for this pixel by selecting only strong beams
         beam_projection_matrix = np.zeros((n_beams, n_hkl), dtype=np.complex128)
-        beam_projection_matrix[np.arange(n_beams), strong_beam_indices] = 1 + 0j
+        beam_projection_matrix[np.arange(n_beams), strong_beam_indices] = 1+0j
         # reduce the matrix using some nifty matrix multiplication
         beam_transpose = beam_projection_matrix.T
         ug_matrix_partial = np.dot(ug_matrix, beam_transpose)
         ug_sg_matrix = np.dot(beam_projection_matrix, ug_matrix_partial)
-        
+
         # Final normalization of the matrix
         # off-diagonal elements are Ug/2K, diagonal elements are Sg
         # Spence's (1990) 'Structure matrix'
         ug_sg_matrix = 2.0*np.pi**2 * ug_sg_matrix / big_k_mag
         # replace the diagonal with strong beam deviation parameters
-        ug_sg_matrix[np.arange(n_beams), np.arange(n_beams)] = s_g_pix[strong_beam_indices]
+        ug_sg_matrix[np.arange(n_beams), np.arange(n_beams)] = \
+            s_g_pix[strong_beam_indices]
 
         # weak beam correction (NOT WORKING)
-        # px.weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_indices, 
+        # px.weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_indices,
         #                min_weak_beams, big_k_mag)
 
         # surface normal correction part 1
         structure_matrix = np.zeros_like(ug_sg_matrix)
-        norm_factor = np.sqrt(1 + g_dot_norm[strong_beam_indices] / k_dot_n_pix)
+        norm_factor = np.sqrt(1 + g_dot_norm[strong_beam_indices]/k_dot_n_pix)
         structure_matrix = ug_sg_matrix / np.outer(norm_factor, norm_factor)
-        
+
         # get eigenvalues (gamma), eigenvectors
         gamma, eigenvectors = eig(structure_matrix)
         # Invert using LU decomposition (similar to ZGETRI in Fortran)
@@ -652,7 +666,7 @@ for pix_x in range(image_radius*2):
             print(eigenvectors[:5, :5])
 
         # calculate intensities
-        
+
         # Initialize incident (complex) wave function psi0
         # all zeros except 000 beam which is 1
         psi0 = np.zeros(n_beams, dtype=np.complex128)
@@ -667,9 +681,9 @@ for pix_x in range(image_radius*2):
         inverted_m = np.diag(m_ii)
         m_matrix = np.diag(1/m_ii)
 
-        # calculate wave functions and intensities (all strong beams in this pixel)
-        wave_functions =  (m_matrix @ eigenvectors @ thickness_terms 
-                           @ inverted_eigenvectors @ inverted_m @ psi0)
+        # calculate wave functions and intensities
+        wave_functions = (m_matrix @ eigenvectors @ thickness_terms
+                          @ inverted_eigenvectors @ inverted_m @ psi0)
         intensities = np.abs(wave_functions)**2
 
         # Map diffracted intensities to required output g vectors
