@@ -981,8 +981,9 @@ def hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k, lattice_type,
     return hkl, g_pool, g_mag, np.array(g_output)
 
 
-def Fg_matrix(n_hkl, scatter_factor_method_flag, n_atoms, atom_coordinate,
-              atomic_number, occupancy, B_iso, g_matrix, g_magnitude):
+def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
+              atomic_number, occupancy, B_iso, g_matrix, g_magnitude,
+              absorption_method, absorption_per):
     Fg_matrix = np.zeros([n_hkl, n_hkl], dtype=np.complex128)
     # calculate g.r for all g-vectors and atom positions [n_hkl, n_hkl, n_atoms]
     g_dot_r = np.einsum('ijk,lk->ijl', g_matrix, atom_coordinate)
@@ -993,20 +994,36 @@ def Fg_matrix(n_hkl, scatter_factor_method_flag, n_atoms, atom_coordinate,
     # g magnitudes but only one atom type.  Potential speed up by broadcasting
     # all atom types and modifying scattering factor methods to accept 2D + 1D
     # arrays [n_hkl, n_hkl] & [n_atoms], returning an array [n_hkl, n_hkl, n_atoms]
-    for i in range(n_atoms):  # get the scattering factor
-        if scatter_factor_method_flag == 0:
+    for i in range(n_atoms):
+        # get the scattering factor
+        if scatter_factor_method == 0:
             f_g = f_kirkland(atomic_number[i], g_magnitude)
-        elif scatter_factor_method_flag == 1:
+        elif scatter_factor_method == 1:
             f_g = f_lobato(atomic_number[i], g_magnitude)
-        elif scatter_factor_method_flag == 2:
+        elif scatter_factor_method == 2:
             f_g = f_peng(atomic_number[i], g_magnitude)
-        elif scatter_factor_method_flag == 3:
+        elif scatter_factor_method == 3:
             f_g = f_doyle_turner(atomic_number[i], g_magnitude)
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
+
+        # get the absorptive scattering factor (null for absorption_method==0)
+        # no absorption
+        if absorption_method == 0:
+            f_g_prime =  np.zeros_like(f_g)
+      # proportional model
+        elif absorption_method == 1:
+            f_g_prime = 1j * f_g * absorption_per/100.0
+        # Bird & King model, parameterised by Thomas (Acta Cryst 2023)
+        elif absorption_method == 2:
+            f_g_prime = 1j * f_g * absorption_per/100.0
+        
+        # The Structure Factor Equation
         # multiply by Debye-Waller factor, phase and occupancy
-        Fg_matrix = Fg_matrix+(f_g * phase[:, :, i] * occupancy[i] *
-                      np.exp(-B_iso[i]*(g_magnitude**2)/(16*np.pi**2)))
+        Fg_matrix = Fg_matrix+((f_g + f_g_prime) * phase[:, :, i] *
+                               occupancy[i] * 
+                               np.exp(-B_iso[i] * 
+                                      (g_magnitude**2)/(16*np.pi**2)))
 
     # clean up
     del phase

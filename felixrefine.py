@@ -17,8 +17,8 @@ import time
 start = time.time()
 # %% Main felix program
 # go to the pylix folder
-path = r"C:\Users\rbean\Documents\GitHub\Felix-python"
-# path = r"C:\Users\rbean\OneDrive - University of Warwick\Pylix"
+# path = r"C:\Users\rbean\Documents\GitHub\Felix-python"
+path = r"C:\Users\Richard\Documents\GitHub\Felix-python"
 os.chdir(path)
 
 # felix modules
@@ -33,9 +33,9 @@ print("felixrefine: see https://github.com/WarwickMicroscopy/Felix")
 print("-----------------------------------------------------------------")
 
 # variables to get from felix.inp
-scatter_factor_method_flag = None
+scatter_factor_method = None
 holz_flag = None
-absorb_flag = None
+absorption_method = None
 byte_size = None
 image_radius = None
 min_reflection_pool = None
@@ -261,13 +261,13 @@ if 'H' in refine_mode:
 if 'I' in refine_mode:
     print("Refining Accelerating Voltage, I")
 
-if scatter_factor_method_flag == 0:
+if scatter_factor_method == 0:
     print("Using Kirkland scattering factors")
-elif scatter_factor_method_flag == 1:
+elif scatter_factor_method == 1:
     print("Using Lobato scattering factors")
-elif scatter_factor_method_flag == 2:
+elif scatter_factor_method == 2:
     print("Using Peng scattering factors")
-elif scatter_factor_method_flag == 3:
+elif scatter_factor_method == 3:
     print("Using Doyle & Turner scattering factors")
 else:
     raise ValueError("No scattering factors chosen in felix.inp")
@@ -331,13 +331,13 @@ if debug:
 # h^2/(2pi*m0*e*CellVolume)
 mip = 0.0
 for i in range(n_atoms):  # get the scattering factor
-    if scatter_factor_method_flag == 0:
+    if scatter_factor_method == 0:
         mip += px.f_kirkland(atomic_number[i], 0.0)
-    elif scatter_factor_method_flag == 1:
+    elif scatter_factor_method == 1:
         mip += px.f_lobato(atomic_number[i], 0.0)
-    elif scatter_factor_method_flag == 2:
+    elif scatter_factor_method == 2:
         mip += px.f_peng(atomic_number[i], 0.0)
-    elif scatter_factor_method_flag == 3:
+    elif scatter_factor_method == 3:
         mip += px.f_doyle_turner(atomic_number[i], 0.0)
     else:
         error_flag = True
@@ -417,9 +417,10 @@ Fg_to_Ug = relativistic_correction / (np.pi * cell_volume)
 
 # now make the Ug matrix, i.e. calculate the structure factor Fg for all
 # g-vectors in g_matrix and convert using the above factor
-ug_matrix = Fg_to_Ug * px.Fg_matrix(n_hkl, scatter_factor_method_flag, n_atoms,
+ug_matrix = Fg_to_Ug * px.Fg_matrix(n_hkl, scatter_factor_method, n_atoms,
                                     atom_coordinate, atomic_number, occupancy,
-                                    B_iso, g_matrix, g_magnitude)
+                                    B_iso, g_matrix, g_magnitude,
+                                    absorption_method, absorption_per)
 # ug_matrix = 10 ug_matrix
 # matrix of dot products with the surface normal
 g_dot_norm = np.dot(g_pool, norm_dir_m)

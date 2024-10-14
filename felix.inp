@@ -5,13 +5,13 @@
 
 # Control flags
 write_flag                = 1
-scatter_factor_method_flag = 0
+scatter_factor_method     = 0
 holz_flag                 = 0
-absorb_flag               = 0
+absorption_method         = 1
 byte_size                 = 2
 
 # Radius of the beam in pixels
-image_radius              = 64
+image_radius              = 32
 
 # Beam selection criteria
 min_reflection_pool       = 200
@@ -21,7 +21,7 @@ g_limit                   = 3.0
 
 # Crystal settings
 debye_waller_constant     = 0.0
-absorption_per            = 10.0
+absorption_per            = 40.0
 
 # Microscope settings
 convergence_angle         = 1
