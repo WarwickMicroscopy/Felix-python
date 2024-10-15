@@ -1176,6 +1176,7 @@ def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list,
     #         2.0*big_k_mag*sum_d/(4.0*np.pi**2)
     return
 
+
 def f_kirkland(z, g_magnitude):
     """
     calculates atomic scattering factor using the Kirkland model.
@@ -1274,6 +1275,112 @@ def f_peng(z, g_magnitude):
 
     return f_g
 
+
+def read_dm3(file_path, y_pixels, x_pixels):
+    """
+    Reads a DM3 file and extracts the image matrix.
+    Parameters:
+    file_path (str): The path to the DM3 file.
+    y_pixels (int): Number of pixels in the Y dimension.
+    x_pixels (int): Number of pixels in the X dimension.
+    
+    Returns:
+    image_dm3 (ndarray): A 2D numpy array containing the image data.
+    
+    Raises:
+    ValueError: If there are any issues with reading the file or the data format.
+    """
+
+    # Parameters
+    print_tags = False
+    image_data_tag = 2
+    
+    # Initialize output variables
+    image_dm3 = np.zeros((max(y_pixels, x_pixels), max(y_pixels, x_pixels)), dtype=np.float32)
+    
+    # Initialize local variables
+    finding_tags = True
+    looking_for_data_tags = True
+    
+    n_bytes = 0
+    n_tags = 0
+    n_data_tags = 0
+    n_header_bytes = 0
+    iy = 0
+    ix = 0
+    previous_bytes = np.zeros(40, dtype=np.uint8)
+    previous_4_bytes = np.zeros(4, dtype=np.uint8)
+    
+    data_length = 0
+    
+    # Try to open the file
+    try:
+        with open(file_path, 'rb') as file:
+            while n_bytes < 4000000:
+                # Shift bytes and read new byte
+                previous_bytes = np.roll(previous_bytes, -1)
+                previous_4_bytes = np.roll(previous_4_bytes, -1)
+                byte = np.fromfile(file, dtype=np.uint8, count=1)
+                if byte.size == 0:  # End of file
+                    if print_tags:
+                        print(f'End Of File Reached, Total bytes = {n_bytes}')
+                    break
+                n_bytes += 1
+                previous_bytes[-1] = byte[0]
+                previous_4_bytes[-1] = byte[0]
+                # Check if at a DM3 tag delimiter '%%%%' (ASCII value 37)
+                if np.all(previous_4_bytes == [37, 37, 37, 37]):
+                    n_tags += 1
+                    
+                    # Convert bytes to tag label
+                    tag_label = ''.join(chr(b) for b in previous_bytes[:-4][previous_bytes[:-4] >= 32])
+                    
+                    if print_tags:
+                        print(f'{tag_label}  {n_tags}  {n_bytes}')
+                    
+                    if looking_for_data_tags:
+                        if tag_label == 'Data':
+                            n_data_tags += 1
+                        if n_data_tags == image_data_tag:
+                            looking_for_data_tags = False
+                            finding_tags = False
+
+                # read_image_data:
+                if n_header_bytes < 16:
+                    # Read 4-byte integer
+                    pre_data = np.fromfile(file, dtype=np.uint32, count=1)
+                    if pre_data.size == 0:
+                        raise ValueError(f'Error reading pre-data bytes, Byte number = {n_bytes}')
+
+                    if n_header_bytes == 12:
+                        # Convert to big endian format
+                        data_length = int.from_bytes(pre_data.tobytes(), 'big')
+                        if data_length != y_pixels * x_pixels:
+                            raise ValueError(f'Data array length does not match input pixel size. '
+                                             f'Data length = {data_length}, '
+                                             f'Expected = {y_pixels * x_pixels}')
+
+                    n_bytes += 4
+                    n_header_bytes += 4
+                else:
+                    # Read image data
+                    data_bytes = np.fromfile(file, dtype=np.float32, count=1)
+                    if data_bytes.size == 0:
+                        raise ValueError(f'Error reading image data, Byte number = {n_bytes}')
+                    
+                    n_bytes += 4
+                    iy += 1
+                    if iy == y_pixels + 1:
+                        iy = 1
+                        ix += 1
+
+                    if ix < x_pixels + 1:
+                        image_dm3[ix - 1, iy - 1] = data_bytes[0]
+
+    except FileNotFoundError:
+        raise ValueError(f"File not found: {file_path}")
+    
+    return image_dm3
 
 def atom_move(space_group_number, wyckoff):
     moves = np.zeros([3, 3])

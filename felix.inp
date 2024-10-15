@@ -7,14 +7,14 @@
 write_flag                = 1
 scatter_factor_method     = 0
 holz_flag                 = 0
-absorption_method         = 1
+absorption_method         = 2
 byte_size                 = 2
 
 # Radius of the beam in pixels
-image_radius              = 32
+image_radius              = 64
 
 # Beam selection criteria
-min_reflection_pool       = 200
+min_reflection_pool       = 250
 min_strong_beams          = 50
 min_weak_beams            = 0
 g_limit                   = 3.0
