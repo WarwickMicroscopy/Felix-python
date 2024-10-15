@@ -18,8 +18,8 @@ import time
 start = time.time()
 # %% Main felix program
 # go to the pylix folder
-path = r"C:\Users\rbean\Documents\GitHub\Felix-python"
-# path = r"C:\Users\Richard\Documents\GitHub\Felix-python"
+# path = r"C:\Users\rbean\Documents\GitHub\Felix-python"
+path = r"C:\Users\Richard\Documents\GitHub\Felix-python"
 os.chdir(path)
 
 # felix modules
@@ -387,16 +387,22 @@ if plot:
     fig, ax = plt.subplots(1, 1)
     w_f = 10
     fig.set_size_inches(w_f, w_f)
+    ax.set_facecolor('black')
+    #colour according to Laue zone
+    lz_cvals = mcolors.Normalize(vmin=np.min(g_pool[:, 2]),
+                                   vmax=np.max(g_pool[:, 2]))
+    lz_cmap = plt.cm.brg
+    lz_colours = lz_cmap(lz_cvals(g_pool[:, 2]))
     # plots the g-vectors in the pool, colours for different Laue zones
     plt.scatter(g_pool[:, 0]/(2*np.pi), g_pool[:, 1]/(2*np.pi),
-                s=5, c=-g_pool[:, 2])
+                s=20, color=lz_colours)
     # title
-    plt.annotate("Beam pool", xy=(5, 5), xycoords='axes pixels', size=16)
+    plt.annotate("Beam pool", xy=(5, 5), color='white', xycoords='axes pixels', size=24)
     # major grid at 1 1/Å
-    plt.grid(True,  which='major', color='grey', linestyle='-', linewidth=0.5)
+    plt.grid(True,  which='major', color='lightgrey', linestyle='-', linewidth=1.0)
     plt.gca().set_xticks(np.arange(-xm, xm, 1))
     plt.gca().set_yticks(np.arange(-xm, xm, 1))
-    plt.grid(True, which='minor', color='lightgrey', linestyle='--',
+    plt.grid(True, which='minor', color='grey', linestyle='--',
              linewidth=0.5)
     # minor grid at 0.2 1/Å
     plt.gca().set_xticks(np.arange(-xm, xm, 0.2), minor=True)
@@ -431,6 +437,128 @@ print("Ug matrix constructed")
 if debug:
     np.set_printoptions(precision=3, suppress=True)
     print(100*ug_matrix[:5, :5])
+
+
+# %% deviation parameter for each pixel and g-vector
+# s_g [n_hkl, image diameter, image diameter]
+# and k vector for each pixel, tilted_k [image diameter, image diameter, 3]
+s_g, tilted_k = px.deviation_parameter(convergence_angle, image_radius,
+                                       big_k_mag, g_pool, g_pool_mag)
+
+
+# %% choose strong beams and do the Bloch wave calculation
+pool = time.time()
+# Dot product of k with surface normal, size [image diameter, image diameter]
+k_dot_n = np.tensordot(tilted_k, norm_dir_m, axes=([2], [0]))
+
+# output LACBED patterns
+lacbed = np.zeros([image_radius*2, image_radius*2, len(g_output)], dtype=float)
+
+print("Bloch wave calculation...", end=' ')
+if debug:
+    print("")
+    print("output indices")
+    print(g_output[:15])
+# pixel by pixel calculations from here
+bf = np.zeros([image_radius*2, image_radius*2], dtype=float)
+for pix_x in range(image_radius*2):
+    print(f"\rBloch wave calculation... {50*pix_x/image_radius:.0f}%", end="")  # progess
+    for pix_y in range(image_radius*2):
+        s_g_pix = np.squeeze(s_g[pix_x, pix_y, :])
+        k_dot_n_pix = k_dot_n[pix_x, pix_y]
+
+        # strong_beam_indices gives the index of a strong beam in the beam pool
+        # output reflections must be in the beam pool
+        strong_beam_indices = g_output
+        # Use Sg and perturbation strength to define other strong beams
+        strong_beam_ = px.strong_beams(s_g_pix, ug_matrix, min_strong_beams)
+        extras = np.setdiff1d(strong_beam_, g_output)
+        strong_beam_indices = np.concatenate((strong_beam_indices, extras))
+        n_beams = len(strong_beam_indices)
+
+        # Make a Ug matrix for this pixel by selecting only strong beams
+        beam_projection_matrix = np.zeros((n_beams, n_hkl), dtype=np.complex128)
+        beam_projection_matrix[np.arange(n_beams), strong_beam_indices] = 1+0j
+        # reduce the matrix using some nifty matrix multiplication
+        beam_transpose = beam_projection_matrix.T
+        ug_matrix_partial = np.dot(ug_matrix, beam_transpose)
+        ug_sg_matrix = np.dot(beam_projection_matrix, ug_matrix_partial)
+
+        # Final normalization of the matrix
+        # off-diagonal elements are Ug/2K, diagonal elements are Sg
+        # Spence's (1990) 'Structure matrix'
+        ug_sg_matrix = 2.0*np.pi**2 * ug_sg_matrix / big_k_mag
+        # replace the diagonal with strong beam deviation parameters
+        ug_sg_matrix[np.arange(n_beams), np.arange(n_beams)] = \
+            s_g_pix[strong_beam_indices]
+
+        # weak beam correction (NOT WORKING)
+        # px.weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_indices,
+        #                min_weak_beams, big_k_mag)
+
+        # surface normal correction part 1
+        structure_matrix = np.zeros_like(ug_sg_matrix)
+        norm_factor = np.sqrt(1 + g_dot_norm[strong_beam_indices]/k_dot_n_pix)
+        structure_matrix = ug_sg_matrix / np.outer(norm_factor, norm_factor)
+
+        # get eigenvalues (gamma), eigenvectors
+        gamma, eigenvectors = eig(structure_matrix)
+        # Invert using LU decomposition (similar to ZGETRI in Fortran)
+        inverted_eigenvectors = inv(eigenvectors)
+
+        if debug:
+            np.set_printoptions(precision=3, suppress=True)
+            print("eigenvectors")
+            print(eigenvectors[:5, :5])
+
+        # calculate intensities
+
+        # Initialize incident (complex) wave function psi0
+        # all zeros except 000 beam which is 1
+        psi0 = np.zeros(n_beams, dtype=np.complex128)
+        psi0[0] = 1.0 + 0j
+        intensities = np.zeros(n_beams, dtype=np.float64)
+
+        # Form eigenvalue diagonal matrix exp(i t gamma)
+        thickness_terms = np.diag(np.exp(1j * initial_thickness * gamma))
+
+        # surface normal correction part 2
+        m_ii = np.sqrt(1 + g_dot_norm[strong_beam_indices] / k_dot_n_pix)
+        inverted_m = np.diag(m_ii)
+        m_matrix = np.diag(1/m_ii)
+
+        # calculate wave functions and intensities
+        wave_functions = (m_matrix @ eigenvectors @ thickness_terms
+                          @ inverted_eigenvectors @ inverted_m @ psi0)
+        intensities = np.abs(wave_functions)**2
+
+        # Map diffracted intensities to required output g vectors
+        lacbed[pix_x, pix_y, :] = intensities[:len(g_output)]
+        # for j in range(len(g_output)):
+        #     for i in strong_beam_indices:
+        #         if (i == g_output[j]):
+        #             lacbed[pix_x, pix_y, j] = intensities[i]
+print("\rBloch wave calculation... done    ")
+done = time.time()
+
+
+# %% output LACBED patterns
+w = int(np.ceil(np.sqrt(n_out)))
+h = int(np.ceil(n_out/w))
+fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))
+text_effect = withStroke(linewidth=3, foreground='black')
+axes = axes.flatten()
+for i in range(n_out):
+    axes[i].imshow(lacbed[:, :, i], cmap='pink')
+    axes[i].axis('off')
+    annotation = f"{hkl[g_output[i], 0]}{hkl[g_output[i], 1]}{hkl[g_output[i], 2]}"
+    axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
+                     size=30, color='w', path_effects=[text_effect])
+for i in range(n_out, len(axes)):
+    axes[i].axis('off')
+plt.tight_layout()
+plt.show()
+
 
 # %% set up refinement, TO BE TESTED
 # --------------------------------------------------------------------
@@ -597,127 +725,16 @@ if 'S' not in refine_mode:
     independent_variable_atom = np.array(atom_refine_flag[:n_variables])
 
 
-# %% deviation parameter for each pixel and g-vector
-# s_g [n_hkl, image diameter, image diameter]
-# and k vector for each pixel, tilted_k [image diameter, image diameter, 3]
-s_g, tilted_k = px.deviation_parameter(convergence_angle, image_radius,
-                                       big_k_mag, g_pool, g_pool_mag)
-
-
-# %% choose strong beams and do the Bloch wave calculation
-pool = time.time()
-# Dot product of k with surface normal, size [image diameter, image diameter]
-k_dot_n = np.tensordot(tilted_k, norm_dir_m, axes=([2], [0]))
-
-# output LACBED patterns
-lacbed = np.zeros([image_radius*2, image_radius*2, len(g_output)], dtype=float)
-
-print("Bloch wave calculation...", end=' ')
-if debug:
-    print("")
-    print("output indices")
-    print(g_output[:15])
-# pixel by pixel calculations from here
-bf = np.zeros([image_radius*2, image_radius*2], dtype=float)
-for pix_x in range(image_radius*2):
-    for pix_y in range(image_radius*2):
-        s_g_pix = np.squeeze(s_g[pix_x, pix_y, :])
-        k_dot_n_pix = k_dot_n[pix_x, pix_y]
-
-        # strong_beam_indices gives the index of a strong beam in the beam pool
-        # output reflections must be in the beam pool
-        strong_beam_indices = g_output
-        # Use Sg and perturbation strength to define other strong beams
-        strong_beam_ = px.strong_beams(s_g_pix, ug_matrix, min_strong_beams)
-        extras = np.setdiff1d(strong_beam_, g_output)
-        strong_beam_indices = np.concatenate((strong_beam_indices, extras))
-        n_beams = len(strong_beam_indices)
-
-        # Make a Ug matrix for this pixel by selecting only strong beams
-        beam_projection_matrix = np.zeros((n_beams, n_hkl), dtype=np.complex128)
-        beam_projection_matrix[np.arange(n_beams), strong_beam_indices] = 1+0j
-        # reduce the matrix using some nifty matrix multiplication
-        beam_transpose = beam_projection_matrix.T
-        ug_matrix_partial = np.dot(ug_matrix, beam_transpose)
-        ug_sg_matrix = np.dot(beam_projection_matrix, ug_matrix_partial)
-
-        # Final normalization of the matrix
-        # off-diagonal elements are Ug/2K, diagonal elements are Sg
-        # Spence's (1990) 'Structure matrix'
-        ug_sg_matrix = 2.0*np.pi**2 * ug_sg_matrix / big_k_mag
-        # replace the diagonal with strong beam deviation parameters
-        ug_sg_matrix[np.arange(n_beams), np.arange(n_beams)] = \
-            s_g_pix[strong_beam_indices]
-
-        # weak beam correction (NOT WORKING)
-        # px.weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_indices,
-        #                min_weak_beams, big_k_mag)
-
-        # surface normal correction part 1
-        structure_matrix = np.zeros_like(ug_sg_matrix)
-        norm_factor = np.sqrt(1 + g_dot_norm[strong_beam_indices]/k_dot_n_pix)
-        structure_matrix = ug_sg_matrix / np.outer(norm_factor, norm_factor)
-
-        # get eigenvalues (gamma), eigenvectors
-        gamma, eigenvectors = eig(structure_matrix)
-        # Invert using LU decomposition (similar to ZGETRI in Fortran)
-        inverted_eigenvectors = inv(eigenvectors)
-
-        if debug:
-            np.set_printoptions(precision=3, suppress=True)
-            print("eigenvectors")
-            print(eigenvectors[:5, :5])
-
-        # calculate intensities
-
-        # Initialize incident (complex) wave function psi0
-        # all zeros except 000 beam which is 1
-        psi0 = np.zeros(n_beams, dtype=np.complex128)
-        psi0[0] = 1.0 + 0j
-        intensities = np.zeros(n_beams, dtype=np.float64)
-
-        # Form eigenvalue diagonal matrix exp(i t gamma)
-        thickness_terms = np.diag(np.exp(1j * initial_thickness * gamma))
-
-        # surface normal correction part 2
-        m_ii = np.sqrt(1 + g_dot_norm[strong_beam_indices] / k_dot_n_pix)
-        inverted_m = np.diag(m_ii)
-        m_matrix = np.diag(1/m_ii)
-
-        # calculate wave functions and intensities
-        wave_functions = (m_matrix @ eigenvectors @ thickness_terms
-                          @ inverted_eigenvectors @ inverted_m @ psi0)
-        intensities = np.abs(wave_functions)**2
-
-        # Map diffracted intensities to required output g vectors
-        lacbed[pix_x, pix_y, :] = intensities[:len(g_output)]
-        # for j in range(len(g_output)):
-        #     for i in strong_beam_indices:
-        #         if (i == g_output[j]):
-        #             lacbed[pix_x, pix_y, j] = intensities[i]
-done = time.time()
-
-
-# %% output
-w = int(np.ceil(np.sqrt(n_out)))
-h = int(np.ceil(n_out/w))
-fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))
-text_effect = withStroke(linewidth=3, foreground='black')
-axes = axes.flatten()
-for i in range(n_out):
-    axes[i].imshow(lacbed[:, :, i], cmap='pink')
-    axes[i].axis('off')
-    annotation = f"{hkl[g_output[i], 0]}{hkl[g_output[i], 1]}{hkl[g_output[i], 2]}"
-    axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
-                     size=30, color='w', path_effects=[text_effect])
-for i in range(n_out, len(axes)):
-    axes[i].axis('off')
-plt.tight_layout()
+# %% read experimental images, dm3
+file_path="DM3_84x84\\GaAs_+0+0+0.dm3"
+y_pixels = 84
+x_pixels = 84
+a000 = px.read_dm3(file_path, y_pixels, x_pixels)
+plt.imshow(a000)
 plt.show()
 
-
 # %%
-print("done")
+
 print(f"Setup took {1000*(setup-start):.1f} milliseconds")
 print(f"Beam pool calculation took {pool-setup:.3f} seconds")
 print(f"Bloch wave calculation took {done-pool:.3f} seconds \

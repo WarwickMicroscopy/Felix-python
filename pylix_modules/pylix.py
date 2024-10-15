@@ -1,10 +1,9 @@
 import ast
 import re
 import numpy as np
-from CifFile import CifFile
 from scipy.constants import c, h, e, m_e
+from CifFile import CifFile
 from pylix_modules import pylix_dicts as fu
-
 
 def read_inp_file(filename):
     """
@@ -72,11 +71,11 @@ def read_hkl_file(filename):
             line = line.strip().replace('[', '').replace(']', '').replace(',', '')
             if line:  # skip blank lines
                 parts = line.split()
-
+    
                 # Extract Miller indices
                 g_ = list(parts[0:3])
                 input_hkls.append(g_)
-
+                
                 if cRED:  # Extract g, i_obs and sigma_obs
                     intensity = float(parts[1].replace(',', ''))
                     sigma = float(parts[2])
@@ -230,8 +229,7 @@ def symop_convert(symop_xyz):
     for i in range(symmetry_count):
         symop = symop_xyz[i]
         # Remove any numbers, extra spaces, and quotation marks
-        symop = re.sub(r'^[^a-zA-Z-]*', '', symop).replace("'", "").\
-            replace('"', '').strip()
+        symop = re.sub(r'^[^a-zA-Z-]*', '', symop).replace("'", "").replace('"', '').strip()
         # split into 3 parts
         parts = symop.split(',')
         for j, pt in enumerate(parts):
@@ -271,6 +269,7 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
 
     Returns:
     atom_position, atom_label, atom_name, B_iso, occupancy
+    
     """
 
     # tolerance in fractional coordinates to consider atoms to be the same
@@ -412,473 +411,6 @@ def reference_frames(cell_a, cell_b, cell_c, cell_alpha, cell_beta,
                 np.dot(a_vec_m, np.cross(b_vec_m, c_vec_m)))
 
     return a_vec_m, b_vec_m, c_vec_m, ar_vec_m, br_vec_m, cr_vec_m, norm_dir_m
-
-
-def hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k, lattice_type,
-             min_reflection_pool, min_strong_beams, g_limit, input_hkls,
-             electron_wave_vector_magnitude):
-    """
-    Generates Miller indices that satisfy the selection rules for a given
-    lattice type and are close to the Bragg condition.
-
-    Parameters:
-    ar_vec_m (ndarray): Reciprocal lattice vector a
-    br_vec_m (ndarray): Reciprocal lattice vector b
-    cr_vec_m (ndarray): Reciprocal lattice vector c
-    lattice_type (str): Lattice type (from space group name)
-    min_strong_beams (int): Minimum number of strong beams required
-    g_limit (float): Upper limit for g-vector magnitude
-    electron_wave_vector_magnitude (float):
-
-    Returns:
-    hkl (ndarray): Miller indices close to the Bragg condition
-    g_pool (ndarray): in the microscope reference frame
-    g_magnitudes (ndarray): their magnitudes
-    """
-
-    # Calculate the magnitude of reciprocal lattice basis vectors
-    ar_mag = np.linalg.norm(ar_vec_m)
-    br_mag = np.linalg.norm(br_vec_m)
-    cr_mag = np.linalg.norm(cr_vec_m)
-
-    # Determine shell size (smallest basis vector)
-    shell = min(ar_mag, br_mag, cr_mag)
-
-    if g_limit < 1e-10:
-        # Use default value and set min_reflection_pool as cutoff
-        g_limit = 10.0 * 2 * np.pi
-    else:
-        # Make min_reflection_pool large and use g_limit as the cutoff
-        min_reflection_pool = 6666
-
-    # Maximum indices to consider based on g_limit
-    max_h = int(np.ceil(g_limit / ar_mag))
-    max_k = int(np.ceil(g_limit / br_mag))
-    max_l = int(np.ceil(g_limit / cr_mag))
-
-    # Generate grid of h, k, l values
-    h_range = np.arange(-max_h, max_h + 1)
-    k_range = np.arange(-max_k, max_k + 1)
-    l_range = np.arange(-max_l, max_l + 1)
-    h_, k_, l_ = np.meshgrid(h_range, k_range, l_range, indexing='ij')
-    hkl_pool = np.stack((h_.ravel(), k_.ravel(), l_.ravel()), axis=-1)
-
-    # Apply selection rules using a mask
-    if lattice_type == "F":
-        mask = (hkl_pool[:, 0] + hkl_pool[:, 1]) % 2 == 0
-        mask &= (hkl_pool[:, 1] + hkl_pool[:, 2]) % 2 == 0
-        mask &= (hkl_pool[:, 2] + hkl_pool[:, 0]) % 2 == 0
-    elif lattice_type == "I":
-        mask = (hkl_pool.sum(axis=1) % 2) == 0
-    elif lattice_type == "A":
-        mask = (hkl_pool[:, 1] + hkl_pool[:, 2]) % 2 == 0
-    elif lattice_type == "B":
-        mask = (hkl_pool[:, 0] + hkl_pool[:, 2]) % 2 == 0
-    elif lattice_type == "C":
-        mask = (hkl_pool[:, 0] + hkl_pool[:, 1]) % 2 == 0
-    elif lattice_type == "R":
-        mask = (hkl_pool[:, 0] - hkl_pool[:, 1] + hkl_pool[:, 2]) % 3 == 0
-    elif lattice_type == "V":
-        mask = (-hkl_pool[:, 0] + hkl_pool[:, 1] + hkl_pool[:, 2]) % 3 == 0
-    elif lattice_type == "P":
-        mask = np.ones(len(hkl_pool), dtype=bool)
-    else:
-        raise ValueError("Space group not recognised")
-    hkl_pool = hkl_pool[mask]
-
-    # Calculate g-vectors and their magnitudes
-    g_pool = hkl_pool @ np.array([ar_vec_m, br_vec_m, cr_vec_m])
-    g_mag = np.linalg.norm(g_pool, axis=1) + 1.0e-12
-    sorter = np.argsort(g_mag)
-    g_pool = g_pool[sorter]
-    hkl_pool = hkl_pool[sorter]
-    g_mag = np.linalg.norm(g_pool, axis=1) + 1.0e-12
-
-    # Calculate deviation from Bragg condition
-    g_plus_k = g_pool + big_k
-    deviations = np.abs(electron_wave_vector_magnitude -
-                        np.linalg.norm(g_plus_k, axis=1)) / g_mag
-    deviations[0] = 0  # 000 beam
-
-    # we choose reflections by increasing the radius of reciprocal space
-    # explored until we have enough
-    # (limited by g_limit or min_reflection_pool, whichever is smallest)
-
-    # first shell
-    lnd = 1.0  # Number of the shell
-    current_g_limit = shell*lnd
-    mask = (g_mag <= current_g_limit) & (deviations < 0.08)
-    hkl = hkl_pool[mask]
-    # expand until we have enough
-    while (len(hkl) < min_reflection_pool) and (lnd * shell < g_limit):
-        lnd += 1.0
-        current_g_limit = shell*lnd
-        mask = (g_mag <= current_g_limit) & (deviations < 0.08)
-        hkl = hkl_pool[mask]
-    g_pool = g_pool[mask]
-    g_mag = g_mag[mask]
-
-    # Check if enough beams are present
-    if len(hkl) < min_strong_beams:
-        raise ValueError("Beam pool is too small, please increase g_limit!")
-
-    # Check if required output HKLs are in the hkl list
-    g_output = ([])
-    for g in input_hkls:
-        comparison = np.all(hkl == g, axis=1)
-        if not np.any(comparison):
-            print(f"Input hkl not found: {g}")
-        idx = np.where(comparison)
-        if len(idx[0]) > 0:
-            g_output.append(idx[0][0])
-    g_output = np.append([0], np.array(g_output))
-
-    return hkl, g_pool, g_mag, np.array(g_output)
-
-
-def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
-              atomic_number, occupancy, B_iso, g_matrix, g_magnitude,
-              absorption_method, absorption_per, electron_velocity):
-    Fg_matrix = np.zeros([n_hkl, n_hkl], dtype=np.complex128)
-    # calculate g.r for all g-vectors and atom posns [n_hkl, n_hkl, n_atoms]
-    g_dot_r = np.einsum('ijk,lk->ijl', g_matrix, atom_coordinate)
-    # exp(i g.r) [n_hkl, n_hkl, n_atoms]
-    phase = np.exp(-1j * g_dot_r)
-    # scattering factor for all g-vectors, to be used atom by atom
-    # NB scattering factor methods accept and return 2D[n_hkl, n_hkl] array of
-    # g magnitudes but only one atom type.  Potential speed up by broadcasting
-    # all atom types and modifying scattering factor methods to accept 2D + 1D
-    # arrays [n_hkl, n_hkl] & [n_atoms],
-    # returning an array [n_hkl, n_hkl, n_atoms]
-    for i in range(n_atoms):
-        # get the scattering factor
-        if scatter_factor_method == 0:
-            f_g = f_kirkland(atomic_number[i], g_magnitude)
-        elif scatter_factor_method == 1:
-            f_g = f_lobato(atomic_number[i], g_magnitude)
-        elif scatter_factor_method == 2:
-            f_g = f_peng(atomic_number[i], g_magnitude)
-        elif scatter_factor_method == 3:
-            f_g = f_doyle_turner(atomic_number[i], g_magnitude)
-        else:
-            raise ValueError("No scattering factors chosen in felix.inp")
-
-        # get the absorptive scattering factor (null for absorption_method==0)
-        # no absorption
-        if absorption_method == 0:
-            f_g_prime = np.zeros_like(f_g)
-        # proportional model
-        elif absorption_method == 1:
-            f_g_prime = 1j * f_g * absorption_per/100.0
-        # Bird & King model, parameterised by Thomas (Acta Cryst 2023)
-        elif absorption_method == 2:
-            f_g_prime = 1j * f_thomas(g_magnitude, B_iso[i],
-                                      atomic_number[i], electron_velocity)
-
-        # The Structure Factor Equation
-        # multiply by Debye-Waller factor, phase and occupancy
-        Fg_matrix = Fg_matrix+((f_g + f_g_prime) * phase[:, :, i] *
-                               occupancy[i] *
-                               np.exp(-B_iso[i] *
-                                      (g_magnitude**2)/(16*np.pi**2)))
-
-    return Fg_matrix
-
-
-def deviation_parameter(convergence_angle, image_radius, big_k_mag, g_pool,
-                        g_pool_mag):
-    # for LACBED pattern of size [m, m] and a set of g-vectors [n, 3]
-    # this returns a 3D array of deviation parameters [m, m, n]
-
-    # resolution in k-space
-    delta_K = 2.0*np.pi * convergence_angle/image_radius
-
-    # pixel grids
-    x_pix = np.arange(-image_radius+.5, image_radius+.5)
-    y_pix = np.arange(-image_radius+.5, image_radius+.5)
-    # k_x and k_y
-    k_x, k_y = np.meshgrid(x_pix * delta_K, y_pix * delta_K)
-
-    # k-vector for all pixels k'
-    k_z = np.sqrt(big_k_mag**2 - k_x**2 - k_y**2)
-    tilted_k = np.stack([k_x, k_y, k_z], axis=-1)
-
-    # g excuding g_pool[0], which is always [000]
-    g_pool1 = g_pool[1:]  # shape: (n_hkl-1, 3)
-    g_pool_mag1 = g_pool_mag[1:]  # shape: (n_hkl-1)
-
-    # Components of k_0
-    k_0_0 = -g_pool_mag1 / 2
-    k_0_2 = np.sqrt(big_k_mag**2 - k_0_0**2)
-    # Components of k_prime
-    k_prime_0 = np.einsum('ijk,lk->ijl', tilted_k, g_pool1) / g_pool_mag1
-    k_prime_2 = np.sqrt(big_k_mag**2 - k_prime_0**2)
-
-    k_0_dot_k_prime = (k_0_0[None, None, :] * k_prime_0 +
-                       k_0_2[None, None, :] * k_prime_2)
-    pm = -np.sign(2*k_prime_0 + g_pool_mag1)
-    s_g = pm * np.sqrt(2*(big_k_mag**2 - k_0_dot_k_prime)) * \
-        (g_pool_mag1/big_k_mag)
-
-    # add in 000
-    s_0 = np.expand_dims(np.zeros_like(k_x), axis=-1)
-    s_g = np.concatenate([s_0, s_g], axis=-1)   # add 000
-
-    return s_g, tilted_k
-
-
-def strong_beams(s_g_pix, ug_matrix, min_strong_beams):
-    """
-    returns a list of strong beams according to their perturbation strength
-    NB s_g_pix here is a 1D array of values for a given pixel, and is different
-    to the s_g in the main code which is for all pixels & g-vectors
-
-    Perturbation Strength Eq. 8 Zuo Ultramicroscopy 57 (1995) 375, |Ug/2KSg|
-    Here use |Ug/Sg| since 2K is a constant
-    NB pert is an array of perturbation strengths for all reflections
-    """
-
-    # Perturbation strength |Ug/Sg|, put 100 where we have s_g=0
-    u_g = np.abs(ug_matrix[:, 0])
-    pert = np.divide(u_g, np.abs(s_g_pix),
-                     out=np.full_like(s_g_pix, 100.0), where=s_g_pix != 0)
-    # deviation parameter and perturbation thresholds for strong beams
-    max_sg = 0.001
-
-    # Determine strong beams: Increase max_sg until enough beams are found
-    strong = np.zeros_like(s_g_pix, dtype=int)
-    while np.sum(strong) < min_strong_beams:
-        min_pert_strong = 0.025 / max_sg
-        strong = np.where((np.abs(s_g_pix) < max_sg)
-                          | (pert >= min_pert_strong), 1, 0)
-        max_sg += 0.001
-
-    # Create strong beam list
-    return np.flatnonzero(strong)
-
-
-def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list,
-               min_weak_beams, big_k_mag):
-    """
-    Updates the Ug-Sg matrix usingweak beams according to their perturbation
-    strength. We start with all non-strong beams in the list.
-    We then raise the threshold perturbation strength until we have fewer than
-    min_weak_beams in the list.  These are the strongest beams not included
-    in strong_beam_list.
-    """
-
-    # Perturbation strength |Ug/Sg|, put 100 where we have s_g=0
-    u_g = np.abs(ug_matrix[:, 0])
-    pert = np.divide(u_g, np.abs(s_g_pix),
-                     out=np.full_like(s_g_pix, 100.0), where=s_g_pix != 0)
-
-    # We start with all non-strong beams in the list.
-    weak = np.ones_like(s_g_pix)
-    weak[strong_beam_list] = 0
-    max_pert_weak = 0.0001
-    # increasing threshold till we have few enough
-    while np.sum(weak) > min_weak_beams:
-        weak *= np.where((pert >= max_pert_weak), 1, 0)
-        max_pert_weak += 0.0001
-
-    # Create weak beam list
-    weak_beam_list = np.flatnonzero(weak)
-    # n_weak_beams = len(weak_beam_list)
-    n_beams = len(weak_beam_list)
-
-    # now update the scattering ug_sg_matrix (not sure if it works)
-    # Add weak beams perturbatively for the 1st column (sumC)
-    # and diagonal elements (sumD)
-    # new version using broadcasting
-    # (NOT WORKING, SIZE mismatch ug_wj * ug_wj_weak)
-    weak_beam_sg = s_g_pix[weak_beam_list]
-    ug_w0 = ug_matrix[weak_beam_list, 0]
-    ug_wj = ug_matrix[strong_beam_list[:, None], weak_beam_list]
-    ug_wj_weak = ug_matrix[weak_beam_list[:, None], strong_beam_list]
-
-    # Eq. 4 from Zuo & Weickenmeier (Ultramicroscopy 57, 1995)
-    sum_c = np.sum(ug_wj * ug_w0 / (2.0 * big_k_mag * weak_beam_sg), axis=1)
-
-    # Eq. 5 (sumD): Broadcasting for diagonal terms
-    sum_d = np.einsum('ij,ij->i', ug_wj, ug_wj_weak) / (
-        2.0 * big_k_mag * weak_beam_sg)
-
-    # Update ug_sg_matrix: first column and diagonal terms
-    ug_sg_matrix[1:n_beams, 0] -= sum_c  # Update first column (sumC)
-    ug_sg_matrix[1:n_beams, 1:n_beams] -= (2.0 * big_k_mag *
-                                           sum_d[:, None]) / (4.0 * np.pi**2)
-    # old version using loops
-    # for j in range(1, n_beams):
-    #     sum_c = 0 + 0j  # Complex zero
-    #     sum_d = 0 + 0j  # Complex zero
-        
-    #     for i in range(n_weak_beams):
-    #         # Eq. 4 from Zuo & Weickenmeier (Ultramicroscopy 57, 1995)
-    #         sum_c += (ug_matrix[strong_beam_list[j], weak[i]] *
-    #                   ug_matrix[weak[i], 0] / 
-    #                   (2.0 * big_k_mag * s_g_pix[weak_beam_list[i]]))
-            
-    #         # Eq. 5 from Zuo & Weickenmeier (Ultramicroscopy 57, 1995)
-    #         sum_d += (ug_matrix[strong_beam_list[j], weak_beam_list[i]] * 
-    #                   ug_matrix[weak_beam_list[i], strong_beam_list[j]] / 
-    #                   (2.0 * big_k_mag * s_g_pix[weak[i]]))
-    
-    #     # Update the first column of the ug_sg_matrix
-    #     mask = ug_sg_matrix == ug_sg_matrix[j, 0]
-    #     ug_sg_matrix[mask] = ug_sg_matrix[j, 0] - sum_c
-    
-    #     # Update the diagonal elements (Sg's)
-    #     ug_sg_matrix[j, j] = ug_sg_matrix[j, j] - \
-    #         2.0*big_k_mag*sum_d/(4.0*np.pi**2)
-    return
-
-
-def f_kirkland(z, g_magnitude):
-    """
-    calculates atomic scattering factor using the Kirkland model.
-    From Appendix C of "Advanced Computing in Electron Microscopy", 2nd ed.
-
-    Parameters:
-    g_magnitude (ndarray): Magnitude of the scattering vector in 1/Å.
-    (NB exp(-i*g.r), physics negative convention)
-    z (int): Atomic number, used to index scattering factors.
-    kirkland (np.ndarray): Array of scattering factors from pylix_dicts
-
-    Returns:
-    ndarray: The calculated Kirkland scattering factor.
-    """
-    
-    q = g_magnitude / (2*np.pi)
-    # coefficients in shape (3, 1, 1) for broadcasting
-    a = fu.kirkland[z-1, 0:6:2].reshape(-1, 1, 1)
-    b = fu.kirkland[z-1, 1:7:2].reshape(-1, 1, 1)
-    c = fu.kirkland[z-1, 6:11:2].reshape(-1, 1, 1)
-    d = fu.kirkland[z-1, 7:12:2].reshape(-1, 1, 1)
-
-    f_g = np.sum(a/(q**2+b), axis=0) + np.sum(c*np.exp(-(d*q**2)), axis=0)
-
-    return f_g
-
-
-def f_doyle_turner(z, g_magnitude):
-    """
-    calculates atomic scattering factor using the Doyle & Turner model.
-
-    Parameters:
-    g_magnitude (ndarray): Magnitude of the scattering vector in 1/Å.
-    (NB exp(-i*g.r), physics negative convention)
-    z (int): Atomic number, used to index scattering factors.
-    kirkland (np.ndarray): Array of scattering factors from pylix_dicts
-
-    Returns:
-    ndarray: The calculated Doyle & Turner scattering factor.
-    """
-    # Convert g to s
-    s = g_magnitude / (4*np.pi)
-
-    a = fu.doyle_turner[z-1, 0:8:2].reshape(-1, 1, 1)
-    b = fu.doyle_turner[z-1, 1:8:2].reshape(-1, 1, 1)
-
-    f_g = np.sum(a * np.exp(-(b * s**2)), axis=0)
-
-    return f_g
-
-
-def f_lobato(z, g_magnitude):
-    """
-    calculates atomic scattering factor using the Lobato model.
-    Lobato & van Dyck Acta Cryst A70, 636 (2014)
-    Parameters:
-    g_magnitude (ndarray): Magnitude of the scattering vector in 1/Å.
-    (NB exp(-i*g.r), physics negative convention)
-    z (int): Atomic number, used to index scattering factors.
-    lobato (np.ndarray): Array of scattering factors from pylix_dicts
-
-    Returns:
-    ndarray: The calculated Lobato scattering factor.
-    """
-    # Convert physics to crystallography convention
-    g = g_magnitude / (2*np.pi)
-
-    a = fu.lobato[z-1, 0:5].reshape(-1, 1, 1)
-    b = fu.lobato[z-1, 5:10].reshape(-1, 1, 1)
-    bg2 = b*(g*g)
-    f_g = np.sum(a*(2+bg2)/((1+bg2)**2), axis=0)
-
-    return f_g
-
-
-def f_peng(z, g_magnitude):
-    """
-    calculates atomic scattering factor using the Peng model.
-    Peng, Micron 30, 625 (1999)
-    Parameters:
-    g_magnitude (ndarray): Magnitude of the scattering vector in 1/Å.
-    (NB exp(-i*g.r), physics negative convention)
-    z (int): Atomic number, used to index scattering factors.
-    peng (np.ndarray): Array of scattering factors from pylix_dicts
-
-    Returns:
-    ndarray: The calculated Peng scattering factor.
-    """
-    # Convert g to s
-    s = g_magnitude / (4*np.pi)
-
-    a = fu.peng[z-1, 0:4].reshape(-1, 1, 1)
-    b = fu.peng[z-1, 4:8].reshape(-1, 1, 1)
-    b_ = -b*(s**2)
-    f_g = np.sum(a*np.exp(b_), axis=0)
-
-    return f_g
-
-
-def four_gauss(x, args):
-    # returns the sum of four Gaussians & a constant for Thomas f_prime
-    f = args[0]*np.exp(-abs(args[1])*x**2) + \
-        args[2]*np.exp(-abs(args[3])*x**2) + \
-        args[4]*np.exp(-abs(args[5])*x**2) + \
-        args[6]*np.exp(-abs(args[7])*x**2) + args[8]
-    return f
-
-
-def f_thomas(g, B, Z, v):
-    # interpolated of parameterised Bird & King absorptive scattering factors
-    # calculation uses s = g/2
-    s = g/2
-    # returns an interpolated absorptive scattering factor
-    Bvalues = np.array([0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5,
-                        0.7, 1, 1.5, 2, 2.75, 4])
-
-    # error checking
-    if isinstance(s, np.ndarray) and np.any(s < 0):
-        raise Exception("inavlid values of s")
-    elif isinstance(s, (int, float)) and s < 0:
-        raise Exception("invalid value of s")
-    if B < 0:
-        raise Exception("invalid value of B")
-    if Z < 1 or Z > 103:
-        raise Exception("invalid value of Z")
-    if B > 4 or 0 < B < 0.1:
-        raise Exception("B outside range of parameterisation")
-    if isinstance(s, np.ndarray) and B == 0:
-        return np.zeros(np.shape(s))
-    elif isinstance(s, (int, float)) and B == 0:
-        return 0
-
-    # get f_prime
-    if np.any(B == Bvalues):  # we don't need to interpolate
-        i = np.where(Bvalues == B)[0][0]
-        line = four_gauss(s, fu.thomas[Z-1][i])
-    else:  # interpolate between parameterised values
-        i = np.where(Bvalues >= B)[0][0]
-        bounding_b = Bvalues[i - 1:i + 1]
-        line1 = four_gauss(s, fu.thomas[Z-1][i - 1])
-        line2 = four_gauss(s, fu.thomas[Z-1][i])
-        line = line1 + (B - bounding_b[0])*(line2 - line1) / \
-            (bounding_b[1] - bounding_b[0])
-    f_prime = c*np.where(line > 0, line, 0)/v
-
-    return f_prime
 
 
 def change_origin(space_group, basis_atom_position, basis_wyckoff):
@@ -1325,7 +857,608 @@ def preferred_basis(space_group, basis_atom_position, basis_wyckoff):
         else:
             raise ValueError("Space group not implemented")
 
-    return basis_atom_position
+        return basis_atom_position
+
+
+def hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k, lattice_type,
+             min_reflection_pool, min_strong_beams, g_limit, input_hkls, 
+             electron_wave_vector_magnitude):
+    """
+    Generates Miller indices that satisfy the selection rules for a given
+    lattice type and are close to the Bragg condition.
+
+    Parameters:
+    ar_vec_m (ndarray): Reciprocal lattice vector a
+    br_vec_m (ndarray): Reciprocal lattice vector b
+    cr_vec_m (ndarray): Reciprocal lattice vector c
+    lattice_type (str): Lattice type (from space group name)
+    min_strong_beams (int): Minimum number of strong beams required
+    g_limit (float): Upper limit for g-vector magnitude
+    electron_wave_vector_magnitude (float): 
+
+    Returns:
+    hkl (ndarray): Miller indices close to the Bragg condition
+    g_pool (ndarray): in the microscope reference frame
+    g_magnitudes (ndarray): their magnitudes
+    """
+
+    # Calculate the magnitude of reciprocal lattice basis vectors
+    ar_mag = np.linalg.norm(ar_vec_m)
+    br_mag = np.linalg.norm(br_vec_m)
+    cr_mag = np.linalg.norm(cr_vec_m)
+
+    # Determine shell size (smallest basis vector)
+    shell = min(ar_mag, br_mag, cr_mag)
+
+    if g_limit < 1e-10:
+        # Use default value and set min_reflection_pool as cutoff
+        g_limit = 10.0 * 2 * np.pi
+    else:
+        # Make min_reflection_pool large and use g_limit as the cutoff
+        min_reflection_pool = 6666
+
+    # Maximum indices to consider based on g_limit
+    max_h = int(np.ceil(g_limit / ar_mag))
+    max_k = int(np.ceil(g_limit / br_mag))
+    max_l = int(np.ceil(g_limit / cr_mag))
+
+    # Generate grid of h, k, l values
+    h_range = np.arange(-max_h, max_h + 1)
+    k_range = np.arange(-max_k, max_k + 1)
+    l_range = np.arange(-max_l, max_l + 1)
+    h_, k_, l_ = np.meshgrid(h_range, k_range, l_range, indexing='ij')
+    hkl_pool = np.stack((h_.ravel(), k_.ravel(), l_.ravel()), axis=-1)
+
+    # Apply selection rules using a mask
+    if lattice_type == "F":
+        mask = (hkl_pool[:, 0] + hkl_pool[:, 1]) % 2 == 0
+        mask &= (hkl_pool[:, 1] + hkl_pool[:, 2]) % 2 == 0
+        mask &= (hkl_pool[:, 2] + hkl_pool[:, 0]) % 2 == 0
+    elif lattice_type == "I":
+        mask = (hkl_pool.sum(axis=1) % 2) == 0
+    elif lattice_type == "A":
+        mask = (hkl_pool[:, 1] + hkl_pool[:, 2]) % 2 == 0
+    elif lattice_type == "B":
+        mask = (hkl_pool[:, 0] + hkl_pool[:, 2]) % 2 == 0
+    elif lattice_type == "C":
+        mask = (hkl_pool[:, 0] + hkl_pool[:, 1]) % 2 == 0
+    elif lattice_type == "R":
+        mask = (hkl_pool[:, 0] - hkl_pool[:, 1] + hkl_pool[:, 2]) % 3 == 0
+    elif lattice_type == "V":
+        mask = (-hkl_pool[:, 0] + hkl_pool[:, 1] + hkl_pool[:, 2]) % 3 == 0
+    elif lattice_type == "P":
+        mask = np.ones(len(hkl_pool), dtype=bool)
+    else:
+        raise ValueError("Space group not recognised")
+    hkl_pool = hkl_pool[mask]
+
+    # Calculate g-vectors and their magnitudes
+    g_pool = hkl_pool @ np.array([ar_vec_m, br_vec_m, cr_vec_m])
+    g_mag = np.linalg.norm(g_pool, axis=1) + 1.0e-12
+    sorter = np.argsort(g_mag)
+    g_pool = g_pool[sorter]
+    hkl_pool = hkl_pool[sorter]
+    g_mag = np.linalg.norm(g_pool, axis=1) + 1.0e-12
+
+    # Calculate deviation from Bragg condition
+    g_plus_k = g_pool + big_k
+    deviations = np.abs(electron_wave_vector_magnitude -
+                        np.linalg.norm(g_plus_k, axis=1)) / g_mag
+    deviations[0] = 0  # 000 beam
+    
+    # we choose reflections by increasing the radius of reciprocal space
+    # explored until we have enough
+    # (limited by g_limit or min_reflection_pool, whichever is smallest)
+
+    # first shell
+    lnd = 1.0  # Number of the shell
+    current_g_limit = shell*lnd
+    mask = (g_mag <= current_g_limit) & (deviations < 0.08)
+    hkl = hkl_pool[mask]
+    # expand until we have enough
+    while (len(hkl) < min_reflection_pool) and (lnd * shell < g_limit):
+        lnd += 1.0
+        current_g_limit = shell*lnd
+        mask = (g_mag <= current_g_limit) & (deviations < 0.08)
+        hkl = hkl_pool[mask]
+    g_pool = g_pool[mask]
+    g_mag = g_mag[mask]
+
+    # Check if enough beams are present
+    if len(hkl) < min_strong_beams:
+        raise ValueError("Beam pool is too small, please increase g_limit!")
+
+    # Check if required output HKLs are in the hkl list
+    g_output = ([])
+    for g in input_hkls:
+        comparison = np.all(hkl == g, axis=1)
+        if not np.any(comparison):
+            print(f"Input hkl not found: {g}")
+        idx = np.where(comparison)
+        if len(idx[0]) > 0:
+            g_output.append(idx[0][0])
+    g_output = np.append([0],np.array(g_output))
+
+    return hkl, g_pool, g_mag, np.array(g_output)
+
+
+def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
+              atomic_number, occupancy, B_iso, g_matrix, g_magnitude,
+              absorption_method, absorption_per, electron_velocity):
+    Fg_matrix = np.zeros([n_hkl, n_hkl], dtype=np.complex128)
+    # calculate g.r for all g-vectors and atom posns [n_hkl, n_hkl, n_atoms]
+    g_dot_r = np.einsum('ijk,lk->ijl', g_matrix, atom_coordinate)
+    # exp(i g.r) [n_hkl, n_hkl, n_atoms]
+    phase = np.exp(-1j * g_dot_r)
+    # scattering factor for all g-vectors, to be used atom by atom
+    # NB scattering factor methods accept and return 2D[n_hkl, n_hkl] array of
+    # g magnitudes but only one atom type.  Potential speed up by broadcasting
+    # all atom types and modifying scattering factor methods to accept 2D + 1D
+    # arrays [n_hkl, n_hkl] & [n_atoms],
+    # returning an array [n_hkl, n_hkl, n_atoms]
+    for i in range(n_atoms):
+        # get the scattering factor
+        if scatter_factor_method == 0:
+            f_g = f_kirkland(atomic_number[i], g_magnitude)
+        elif scatter_factor_method == 1:
+            f_g = f_lobato(atomic_number[i], g_magnitude)
+        elif scatter_factor_method == 2:
+            f_g = f_peng(atomic_number[i], g_magnitude)
+        elif scatter_factor_method == 3:
+            f_g = f_doyle_turner(atomic_number[i], g_magnitude)
+        else:
+            raise ValueError("No scattering factors chosen in felix.inp")
+
+        # get the absorptive scattering factor (null for absorption_method==0)
+        # no absorption
+        if absorption_method == 0:
+            f_g_prime = np.zeros_like(f_g)
+        # proportional model
+        elif absorption_method == 1:
+            f_g_prime = 1j * f_g * absorption_per/100.0
+        # Bird & King model, parameterised by Thomas (Acta Cryst 2023)
+        elif absorption_method == 2:
+            f_g_prime = 1j * f_thomas(g_magnitude, B_iso[i],
+                                      atomic_number[i], electron_velocity)
+
+        # The Structure Factor Equation
+        # multiply by Debye-Waller factor, phase and occupancy
+        Fg_matrix = Fg_matrix+((f_g + f_g_prime) * phase[:, :, i] *
+                               occupancy[i] *
+                               np.exp(-B_iso[i] *
+                                      (g_magnitude**2)/(16*np.pi**2)))
+
+    return Fg_matrix
+
+
+def deviation_parameter(convergence_angle, image_radius, big_k_mag, g_pool, g_pool_mag):
+    # for LACBED pattern of size [m, m] and a set of g-vectors [n, 3]
+    # this returns a 3D array of deviation parameters [m, m, n]
+
+    # resolution in k-space
+    delta_K = 2.0*np.pi * convergence_angle/image_radius
+    
+    # pixel grids
+    x_pix = np.arange(-image_radius+.5, image_radius+.5)
+    y_pix = np.arange(-image_radius+.5, image_radius+.5)
+    # k_x and k_y
+    k_x, k_y = np.meshgrid(x_pix * delta_K, y_pix * delta_K)
+    
+    # k-vector for all pixels k'
+    k_z = np.sqrt(big_k_mag**2 - k_x**2 - k_y**2)
+    tilted_k = np.stack([k_x, k_y, k_z], axis=-1)
+    
+    # g excuding g_pool[0], which is always [000]
+    g_pool1 = g_pool[1:]  # shape: (n_hkl-1, 3)
+    g_pool_mag1 = g_pool_mag[1:] # shape: (n_hkl-1)
+
+    # Components of k_0
+    k_0_0 = -g_pool_mag1 / 2
+    k_0_2 = np.sqrt(big_k_mag**2 - k_0_0**2)
+    # Components of k_prime
+    k_prime_0 = np.einsum('ijk,lk->ijl', tilted_k, g_pool1) / g_pool_mag1
+    k_prime_2 = np.sqrt(big_k_mag**2 - k_prime_0**2)
+
+    k_0_dot_k_prime = (k_0_0[None, None, :] * k_prime_0 +
+                       k_0_2[None, None, :] * k_prime_2)
+    pm = -np.sign(2*k_prime_0 + g_pool_mag1)
+    s_g = pm * np.sqrt(2*(big_k_mag**2 -k_0_dot_k_prime)) * (g_pool_mag1/big_k_mag)
+
+    # add in 000
+    s_0 = np.expand_dims(np.zeros_like(k_x), axis=-1)  
+    s_g = np.concatenate([s_0, s_g], axis = -1)  # add 000 
+   
+    return s_g, tilted_k
+
+
+def strong_beams(s_g_pix, ug_matrix, min_strong_beams):
+    """
+    returns a list of strong beams according to their perturbation strength
+    NB s_g_pix here is a 1D array of values for a given pixel, and is different
+    to the s_g in the main code which is for all pixels & g-vectors
+    
+    Perturbation Strength Eq. 8 Zuo Ultramicroscopy 57 (1995) 375, |Ug/2KSg|
+    Here use |Ug/Sg| since 2K is a constant
+    NB pert is an array of perturbation strengths for all reflections
+    """
+    
+    # Perturbation strength |Ug/Sg|, put 100 where we have s_g=0
+    u_g = np.abs(ug_matrix[:, 0])
+    pert = np.divide(u_g, np.abs(s_g_pix),
+              out=np.full_like(s_g_pix, 100.0), where=s_g_pix != 0)
+    # deviation parameter and perturbation thresholds for strong beams
+    max_sg = 0.001
+    
+    # Determine strong beams: Increase max_sg until enough beams are found
+    strong = np.zeros_like(s_g_pix, dtype=int)
+    while np.sum(strong) < min_strong_beams:
+        min_pert_strong = 0.025 / max_sg
+        strong = np.where((np.abs(s_g_pix) < max_sg) 
+                          | (pert >= min_pert_strong), 1, 0)
+        max_sg += 0.001
+
+    # Create strong beam list
+    return np.flatnonzero(strong)
+
+
+def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list, 
+               min_weak_beams, big_k_mag):
+    """
+    Updates the Ug-Sg matrix usingweak beams according to their perturbation
+    strength. We start with all non-strong beams in the list.
+    We then raise the threshold perturbation strength until we have fewer than
+    min_weak_beams in the list.  These are the strongest beams not included
+    in strong_beam_list.
+    """
+    
+    # Perturbation strength |Ug/Sg|, put 100 where we have s_g=0
+    u_g = np.abs(ug_matrix[:, 0])
+    pert = np.divide(u_g, np.abs(s_g_pix),
+              out=np.full_like(s_g_pix, 100.0), where=s_g_pix != 0)
+
+    # We start with all non-strong beams in the list.
+    weak = np.ones_like(s_g_pix)
+    weak[strong_beam_list] = 0
+    max_pert_weak = 0.0001
+    # increasing threshold till we have few enough
+    while np.sum(weak) > min_weak_beams:
+        weak *= np.where((pert >= max_pert_weak), 1, 0)
+        max_pert_weak += 0.0001
+    
+    # Create weak beam list
+    weak_beam_list = np.flatnonzero(weak)
+    # n_weak_beams = len(weak_beam_list)
+    n_beams = len(weak_beam_list)
+    
+    # now update the scattering ug_sg_matrix (not sure if it works)
+    # Add weak beams perturbatively for the 1st column (sumC)
+    # and diagonal elements (sumD)
+    # new version using broadcasting 
+    # (NOT WORKING, SIZE mismatch ug_wj * ug_wj_weak)
+    weak_beam_sg = s_g_pix[weak_beam_list]
+    ug_w0 = ug_matrix[weak_beam_list, 0]
+    ug_wj = ug_matrix[strong_beam_list[:, None], weak_beam_list]
+    ug_wj_weak = ug_matrix[weak_beam_list[:, None], strong_beam_list]
+    
+    # Eq. 4 from Zuo & Weickenmeier (Ultramicroscopy 57, 1995)
+    sum_c = np.sum(ug_wj * ug_w0 / (2.0 * big_k_mag * weak_beam_sg), axis=1)
+    
+    # Eq. 5 (sumD): Broadcasting for diagonal terms
+    sum_d = np.einsum('ij,ij->i', ug_wj, ug_wj_weak) / (2.0 * big_k_mag * weak_beam_sg)
+    
+    # Update ug_sg_matrix: first column and diagonal terms
+    ug_sg_matrix[1:n_beams, 0] -= sum_c  # Update first column (sumC)
+    ug_sg_matrix[1:n_beams, 1:n_beams] -= (2.0 * big_k_mag * 
+                                           sum_d[:, None]) / (4.0 * np.pi**2)
+    # old version using loops
+    # for j in range(1, n_beams):
+    #     sum_c = 0 + 0j  # Complex zero
+    #     sum_d = 0 + 0j  # Complex zero
+        
+    #     for i in range(n_weak_beams):
+    #         # Eq. 4 from Zuo & Weickenmeier (Ultramicroscopy 57, 1995)
+    #         sum_c += (ug_matrix[strong_beam_list[j], weak[i]] *
+    #                   ug_matrix[weak[i], 0] / 
+    #                   (2.0 * big_k_mag * s_g_pix[weak_beam_list[i]]))
+            
+    #         # Eq. 5 from Zuo & Weickenmeier (Ultramicroscopy 57, 1995)
+    #         sum_d += (ug_matrix[strong_beam_list[j], weak_beam_list[i]] * 
+    #                   ug_matrix[weak_beam_list[i], strong_beam_list[j]] / 
+    #                   (2.0 * big_k_mag * s_g_pix[weak[i]]))
+    
+    #     # Update the first column of the ug_sg_matrix
+    #     mask = ug_sg_matrix == ug_sg_matrix[j, 0]
+    #     ug_sg_matrix[mask] = ug_sg_matrix[j, 0] - sum_c
+    
+    #     # Update the diagonal elements (Sg's)
+    #     ug_sg_matrix[j, j] = ug_sg_matrix[j, j] - \
+    #         2.0*big_k_mag*sum_d/(4.0*np.pi**2)
+    return
+
+
+def f_kirkland(z, g_magnitude):
+    """
+    calculates atomic scattering factor using the Kirkland model.
+    From Appendix C of "Advanced Computing in Electron Microscopy", 2nd ed.
+
+    Parameters:
+    g_magnitude (ndarray): Magnitude of the scattering vector in 1/Å.
+    (NB exp(-i*g.r), physics negative convention)
+    z (int): Atomic number, used to index scattering factors.
+    kirkland (np.ndarray): Array of scattering factors from pylix_dicts
+
+    Returns:
+    ndarray: The calculated Kirkland scattering factor.
+    """
+    
+    q = g_magnitude / (2*np.pi)
+    # coefficients in shape (3, 1, 1) for broadcasting
+    a = fu.kirkland[z-1, 0:6:2].reshape(-1, 1, 1)
+    b = fu.kirkland[z-1, 1:7:2].reshape(-1, 1, 1)
+    c = fu.kirkland[z-1, 6:11:2].reshape(-1, 1, 1)
+    d = fu.kirkland[z-1, 7:12:2].reshape(-1, 1, 1)
+
+    f_g = np.sum(a/(q**2+b), axis=0) + np.sum(c*np.exp(-(d*q**2)), axis=0)
+
+    return f_g
+
+
+def f_doyle_turner(z, g_magnitude):
+    """
+    calculates atomic scattering factor using the Doyle & Turner model.
+
+    Parameters:
+    g_magnitude (ndarray): Magnitude of the scattering vector in 1/Å.
+    (NB exp(-i*g.r), physics negative convention)
+    z (int): Atomic number, used to index scattering factors.
+    kirkland (np.ndarray): Array of scattering factors from pylix_dicts
+
+    Returns:
+    ndarray: The calculated Doyle & Turner scattering factor.
+    """
+    # Convert g to s
+    s = g_magnitude / (4*np.pi)
+
+    a = fu.doyle_turner[z-1, 0:8:2].reshape(-1, 1, 1)
+    b = fu.doyle_turner[z-1, 1:8:2].reshape(-1, 1, 1)
+
+    f_g = np.sum(a * np.exp(-(b * s**2)), axis=0)
+
+    return f_g
+
+
+def f_lobato(z, g_magnitude):
+    """
+    calculates atomic scattering factor using the Lobato model.
+    Lobato & van Dyck Acta Cryst A70, 636 (2014)
+    Parameters:
+    g_magnitude (ndarray): Magnitude of the scattering vector in 1/Å.
+    (NB exp(-i*g.r), physics negative convention)
+    z (int): Atomic number, used to index scattering factors.
+    lobato (np.ndarray): Array of scattering factors from pylix_dicts
+
+    Returns:
+    ndarray: The calculated Lobato scattering factor.
+    """
+    # Convert physics to crystallography convention
+    g = g_magnitude / (2*np.pi)
+
+    a = fu.lobato[z-1, 0:5].reshape(-1, 1, 1)
+    b = fu.lobato[z-1, 5:10].reshape(-1, 1, 1)
+    bg2 = b*(g*g)
+    f_g = np.sum(a*(2+bg2)/((1+bg2)**2), axis=0)
+
+    return f_g
+
+
+def f_peng(z, g_magnitude):
+    """
+    calculates atomic scattering factor using the Peng model.
+    Peng, Micron 30, 625 (1999)
+    Parameters:
+    g_magnitude (ndarray): Magnitude of the scattering vector in 1/Å.
+    (NB exp(-i*g.r), physics negative convention)
+    z (int): Atomic number, used to index scattering factors.
+    peng (np.ndarray): Array of scattering factors from pylix_dicts
+
+    Returns:
+    ndarray: The calculated Peng scattering factor.
+    """
+    # Convert g to s
+    s = g_magnitude / (4*np.pi)
+
+    a = fu.peng[z-1, 0:4].reshape(-1, 1, 1)
+    b = fu.peng[z-1, 4:8].reshape(-1, 1, 1)
+    b_ = -b*(s**2)
+    f_g = np.sum(a*np.exp(b_), axis=0)
+
+    return f_g
+
+
+def four_gauss(x, args):
+    # returns the sum of four Gaussians & a constant for Thomas f_prime
+    f = args[0]*np.exp(-abs(args[1])*x**2) + \
+        args[2]*np.exp(-abs(args[3])*x**2) + \
+        args[4]*np.exp(-abs(args[5])*x**2) + \
+        args[6]*np.exp(-abs(args[7])*x**2) + args[8]
+    return f
+
+
+def f_thomas(g, B, Z, v):
+    # interpolated of parameterised Bird & King absorptive scattering factors
+    # calculation uses s = g/2
+    s = g/2
+    # returns an interpolated absorptive scattering factor
+    Bvalues = np.array([0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5,
+                        0.7, 1, 1.5, 2, 2.75, 4])
+
+    # error checking
+    if isinstance(s, np.ndarray) and np.any(s < 0):
+        raise Exception("inavlid values of s")
+    elif isinstance(s, (int, float)) and s < 0:
+        raise Exception("invalid value of s")
+    if B < 0:
+        raise Exception("invalid value of B")
+    if Z < 1 or Z > 103:
+        raise Exception("invalid value of Z")
+    if B > 4 or 0 < B < 0.1:
+        raise Exception("B outside range of parameterisation")
+    if isinstance(s, np.ndarray) and B == 0:
+        return np.zeros(np.shape(s))
+    elif isinstance(s, (int, float)) and B == 0:
+        return 0
+
+    # get f_prime
+    if np.any(B == Bvalues):  # we don't need to interpolate
+        i = np.where(Bvalues == B)[0][0]
+        line = four_gauss(s, fu.thomas[Z-1][i])
+    else:  # interpolate between parameterised values
+        i = np.where(Bvalues >= B)[0][0]
+        bounding_b = Bvalues[i - 1:i + 1]
+        line1 = four_gauss(s, fu.thomas[Z-1][i - 1])
+        line2 = four_gauss(s, fu.thomas[Z-1][i])
+        line = line1 + (B - bounding_b[0])*(line2 - line1) / \
+            (bounding_b[1] - bounding_b[0])
+    f_prime = c*np.where(line > 0, line, 0)/v
+
+    return f_prime
+
+
+def read_dm3(file_path, y_pixels, x_pixels):
+    """
+    Reads a DM3 file and extracts the image matrix.
+    Parameters:
+    file_path (str): The path to the DM3 file.
+    y_pixels (int): Number of pixels in the Y dimension.
+    x_pixels (int): Number of pixels in the X dimension.
+    
+    Returns:
+    image_dm3 (ndarray): A 2D numpy array containing the image data.
+    
+    Raises:
+    ValueError: If there are any issues with reading the file or the data format.
+    """
+
+    # Parameters
+    print_tags = True
+    image_data_tag = 2
+    
+    # Initialize output variables
+    image_dm3 = np.zeros((y_pixels, x_pixels), dtype=np.float32)
+    
+    # Initialize local variables
+    finding_tags = True
+    looking_for_data_tags = True
+    
+    n_bytes = 0
+    n_tags = 0
+    n_data_tags = 0
+    n_header_bytes = 0
+    iy = 0
+    ix = 0
+    previous_bytes = np.zeros(40, dtype=np.uint8)
+    previous_4_bytes = np.zeros(4, dtype=np.uint8)
+    
+    data_length = 0
+    tag_label = ""
+    in_tag_reading_mode = False
+    
+    # Try to open the file
+    try:
+        with open(file_path, 'rb') as file:
+            while n_bytes < 4000000:
+                if finding_tags:
+                    # Shift bytes and read new byte
+                    previous_bytes = np.roll(previous_bytes, -1)
+                    previous_4_bytes = np.roll(previous_4_bytes, -1)
+                    byte = np.fromfile(file, dtype=np.uint8, count=1)
+                    if byte.size == 0:  # End of file
+                        if print_tags:
+                            print(f'End Of File Reached, Total bytes = {n_bytes}')
+                        break
+                    n_bytes += 1
+                    previous_bytes[-1] = byte[0]
+                    previous_4_bytes[-1] = byte[0]
+                    
+                    # Check if at a DM3 tag delimiter '%%%%' (ASCII value 37)
+                    if np.all(previous_4_bytes == [37, 37, 37, 37]):
+                        if in_tag_reading_mode:
+                            # Capture bytes leading up to the delimiter (those that are valid ASCII)
+                            label = ''
+                            for j in range(len(previous_bytes)-5, -1, -1):
+                                if 32 <= previous_bytes[j] <= 126:
+                                    label = chr(previous_bytes[j]) + label
+                                else:
+                                    break  # Stop on non-ASCII
+                            tag_label = label.strip()
+                            # Print tag if needed
+                            n_tags += 1
+                            if print_tags:
+                                print(f'{tag_label}  {n_tags}  {n_bytes}')
+                                
+                            # Check if it's the 'Data' tag
+                            if looking_for_data_tags:
+                                if 'Data' in tag_label:
+                                    n_data_tags += 1
+                                if n_data_tags == image_data_tag:
+                                    looking_for_data_tags = False
+                                    finding_tags = False
+                            
+                            # Reset tag label for next tag
+                            tag_label = ""
+                            in_tag_reading_mode = False
+                        
+                        # Set the mode to read tag label after finding delimiter
+                        in_tag_reading_mode = True
+                        read_after_delimiter = True
+                    elif in_tag_reading_mode:
+                        # Collect ASCII characters to form the tag label
+                        if 32 <= byte[0] <= 126 and read_after_delimiter:
+                            tag_label += chr(byte[0])
+                        # Stop reading after tag is fully captured
+                        elif not read_after_delimiter:
+                            in_tag_reading_mode = False
+                            tag_label = ""
+                        else:
+                            read_after_delimiter = False
+
+                else:
+                    # read_image_data:
+                    if n_header_bytes < 16:
+                        # Read 4-byte integer
+                        pre_data = np.fromfile(file, dtype=np.uint32, count=1)
+                        if pre_data.size == 0:
+                            raise ValueError(f'Error reading pre-data bytes, Byte number = {n_bytes}')
+    
+                        if n_header_bytes == 12:
+                            # Convert to big endian format
+                            data_length = int.from_bytes(pre_data.tobytes(), 'big')
+                            if data_length != y_pixels * x_pixels:
+                                raise ValueError(f'Data array length does not match input pixel size. '
+                                                 f'Data length = {data_length}, '
+                                                 f'Expected = {y_pixels * x_pixels}')
+    
+                        n_bytes += 4
+                        n_header_bytes += 4
+                    else:
+                        # Read image data
+                        data_bytes = np.fromfile(file, dtype=np.float32, count=1)
+                        if data_bytes.size == 0:
+                            raise ValueError(f'Error reading image data, Byte number = {n_bytes}')
+                        
+                        n_bytes += 4
+                        iy += 1
+                        if iy == y_pixels + 1:
+                            iy = 1
+                            ix += 1
+    
+                        if ix < x_pixels + 1:
+                            image_dm3[ix - 1, iy - 1] = data_bytes[0]
+
+    except FileNotFoundError:
+        raise ValueError(f"File not found: {file_path}")
+    
+    return image_dm3
 
 
 def atom_move(space_group_number, wyckoff):
@@ -1711,9 +1844,9 @@ def atom_move(space_group_number, wyckoff):
     # if space_group_number == 215)
     if space_group_number == 216:  # F-43m
         # a: point symmetry -43m, coordinate [0,0,0], no allowed movements
-        # b: point symmetry -43m, coordinate [1/2,1/2,1/2], no allowed moves
-        # c: point symmetry -43m, coordinate [1/4,1/4,1/4], no allowed moves
-        # d: point symmetry -43m, coordinate [3/4,3/4,3/4], no allowed moves
+        # b: point symmetry -43m, coordinate [1/2,1/2,1/2], no allowed movements
+        # c: point symmetry -43m, coordinate [1/4,1/4,1/4], no allowed movements
+        # d: point symmetry -43m, coordinate [3/4,3/4,3/4], no allowed movements
         if ('e') in wyckoff:  # point symmetry 3m, coordinate [x,x,x] allowed movement along [111]
             moves[0, :] = ([1/np.sqrt(3), 1/np.sqrt(3), 1/np.sqrt(3)])
         elif ('f') in wyckoff:  # point symmetry mm, coordinate [x,0,0] allowed movements along x
