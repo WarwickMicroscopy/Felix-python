@@ -11,7 +11,7 @@ absorption_method         = 2
 byte_size                 = 2
 
 # Radius of the beam in pixels
-image_radius              = 42
+image_radius              = 4
 
 # Beam selection criteria
 min_reflection_pool       = 250

@@ -1030,6 +1030,7 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
 
     return Fg_matrix
 
+
 def deviation_parameter(convergence_angle, image_radius, big_k_mag, g_pool, g_pool_mag):
     # for LACBED pattern of size [m, m] and a set of g-vectors [n, 3]
     # this returns a 3D array of deviation parameters [m, m, n]
@@ -1322,6 +1323,7 @@ def f_thomas(g, B, Z, v):
 
     return f_prime
 
+
 def read_dm3(file_path, y_pixels, x_pixels):
     """
     Reads a DM3 file and extracts the image matrix.
@@ -1342,7 +1344,7 @@ def read_dm3(file_path, y_pixels, x_pixels):
     image_data_tag = 2
     
     # Initialize output variables
-    image_dm3 = np.zeros((max(y_pixels, x_pixels), max(y_pixels, x_pixels)), dtype=np.float32)
+    image_dm3 = np.zeros((y_pixels, x_pixels), dtype=np.float32)
     
     # Initialize local variables
     finding_tags = True
@@ -1358,12 +1360,13 @@ def read_dm3(file_path, y_pixels, x_pixels):
     previous_4_bytes = np.zeros(4, dtype=np.uint8)
     
     data_length = 0
+    tag_label = ""
+    in_tag_reading_mode = False
     
     # Try to open the file
     try:
         with open(file_path, 'rb') as file:
             while n_bytes < 4000000:
-                # read the tags first 
                 if finding_tags:
                     # Shift bytes and read new byte
                     previous_bytes = np.roll(previous_bytes, -1)
@@ -1376,22 +1379,49 @@ def read_dm3(file_path, y_pixels, x_pixels):
                     n_bytes += 1
                     previous_bytes[-1] = byte[0]
                     previous_4_bytes[-1] = byte[0]
+                    
                     # Check if at a DM3 tag delimiter '%%%%' (ASCII value 37)
                     if np.all(previous_4_bytes == [37, 37, 37, 37]):
-                        n_tags += 1
+                        if in_tag_reading_mode:
+                            # Capture bytes leading up to the delimiter (those that are valid ASCII)
+                            label = ''
+                            for j in range(len(previous_bytes)-5, -1, -1):
+                                if 32 <= previous_bytes[j] <= 126:
+                                    label = chr(previous_bytes[j]) + label
+                                else:
+                                    break  # Stop on non-ASCII
+                            tag_label = label.strip()
+                            # Print tag if needed
+                            n_tags += 1
+                            if print_tags:
+                                print(f'{tag_label}  {n_tags}  {n_bytes}')
+                                
+                            # Check if it's the 'Data' tag
+                            if looking_for_data_tags:
+                                if 'Data' in tag_label:
+                                    n_data_tags += 1
+                                if n_data_tags == image_data_tag:
+                                    looking_for_data_tags = False
+                                    finding_tags = False
+                            
+                            # Reset tag label for next tag
+                            tag_label = ""
+                            in_tag_reading_mode = False
                         
-                        # Convert bytes to tag label
-                        tag_label = ''.join(chr(b) for b in previous_bytes[:-4][previous_bytes[:-4] >= 32])
-                        
-                        if print_tags:
-                            print(f'{tag_label}  {n_tags}  {n_bytes}')
-                        
-                        if looking_for_data_tags:
-                            if tag_label == 'Data':
-                                n_data_tags += 1
-                            if n_data_tags == image_data_tag:
-                                looking_for_data_tags = False
-                                finding_tags = False
+                        # Set the mode to read tag label after finding delimiter
+                        in_tag_reading_mode = True
+                        read_after_delimiter = True
+                    elif in_tag_reading_mode:
+                        # Collect ASCII characters to form the tag label
+                        if 32 <= byte[0] <= 126 and read_after_delimiter:
+                            tag_label += chr(byte[0])
+                        # Stop reading after tag is fully captured
+                        elif not read_after_delimiter:
+                            in_tag_reading_mode = False
+                            tag_label = ""
+                        else:
+                            read_after_delimiter = False
+
                 else:
                     # read_image_data:
                     if n_header_bytes < 16:
@@ -1429,6 +1459,7 @@ def read_dm3(file_path, y_pixels, x_pixels):
         raise ValueError(f"File not found: {file_path}")
     
     return image_dm3
+
 
 def atom_move(space_group_number, wyckoff):
     moves = np.zeros([3, 3])
