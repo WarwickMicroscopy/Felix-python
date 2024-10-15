@@ -1,6 +1,7 @@
 import ast
 import re
 import numpy as np
+from scipy.constants import c, h, e, m_e
 from CifFile import CifFile
 from pylix_modules import pylix_dicts as fu
 
@@ -983,17 +984,18 @@ def hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k, lattice_type,
 
 def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
               atomic_number, occupancy, B_iso, g_matrix, g_magnitude,
-              absorption_method, absorption_per):
+              absorption_method, absorption_per, electron_velocity):
     Fg_matrix = np.zeros([n_hkl, n_hkl], dtype=np.complex128)
-    # calculate g.r for all g-vectors and atom positions [n_hkl, n_hkl, n_atoms]
+    # calculate g.r for all g-vectors and atom posns [n_hkl, n_hkl, n_atoms]
     g_dot_r = np.einsum('ijk,lk->ijl', g_matrix, atom_coordinate)
     # exp(i g.r) [n_hkl, n_hkl, n_atoms]
     phase = np.exp(-1j * g_dot_r)
     # scattering factor for all g-vectors, to be used atom by atom
-    # NB scattering factor methods accept and return 2D arrays [n_hkl, n_hkl] of
+    # NB scattering factor methods accept and return 2D[n_hkl, n_hkl] array of
     # g magnitudes but only one atom type.  Potential speed up by broadcasting
     # all atom types and modifying scattering factor methods to accept 2D + 1D
-    # arrays [n_hkl, n_hkl] & [n_atoms], returning an array [n_hkl, n_hkl, n_atoms]
+    # arrays [n_hkl, n_hkl] & [n_atoms],
+    # returning an array [n_hkl, n_hkl, n_atoms]
     for i in range(n_atoms):
         # get the scattering factor
         if scatter_factor_method == 0:
@@ -1010,27 +1012,23 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
         # get the absorptive scattering factor (null for absorption_method==0)
         # no absorption
         if absorption_method == 0:
-            f_g_prime =  np.zeros_like(f_g)
-      # proportional model
+            f_g_prime = np.zeros_like(f_g)
+        # proportional model
         elif absorption_method == 1:
             f_g_prime = 1j * f_g * absorption_per/100.0
         # Bird & King model, parameterised by Thomas (Acta Cryst 2023)
         elif absorption_method == 2:
-            f_g_prime = 1j * f_g * absorption_per/100.0
-        
+            f_g_prime = 1j * f_thomas(g_magnitude, B_iso[i],
+                                      atomic_number[i], electron_velocity)
+
         # The Structure Factor Equation
         # multiply by Debye-Waller factor, phase and occupancy
         Fg_matrix = Fg_matrix+((f_g + f_g_prime) * phase[:, :, i] *
-                               occupancy[i] * 
-                               np.exp(-B_iso[i] * 
+                               occupancy[i] *
+                               np.exp(-B_iso[i] *
                                       (g_magnitude**2)/(16*np.pi**2)))
 
-    # clean up
-    del phase
-    del g_dot_r
-    
     return Fg_matrix
-
 
 def deviation_parameter(convergence_angle, image_radius, big_k_mag, g_pool, g_pool_mag):
     # for LACBED pattern of size [m, m] and a set of g-vectors [n, 3]
@@ -1276,6 +1274,54 @@ def f_peng(z, g_magnitude):
     return f_g
 
 
+def four_gauss(x, args):
+    # returns the sum of four Gaussians & a constant for Thomas f_prime
+    f = args[0]*np.exp(-abs(args[1])*x**2) + \
+        args[2]*np.exp(-abs(args[3])*x**2) + \
+        args[4]*np.exp(-abs(args[5])*x**2) + \
+        args[6]*np.exp(-abs(args[7])*x**2) + args[8]
+    return f
+
+
+def f_thomas(g, B, Z, v):
+    # interpolated of parameterised Bird & King absorptive scattering factors
+    # calculation uses s = g/2
+    s = g/2
+    # returns an interpolated absorptive scattering factor
+    Bvalues = np.array([0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5,
+                        0.7, 1, 1.5, 2, 2.75, 4])
+
+    # error checking
+    if isinstance(s, np.ndarray) and np.any(s < 0):
+        raise Exception("inavlid values of s")
+    elif isinstance(s, (int, float)) and s < 0:
+        raise Exception("invalid value of s")
+    if B < 0:
+        raise Exception("invalid value of B")
+    if Z < 1 or Z > 103:
+        raise Exception("invalid value of Z")
+    if B > 4 or 0 < B < 0.1:
+        raise Exception("B outside range of parameterisation")
+    if isinstance(s, np.ndarray) and B == 0:
+        return np.zeros(np.shape(s))
+    elif isinstance(s, (int, float)) and B == 0:
+        return 0
+
+    # get f_prime
+    if np.any(B == Bvalues):  # we don't need to interpolate
+        i = np.where(Bvalues == B)[0][0]
+        line = four_gauss(s, fu.thomas[Z-1][i])
+    else:  # interpolate between parameterised values
+        i = np.where(Bvalues >= B)[0][0]
+        bounding_b = Bvalues[i - 1:i + 1]
+        line1 = four_gauss(s, fu.thomas[Z-1][i - 1])
+        line2 = four_gauss(s, fu.thomas[Z-1][i])
+        line = line1 + (B - bounding_b[0])*(line2 - line1) / \
+            (bounding_b[1] - bounding_b[0])
+    f_prime = c*np.where(line > 0, line, 0)/v
+
+    return f_prime
+
 def read_dm3(file_path, y_pixels, x_pixels):
     """
     Reads a DM3 file and extracts the image matrix.
@@ -1292,7 +1338,7 @@ def read_dm3(file_path, y_pixels, x_pixels):
     """
 
     # Parameters
-    print_tags = False
+    print_tags = True
     image_data_tag = 2
     
     # Initialize output variables
@@ -1317,65 +1363,67 @@ def read_dm3(file_path, y_pixels, x_pixels):
     try:
         with open(file_path, 'rb') as file:
             while n_bytes < 4000000:
-                # Shift bytes and read new byte
-                previous_bytes = np.roll(previous_bytes, -1)
-                previous_4_bytes = np.roll(previous_4_bytes, -1)
-                byte = np.fromfile(file, dtype=np.uint8, count=1)
-                if byte.size == 0:  # End of file
-                    if print_tags:
-                        print(f'End Of File Reached, Total bytes = {n_bytes}')
-                    break
-                n_bytes += 1
-                previous_bytes[-1] = byte[0]
-                previous_4_bytes[-1] = byte[0]
-                # Check if at a DM3 tag delimiter '%%%%' (ASCII value 37)
-                if np.all(previous_4_bytes == [37, 37, 37, 37]):
-                    n_tags += 1
-                    
-                    # Convert bytes to tag label
-                    tag_label = ''.join(chr(b) for b in previous_bytes[:-4][previous_bytes[:-4] >= 32])
-                    
-                    if print_tags:
-                        print(f'{tag_label}  {n_tags}  {n_bytes}')
-                    
-                    if looking_for_data_tags:
-                        if tag_label == 'Data':
-                            n_data_tags += 1
-                        if n_data_tags == image_data_tag:
-                            looking_for_data_tags = False
-                            finding_tags = False
-
-                # read_image_data:
-                if n_header_bytes < 16:
-                    # Read 4-byte integer
-                    pre_data = np.fromfile(file, dtype=np.uint32, count=1)
-                    if pre_data.size == 0:
-                        raise ValueError(f'Error reading pre-data bytes, Byte number = {n_bytes}')
-
-                    if n_header_bytes == 12:
-                        # Convert to big endian format
-                        data_length = int.from_bytes(pre_data.tobytes(), 'big')
-                        if data_length != y_pixels * x_pixels:
-                            raise ValueError(f'Data array length does not match input pixel size. '
-                                             f'Data length = {data_length}, '
-                                             f'Expected = {y_pixels * x_pixels}')
-
-                    n_bytes += 4
-                    n_header_bytes += 4
+                # read the tags first 
+                if finding_tags:
+                    # Shift bytes and read new byte
+                    previous_bytes = np.roll(previous_bytes, -1)
+                    previous_4_bytes = np.roll(previous_4_bytes, -1)
+                    byte = np.fromfile(file, dtype=np.uint8, count=1)
+                    if byte.size == 0:  # End of file
+                        if print_tags:
+                            print(f'End Of File Reached, Total bytes = {n_bytes}')
+                        break
+                    n_bytes += 1
+                    previous_bytes[-1] = byte[0]
+                    previous_4_bytes[-1] = byte[0]
+                    # Check if at a DM3 tag delimiter '%%%%' (ASCII value 37)
+                    if np.all(previous_4_bytes == [37, 37, 37, 37]):
+                        n_tags += 1
+                        
+                        # Convert bytes to tag label
+                        tag_label = ''.join(chr(b) for b in previous_bytes[:-4][previous_bytes[:-4] >= 32])
+                        
+                        if print_tags:
+                            print(f'{tag_label}  {n_tags}  {n_bytes}')
+                        
+                        if looking_for_data_tags:
+                            if tag_label == 'Data':
+                                n_data_tags += 1
+                            if n_data_tags == image_data_tag:
+                                looking_for_data_tags = False
+                                finding_tags = False
                 else:
-                    # Read image data
-                    data_bytes = np.fromfile(file, dtype=np.float32, count=1)
-                    if data_bytes.size == 0:
-                        raise ValueError(f'Error reading image data, Byte number = {n_bytes}')
-                    
-                    n_bytes += 4
-                    iy += 1
-                    if iy == y_pixels + 1:
-                        iy = 1
-                        ix += 1
-
-                    if ix < x_pixels + 1:
-                        image_dm3[ix - 1, iy - 1] = data_bytes[0]
+                    # read_image_data:
+                    if n_header_bytes < 16:
+                        # Read 4-byte integer
+                        pre_data = np.fromfile(file, dtype=np.uint32, count=1)
+                        if pre_data.size == 0:
+                            raise ValueError(f'Error reading pre-data bytes, Byte number = {n_bytes}')
+    
+                        if n_header_bytes == 12:
+                            # Convert to big endian format
+                            data_length = int.from_bytes(pre_data.tobytes(), 'big')
+                            if data_length != y_pixels * x_pixels:
+                                raise ValueError(f'Data array length does not match input pixel size. '
+                                                 f'Data length = {data_length}, '
+                                                 f'Expected = {y_pixels * x_pixels}')
+    
+                        n_bytes += 4
+                        n_header_bytes += 4
+                    else:
+                        # Read image data
+                        data_bytes = np.fromfile(file, dtype=np.float32, count=1)
+                        if data_bytes.size == 0:
+                            raise ValueError(f'Error reading image data, Byte number = {n_bytes}')
+                        
+                        n_bytes += 4
+                        iy += 1
+                        if iy == y_pixels + 1:
+                            iy = 1
+                            ix += 1
+    
+                        if ix < x_pixels + 1:
+                            image_dm3[ix - 1, iy - 1] = data_bytes[0]
 
     except FileNotFoundError:
         raise ValueError(f"File not found: {file_path}")

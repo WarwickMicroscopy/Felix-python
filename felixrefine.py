@@ -18,8 +18,8 @@ import time
 start = time.time()
 # %% Main felix program
 # go to the pylix folder
-path = r"C:\Users\rbean\Documents\GitHub\Felix-python"
-# path = r"C:\Users\Richard\Documents\GitHub\Felix-python"
+# path = r"C:\Users\rbean\Documents\GitHub\Felix-python"
+path = r"C:\Users\Richard\Documents\GitHub\Felix-python"
 os.chdir(path)
 
 # felix modules
