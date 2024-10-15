@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # %% modules and subroutines
 """
 Created August 2024
@@ -17,8 +18,8 @@ import time
 start = time.time()
 # %% Main felix program
 # go to the pylix folder
-# path = r"C:\Users\rbean\Documents\GitHub\Felix-python"
-path = r"C:\Users\Richard\Documents\GitHub\Felix-python"
+path = r"C:\Users\rbean\Documents\GitHub\Felix-python"
+# path = r"C:\Users\Richard\Documents\GitHub\Felix-python"
 os.chdir(path)
 
 # felix modules
@@ -151,7 +152,7 @@ if "cell_volume" in cif_dict:
 else:
     cell_volume = cell_a*cell_b*cell_c*np.sqrt(1.0-np.cos(cell_alpha)**2
                   - np.cos(cell_beta)**2 - np.cos(cell_gamma)**2
-                  + 2.0*np.cos(cell_alpha)*np.cos(cell_beta)*np.cos(cell_gamma))
+                  +2.0*np.cos(cell_alpha)*np.cos(cell_beta)*np.cos(cell_gamma))
 
 # Conversion from scattering factor to volts
 scatt_fac_to_volts = ((h**2) /
@@ -426,7 +427,8 @@ Fg_to_Ug = relativistic_correction / (np.pi * cell_volume)
 ug_matrix = Fg_to_Ug * px.Fg_matrix(n_hkl, scatter_factor_method, n_atoms,
                                     atom_coordinate, atomic_number, occupancy,
                                     B_iso, g_matrix, g_magnitude,
-                                    absorption_method, absorption_per)
+                                    absorption_method, absorption_per,
+                                    electron_velocity)
 # ug_matrix = 10 ug_matrix
 # matrix of dot products with the surface normal
 g_dot_norm = np.dot(g_pool, norm_dir_m)

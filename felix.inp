@@ -21,7 +21,7 @@ g_limit                   = 3.0
 
 # Crystal settings
 debye_waller_constant     = 0.0
-absorption_per            = 40.0
+absorption_per            = 10.0
 
 # Microscope settings
 convergence_angle         = 1
@@ -50,4 +50,4 @@ print_flag                = 0
 simplex_length_scale      = 0.1
 exit_criteria             = 0.000001
 debug                     = 0
-plot                      = 1
+plot                      = 0
