@@ -7,6 +7,7 @@ Created August 2024
 
 """
 import os
+import re
 import numpy as np
 from scipy.constants import c, h, e, m_e, angstrom
 from scipy.linalg import eig, inv
@@ -116,9 +117,11 @@ for var_name, var_value in cif_dict.items():
 # ====== extract values
 # chemical formula
 if "chemical_formula_structural" in cif_dict:
-    chemical_formula = chemical_formula_structural.replace(' ', '')
+    chemical_formula = re.sub(r'(?<!\d)1(?!\d)', '',
+                              chemical_formula_structural.replace(' ', ''))
 if "chemical_formula_sum" in cif_dict:  # preferred, replce structural if poss
-    chemical_formula = chemical_formula_sum.replace(' ', '')
+    chemical_formula = re.sub(r'(?<!\d)1(?!\d)', '',
+                              chemical_formula_sum.replace(' ', ''))
 print("Material: " + chemical_formula)
 # space group number and lattice type
 if "space_group_symbol" in cif_dict:
@@ -580,6 +583,16 @@ plt.show()
 # 10 = kV *** NOT YET IMPLEMENTED ***
 
 if 'S' not in refine_mode:
+    # read in experimental images
+    x_str = str(image_radius*2)
+    for dirpath, dirnames, filenames in os.walk(path):
+        for dirname in dirnames:
+            # Check if 'dm3' and the number x are in the folder name
+            if 'dm3' in dirname.lower() and x_str in dirname:
+                # Return the full path of the matching folder
+                dm3_folder = os.path.join(dirpath, dirname)
+    
+    
     independent_variable = ([])
     independent_variable_type = ([])
     atom_refine_flag = ([])

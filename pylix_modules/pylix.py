@@ -1,8 +1,9 @@
 import ast
 import re
 import numpy as np
-from scipy.constants import c, h, e, m_e
+from scipy.constants import c
 from CifFile import CifFile
+import struct
 from pylix_modules import pylix_dicts as fu
 
 def read_inp_file(filename):
@@ -1324,141 +1325,161 @@ def f_thomas(g, B, Z, v):
     return f_prime
 
 
-def read_dm3(file_path, y_pixels, x_pixels):
+def read_dm3(file_path, x, y):
     """
-    Reads a DM3 file and extracts the image matrix.
-    Parameters:
-    file_path (str): The path to the DM3 file.
-    y_pixels (int): Number of pixels in the Y dimension.
-    x_pixels (int): Number of pixels in the X dimension.
+    Reads a .dm3 file, finds tags (ignores their structure and content),
+    and extracts image data.
     
-    Returns:
-    image_dm3 (ndarray): A 2D numpy array containing the image data.
-    
-    Raises:
-    ValueError: If there are any issues with reading the file or the data format.
-    """
+    in principle it is possible to get the dimensions of the image from the
+    tags and use this to determine image size x and y.  However if the image
+    size doesn't match the simulation there's not much point (at the moment)
 
-    # Parameters
-    print_tags = True
-    image_data_tag = 2
-    
-    # Initialize output variables
-    image_dm3 = np.zeros((y_pixels, x_pixels), dtype=np.float32)
-    
-    # Initialize local variables
-    finding_tags = True
-    looking_for_data_tags = True
-    
-    n_bytes = 0
-    n_tags = 0
-    n_data_tags = 0
-    n_header_bytes = 0
-    iy = 0
-    ix = 0
-    previous_bytes = np.zeros(40, dtype=np.uint8)
-    previous_4_bytes = np.zeros(4, dtype=np.uint8)
-    
-    data_length = 0
-    tag_label = ""
-    in_tag_reading_mode = False
-    
-    # Try to open the file
-    try:
-        with open(file_path, 'rb') as file:
-            while n_bytes < 4000000:
-                if finding_tags:
-                    # Shift bytes and read new byte
-                    previous_bytes = np.roll(previous_bytes, -1)
-                    previous_4_bytes = np.roll(previous_4_bytes, -1)
-                    byte = np.fromfile(file, dtype=np.uint8, count=1)
-                    if byte.size == 0:  # End of file
-                        if print_tags:
-                            print(f'End Of File Reached, Total bytes = {n_bytes}')
+    We look for delimiters %%%% that lies between tag labels and data
+    """
+    with open(file_path, 'rb') as f:
+        n_tags = 0
+        n_datatags = 0
+        tag_delimiter = b'%%%%'
+        tag_label = ""
+        # Initialize an empty image
+        image = np.zeros((y, x), dtype=np.float32)
+
+        # Create a buffer for 40 bytes
+        buffersize = 60
+        prev_bytes = bytearray(buffersize)
+        prev_4_bytes = bytearray(4)
+
+        # first go through the tags
+        find_tags = True
+        while find_tags is True:
+            # Read one byte at a time
+            byte = f.read(1)
+            if not byte:
+                # End of file
+                raise ValueError("Unexpected end of file")
+                break
+            prev_bytes = prev_bytes[1:] + byte
+            prev_4_bytes = prev_4_bytes[1:] + byte
+
+            if prev_4_bytes == tag_delimiter:
+                n_tags += 1
+                tag_label = ""
+                # The tag label is in the bytes before delimiter
+                for j in range(buffersize-5, 0, -1):
+                    char_byte = prev_bytes[j]
+                    if chr(char_byte) == '%':  # we've reached the previous tag
                         break
-                    n_bytes += 1
-                    previous_bytes[-1] = byte[0]
-                    previous_4_bytes[-1] = byte[0]
-                    
-                    # Check if at a DM3 tag delimiter '%%%%' (ASCII value 37)
-                    if np.all(previous_4_bytes == [37, 37, 37, 37]):
-                        if in_tag_reading_mode:
-                            # Capture bytes leading up to the delimiter (those that are valid ASCII)
-                            label = ''
-                            for j in range(len(previous_bytes)-5, -1, -1):
-                                if 32 <= previous_bytes[j] <= 126:
-                                    label = chr(previous_bytes[j]) + label
-                                else:
-                                    break  # Stop on non-ASCII
-                            tag_label = label.strip()
-                            # Print tag if needed
-                            n_tags += 1
-                            if print_tags:
-                                print(f'{tag_label}  {n_tags}  {n_bytes}')
-                                
-                            # Check if it's the 'Data' tag
-                            if looking_for_data_tags:
-                                if 'Data' in tag_label:
-                                    n_data_tags += 1
-                                if n_data_tags == image_data_tag:
-                                    looking_for_data_tags = False
-                                    finding_tags = False
-                            
-                            # Reset tag label for next tag
-                            tag_label = ""
-                            in_tag_reading_mode = False
-                        
-                        # Set the mode to read tag label after finding delimiter
-                        in_tag_reading_mode = True
-                        read_after_delimiter = True
-                    elif in_tag_reading_mode:
-                        # Collect ASCII characters to form the tag label
-                        if 32 <= byte[0] <= 126 and read_after_delimiter:
-                            tag_label += chr(byte[0])
-                        # Stop reading after tag is fully captured
-                        elif not read_after_delimiter:
-                            in_tag_reading_mode = False
-                            tag_label = ""
-                        else:
-                            read_after_delimiter = False
-
-                else:
-                    # read_image_data:
-                    if n_header_bytes < 16:
-                        # Read 4-byte integer
-                        pre_data = np.fromfile(file, dtype=np.uint32, count=1)
-                        if pre_data.size == 0:
-                            raise ValueError(f'Error reading pre-data bytes, Byte number = {n_bytes}')
-    
-                        if n_header_bytes == 12:
-                            # Convert to big endian format
-                            data_length = int.from_bytes(pre_data.tobytes(), 'big')
-                            if data_length != y_pixels * x_pixels:
-                                raise ValueError(f'Data array length does not match input pixel size. '
-                                                 f'Data length = {data_length}, '
-                                                 f'Expected = {y_pixels * x_pixels}')
-    
-                        n_bytes += 4
-                        n_header_bytes += 4
+                    if 32 <= char_byte <= 126:  # ASCII character
+                        tag_label = chr(char_byte) + tag_label
                     else:
-                        # Read image data
-                        data_bytes = np.fromfile(file, dtype=np.float32, count=1)
-                        if data_bytes.size == 0:
-                            raise ValueError(f'Error reading image data, Byte number = {n_bytes}')
-                        
-                        n_bytes += 4
-                        iy += 1
-                        if iy == y_pixels + 1:
-                            iy = 1
-                            ix += 1
-    
-                        if ix < x_pixels + 1:
-                            image_dm3[ix - 1, iy - 1] = data_bytes[0]
+                        break
 
-    except FileNotFoundError:
-        raise ValueError(f"File not found: {file_path}")
-    
-    return image_dm3
+                # 16 bytes of tag information
+                # first 4 bytes = tag type
+                tag_type = struct.unpack('>I', f.read(4))[0]
+                if tag_type == 1:
+                    data_type = "int"
+                elif tag_type == 2:
+                    data_type = "int16"
+                elif tag_type == 3:
+                    data_type = "real 4"
+                elif tag_type == 4:
+                    data_type = "uint16"
+                elif tag_type == 5:
+                    data_type = "uint32"
+                elif tag_type == 6:
+                    data_type = "float32"
+                elif tag_type == 7:
+                    data_type = "float64"
+                elif tag_type == 8:
+                    data_type = "bool"
+                elif tag_type == 9:
+                    data_type = "uint8 character"
+                elif tag_type == 10:
+                    data_type = "octet"
+                elif tag_type == 11:
+                    data_type = "uint64"
+                else:
+                    data_type = str(tag_type)
+                    # raise ValueError("Data type not recognised")
+                    
+                # next 4 bytes is the tag form (not sure about these)
+                tag_form = struct.unpack('>I', f.read(4))[0]
+                if tag_form == 15:
+                    data_form = "1D array"
+                elif tag_form == 5:
+                    data_form = "int"
+                elif tag_form == 6:
+                    data_form = "float"
+                elif tag_form == 8:
+                    data_form = "bool"
+                elif tag_form == 20:
+                    data_form = "2D array"
+
+                # print(f"{tag_label}: {data_type}, {data_form}")
+
+                # Check if it's the second 'Data' tag
+                if tag_label == 'Data':
+                    n_datatags += 1
+                    if n_datatags == 2:  # found it
+                        find_tags = False
+
+        # Read the image
+        print(f"Reading image {file_path}")
+        # next 4 bytes is data_type (again?_
+        tag_type = struct.unpack('>I', f.read(4))[0]
+        if tag_type == 2:
+            pix_bytes = 2  # Signed 2-byte integer
+        elif tag_type == 3:
+            pix_bytes = 4  # Signed 4-byte integer
+        elif tag_type == 4:
+            pix_bytes = 2  # Unsigned 2-byte integer
+        elif tag_type == 5:
+            pix_bytes = 4  # Unsigned 4-byte integer
+        elif tag_type == 6:
+            pix_bytes = 4  # int32
+        elif tag_type == 7:
+            pix_bytes = 8  # int64
+        elif tag_type == 9:
+            pix_bytes = 1  # Signed 1-byte integer
+        elif tag_type == 10:
+            pix_bytes = 1  # Unsigned 1-byte integer
+        else:
+            raise ValueError(f"data type [{tag_type}] not recognised")
+              
+        # final 4 bytes is data length
+        data_length = struct.unpack('>I', f.read(4))[0]
+        # Check data array length, error if things don't match
+        expected_data_length = y * x
+        if data_length != expected_data_length:
+            raise ValueError(f"Data length mismatch. Expected: {expected_data_length}, Got: {data_length}")
+        
+        total_bytes = data_length * pix_bytes  # 4 bytes per float32
+        raw_data = f.read(total_bytes)
+        # Error if things don't match
+        if len(raw_data) != total_bytes:
+            raise ValueError(f"Error: Incomplete data read. Expected {total_bytes} bytes, got {len(raw_data)} bytes.")
+
+        # put the data into a 2D image according to its data type
+        if tag_type == 2:
+            image = np.frombuffer(raw_data, dtype='<i2').reshape((x, y))
+        if tag_type == 3:
+            image = np.frombuffer(raw_data, dtype='<i4').reshape((x, y))
+        if tag_type == 4:
+            image = np.frombuffer(raw_data, dtype='<u2').reshape((x, y))
+        if tag_type == 5:
+            image = np.frombuffer(raw_data, dtype='<u4').reshape((x, y))
+        if tag_type == 6:
+            image = np.frombuffer(raw_data, dtype='<f4').reshape((x, y))
+        if tag_type == 7:
+            image = np.frombuffer(raw_data, dtype='<f8').reshape((x, y))
+        if tag_type == 9:
+            image = np.frombuffer(raw_data, dtype=np.int8).reshape((x, y))
+        if tag_type == 10:
+            image = np.frombuffer(raw_data, dtype=np.uint8).reshape((x, y))
+
+
+    return image
 
 
 def atom_move(space_group_number, wyckoff):
