@@ -38,7 +38,7 @@ delta_thickness           = 100.0
 precision                 = 0.00002
 
 # Refinement specific flags
-refine_mode               = 'S'
+refine_mode               = 'H'
 weighting_flag            = 0
 refine_method_flag        = 3
 correlation_flag          = 2

@@ -27,11 +27,11 @@ os.chdir(path)
 # from pylix_modules import pylix_dicts as fu
 from pylix_modules import pylix as px
 from pylix_modules import pylix_dicts as fu
-
+latest_commit_id = px.get_git()
 # outputs
 print("-----------------------------------------------------------------")
-print("felixrefine:  <version>")
-print("felixrefine: see https://github.com/WarwickMicroscopy/Felix")
+print(f"felixrefine:  version {latest_commit_id[:8]}")
+print("felixrefine: see https://github.com/WarwickMicroscopy/Felix-python")
 print("-----------------------------------------------------------------")
 
 # variables to get from felix.inp
@@ -190,10 +190,12 @@ for i in range(basis_count):
 basis_wyckoff = atom_site_wyckoff_symbol
 
 # basis_atom_position = np.zeros([basis_count, 3])
-x_ = np.array([tup[0] for tup in atom_site_fract_x])
-y_ = np.array([tup[0] for tup in atom_site_fract_y])
-z_ = np.array([tup[0] for tup in atom_site_fract_z])
-basis_atom_position = np.column_stack((x_, y_, z_))
+# x_ = np.array([tup[0] for tup in atom_site_fract_x])
+# y_ = np.array([tup[0] for tup in atom_site_fract_y])
+# z_ = np.array([tup[0] for tup in atom_site_fract_z])
+basis_atom_position = np.column_stack((np.array([tup[0] for tup in atom_site_fract_x]),
+                                       np.array([tup[0] for tup in atom_site_fract_y]),
+                                       np.array([tup[0] for tup in atom_site_fract_z])))
 # Debye-Waller factor
 if "atom_site_b_iso_or_equiv" in cif_dict:
     basis_B_iso = np.array([tup[0] for tup in atom_site_b_iso_or_equiv])
@@ -216,7 +218,8 @@ if error_flag is True:
     raise ValueError("can't read felix.inp")
 
 # pixels
-n_pixels = (2*image_radius)**2
+image_width = 2*image_radius
+n_pixels = (image_width)**2
 
 # thickness count
 thickness_count = int((final_thickness-initial_thickness)/delta_thickness) + 1
@@ -455,7 +458,7 @@ pool = time.time()
 k_dot_n = np.tensordot(tilted_k, norm_dir_m, axes=([2], [0]))
 
 # output LACBED patterns
-lacbed = np.zeros([image_radius*2, image_radius*2, len(g_output)], dtype=float)
+lacbed = np.zeros([image_width, image_width, len(g_output)], dtype=float)
 
 print("Bloch wave calculation...", end=' ')
 if debug:
@@ -463,10 +466,12 @@ if debug:
     print("output indices")
     print(g_output[:15])
 # pixel by pixel calculations from here
-bf = np.zeros([image_radius*2, image_radius*2], dtype=float)
-for pix_x in range(image_radius*2):
-    print(f"\rBloch wave calculation... {50*pix_x/image_radius:.0f}%", end="")  # progess
-    for pix_y in range(image_radius*2):
+bf = np.zeros([image_width, image_width], dtype=float)
+for pix_x in range(image_width):
+    # progess
+    print(f"\rBloch wave calculation... {50*pix_x/image_radius:.0f}%", end="")
+    
+    for pix_y in range(image_width):
         s_g_pix = np.squeeze(s_g[pix_x, pix_y, :])
         k_dot_n_pix = k_dot_n[pix_x, pix_y]
 
@@ -476,6 +481,7 @@ for pix_x in range(image_radius*2):
         # Use Sg and perturbation strength to define other strong beams
         strong_beam_ = px.strong_beams(s_g_pix, ug_matrix, min_strong_beams)
         extras = np.setdiff1d(strong_beam_, g_output)
+        # hkls in the structure matrix, with outputs top of the list
         strong_beam_indices = np.concatenate((strong_beam_indices, extras))
         n_beams = len(strong_beam_indices)
 
@@ -536,7 +542,8 @@ for pix_x in range(image_radius*2):
         intensities = np.abs(wave_functions)**2
 
         # Map diffracted intensities to required output g vectors
-        lacbed[pix_x, pix_y, :] = intensities[:len(g_output)]
+        # note x and y swapped!
+        lacbed[-pix_y, pix_x, :] = intensities[:len(g_output)]
         # for j in range(len(g_output)):
         #     for i in strong_beam_indices:
         #         if (i == g_output[j]):
@@ -583,16 +590,51 @@ plt.show()
 # 10 = kV *** NOT YET IMPLEMENTED ***
 
 if 'S' not in refine_mode:
-    # read in experimental images
-    x_str = str(image_radius*2)
+    # read in experimental images that will go in
+    expt_lacbed = np.zeros([image_width, image_width, n_out])
+    # get the list of available images
+    x_str = str(image_width)
+    dm3_folder = None
     for dirpath, dirnames, filenames in os.walk(path):
         for dirname in dirnames:
             # Check if 'dm3' and the number x are in the folder name
             if 'dm3' in dirname.lower() and x_str in dirname:
                 # Return the full path of the matching folder
                 dm3_folder = os.path.join(dirpath, dirname)
-    
-    
+    if dm3_folder is not None:
+        dm3_files = [file for file in os.listdir(dm3_folder)
+                 if file.lower().endswith('.dm3')]
+    # match the indices
+    n_expt = n_out
+    for i in range(n_out):
+        g_string = px.hkl_string(hkl[g_output[i]])
+        found = False
+        for file_name in dm3_files:
+            if g_string in file_name:
+                file_path = os.path.join(dm3_folder, file_name)
+                expt_lacbed[:, :, i] = px.read_dm3(file_path, image_width)
+                found = True
+        if not found:
+            n_expt -= 1
+            print(f"{g_string} not found")
+
+    # output experimental LACBED patterns
+    w = int(np.ceil(np.sqrt(n_out)))
+    h = int(np.ceil(n_out/w))
+    fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))
+    text_effect = withStroke(linewidth=3, foreground='black')
+    axes = axes.flatten()
+    for i in range(n_out):
+        axes[i].imshow(expt_lacbed[:, :, i], cmap='gist_earth')
+        axes[i].axis('off')
+        annotation = f"{hkl[g_output[i], 0]}{hkl[g_output[i], 1]}{hkl[g_output[i], 2]}"
+        axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
+                         size=30, color='w', path_effects=[text_effect])
+    for i in range(n_out, len(axes)):
+        axes[i].axis('off')
+    plt.tight_layout()
+    plt.show()
+            
     independent_variable = ([])
     independent_variable_type = ([])
     atom_refine_flag = ([])
@@ -737,14 +779,6 @@ if 'S' not in refine_mode:
     independent_variable_type = np.array(independent_variable_type)
     independent_variable_atom = np.array(atom_refine_flag[:n_variables])
 
-
-# %% read experimental images, dm3
-file_path="DM3_84x84\\GaAs_+0+0+0.dm3"
-y_pixels = 84
-x_pixels = 84
-a000 = px.read_dm3(file_path, y_pixels, x_pixels)
-plt.imshow(a000)
-plt.show()
 
 # %%
 
