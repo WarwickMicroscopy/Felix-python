@@ -10,7 +10,6 @@ import os
 import re
 import numpy as np
 from scipy.constants import c, h, e, m_e, angstrom
-from scipy.linalg import eig, inv
 import matplotlib.pyplot as plt
 from matplotlib.patheffects import withStroke
 import matplotlib.colors as mcolors
@@ -466,7 +465,6 @@ if debug:
     print("output indices")
     print(g_output[:15])
 # pixel by pixel calculations from here
-bf = np.zeros([image_width, image_width], dtype=float)
 for pix_x in range(image_width):
     # progess
     print(f"\rBloch wave calculation... {50*pix_x/image_radius:.0f}%", end="")
@@ -475,70 +473,10 @@ for pix_x in range(image_width):
         s_g_pix = np.squeeze(s_g[pix_x, pix_y, :])
         k_dot_n_pix = k_dot_n[pix_x, pix_y]
 
-        # strong_beam_indices gives the index of a strong beam in the beam pool
-        # output reflections must be in the beam pool
-        strong_beam_indices = g_output
-        # Use Sg and perturbation strength to define other strong beams
-        strong_beam_ = px.strong_beams(s_g_pix, ug_matrix, min_strong_beams)
-        extras = np.setdiff1d(strong_beam_, g_output)
-        # hkls in the structure matrix, with outputs top of the list
-        strong_beam_indices = np.concatenate((strong_beam_indices, extras))
-        n_beams = len(strong_beam_indices)
-
-        # Make a Ug matrix for this pixel by selecting only strong beams
-        beam_projection_matrix = np.zeros((n_beams, n_hkl), dtype=np.complex128)
-        beam_projection_matrix[np.arange(n_beams), strong_beam_indices] = 1+0j
-        # reduce the matrix using some nifty matrix multiplication
-        beam_transpose = beam_projection_matrix.T
-        ug_matrix_partial = np.dot(ug_matrix, beam_transpose)
-        ug_sg_matrix = np.dot(beam_projection_matrix, ug_matrix_partial)
-
-        # Final normalization of the matrix
-        # off-diagonal elements are Ug/2K, diagonal elements are Sg
-        # Spence's (1990) 'Structure matrix'
-        ug_sg_matrix = 2.0*np.pi**2 * ug_sg_matrix / big_k_mag
-        # replace the diagonal with strong beam deviation parameters
-        ug_sg_matrix[np.arange(n_beams), np.arange(n_beams)] = \
-            s_g_pix[strong_beam_indices]
-
-        # weak beam correction (NOT WORKING)
-        # px.weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_indices,
-        #                min_weak_beams, big_k_mag)
-
-        # surface normal correction part 1
-        structure_matrix = np.zeros_like(ug_sg_matrix)
-        norm_factor = np.sqrt(1 + g_dot_norm[strong_beam_indices]/k_dot_n_pix)
-        structure_matrix = ug_sg_matrix / np.outer(norm_factor, norm_factor)
-
-        # get eigenvalues (gamma), eigenvectors
-        gamma, eigenvectors = eig(structure_matrix)
-        # Invert using LU decomposition (similar to ZGETRI in Fortran)
-        inverted_eigenvectors = inv(eigenvectors)
-
-        if debug:
-            np.set_printoptions(precision=3, suppress=True)
-            print("eigenvectors")
-            print(eigenvectors[:5, :5])
-
-        # calculate intensities
-
-        # Initialize incident (complex) wave function psi0
-        # all zeros except 000 beam which is 1
-        psi0 = np.zeros(n_beams, dtype=np.complex128)
-        psi0[0] = 1.0 + 0j
-        intensities = np.zeros(n_beams, dtype=np.float64)
-
-        # Form eigenvalue diagonal matrix exp(i t gamma)
-        thickness_terms = np.diag(np.exp(1j * initial_thickness * gamma))
-
-        # surface normal correction part 2
-        m_ii = np.sqrt(1 + g_dot_norm[strong_beam_indices] / k_dot_n_pix)
-        inverted_m = np.diag(m_ii)
-        m_matrix = np.diag(1/m_ii)
-
-        # calculate wave functions and intensities
-        wave_functions = (m_matrix @ eigenvectors @ thickness_terms
-                          @ inverted_eigenvectors @ inverted_m @ psi0)
+        wave_functions = px.wave_functions(
+            g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl, big_k_mag,
+            g_dot_norm, k_dot_n_pix, initial_thickness, debug)
+        
         intensities = np.abs(wave_functions)**2
 
         # Map diffracted intensities to required output g vectors

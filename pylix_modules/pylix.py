@@ -3,6 +3,7 @@ import re
 import subprocess
 import numpy as np
 from scipy.constants import c
+from scipy.linalg import eig, inv
 from CifFile import CifFile
 import struct
 from pylix_modules import pylix_dicts as fu
@@ -1101,6 +1102,88 @@ def strong_beams(s_g_pix, ug_matrix, min_strong_beams):
 
     # Create strong beam list
     return np.flatnonzero(strong)
+
+
+def bloch(g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl,
+                  big_k_mag, g_dot_norm, k_dot_n_pix, debug):
+    
+    # strong_beam_indices gives the index of a strong beam in the beam pool
+    # Use Sg and perturbation strength to define strong beams
+    strong_beam = strong_beams(s_g_pix, ug_matrix, min_strong_beams)
+    # which ones are new (i.e. not already in the output list)
+    strong_new = np.setdiff1d(strong_beam, g_output)
+    # make the structure matrix for this pixel, outputs top of the list
+    strong_beam_indices = np.concatenate((g_output, strong_new))
+    n_beams = len(strong_beam_indices)
+
+    # Make a Ug matrix for this pixel by selecting only strong beams
+    beam_projection_matrix = np.zeros((n_beams, n_hkl), dtype=np.complex128)
+    beam_projection_matrix[np.arange(n_beams), strong_beam_indices] = 1+0j
+    # reduce the matrix using some nifty matrix multiplication
+    beam_transpose = beam_projection_matrix.T
+    ug_matrix_partial = np.dot(ug_matrix, beam_transpose)
+    ug_sg_matrix = np.dot(beam_projection_matrix, ug_matrix_partial)
+
+    # Final normalization of the matrix
+    # off-diagonal elements are Ug/2K, diagonal elements are Sg
+    # Spence's (1990) 'Structure matrix'
+    ug_sg_matrix = 2.0*np.pi**2 * ug_sg_matrix / big_k_mag
+    # replace the diagonal with strong beam deviation parameters
+    ug_sg_matrix[np.arange(n_beams), np.arange(n_beams)] = \
+        s_g_pix[strong_beam_indices]
+
+    # weak beam correction (NOT WORKING)
+    # px.weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_indices,
+    #                min_weak_beams, big_k_mag)
+
+    # surface normal correction part 1
+    structure_matrix = np.zeros_like(ug_sg_matrix)
+    norm_factor = np.sqrt(1 + g_dot_norm[strong_beam_indices]/k_dot_n_pix)
+    structure_matrix = ug_sg_matrix / np.outer(norm_factor, norm_factor)
+
+    # get eigenvalues (gamma), eigenvecs
+    gamma, eigenvecs = eig(structure_matrix)
+    # Invert using LU decomposition (similar to ZGETRI in Fortran)
+    inv_eigenvecs = inv(eigenvecs)
+
+    if debug:
+        np.set_printoptions(precision=3, suppress=True)
+        print("eigenvectors")
+        print(eigenvecs[:5, :5])
+
+    return n_beams, strong_beam_indices, gamma, eigenvecs, inv_eigenvecs
+
+
+def wave_functions(g_output, s_g_pix, ug_matrix, min_strong_beams,
+                   n_hkl, big_k_mag, g_dot_norm,
+                   k_dot_n_pix, thickness, debug):
+    #calculates wave functions for a given thickness by calling the bloch
+    # subroutine to get the eigenvector matrices
+    # and evaluating for a range of thicknesses
+
+    n_beams, strong_beam_indices, gamma, eigenvecs, inv_eigenvecs = bloch(
+        g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl, big_k_mag,
+        g_dot_norm, k_dot_n_pix, debug)
+    # calculate intensities
+
+    # Initialize incident (complex) wave function psi0
+    # all zeros except 000 beam which is 1
+    psi0 = np.zeros(n_beams, dtype=np.complex128)
+    psi0[0] = 1.0 + 0j
+
+    # Form eigenvalue diagonal matrix exp(i t gamma)
+    thickness_terms = np.diag(np.exp(1j * thickness * gamma))
+
+    # surface normal correction part 2
+    m_ii = np.sqrt(1 + g_dot_norm[strong_beam_indices] / k_dot_n_pix)
+    inverted_m = np.diag(m_ii)
+    m_matrix = np.diag(1/m_ii)
+
+    # calculate wave functions and intensities
+    wave_functions = (m_matrix @ eigenvecs @ thickness_terms
+                      @ inv_eigenvecs @ inverted_m @ psi0)
+    
+    return wave_functions
 
 
 def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list, 

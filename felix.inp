@@ -50,4 +50,4 @@ print_flag                = 0
 simplex_length_scale      = 0.1
 exit_criteria             = 0.000001
 debug                     = 0
-plot                      = 1
+plot                      = 0
