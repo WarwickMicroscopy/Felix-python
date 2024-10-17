@@ -32,7 +32,7 @@ accelerating_voltage_kv   = 200.0
 acceptance_angle          = 0.0
 
 # Image output options
-initial_thickness         = 930.0
+initial_thickness         = 530.0
 final_thickness           = 930.0
 delta_thickness           = 100.0
 precision                 = 0.00002

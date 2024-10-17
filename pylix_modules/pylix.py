@@ -1171,19 +1171,35 @@ def wave_functions(g_output, s_g_pix, ug_matrix, min_strong_beams,
     psi0 = np.zeros(n_beams, dtype=np.complex128)
     psi0[0] = 1.0 + 0j
 
-    # Form eigenvalue diagonal matrix exp(i t gamma)
-    thickness_terms = np.diag(np.exp(1j * thickness * gamma))
-
     # surface normal correction part 2
     m_ii = np.sqrt(1 + g_dot_norm[strong_beam_indices] / k_dot_n_pix)
     inverted_m = np.diag(m_ii)
     m_matrix = np.diag(1/m_ii)
 
-    # calculate wave functions and intensities
-    wave_functions = (m_matrix @ eigenvecs @ thickness_terms
-                      @ inv_eigenvecs @ inverted_m @ psi0)
+    # evaluate for the range of thicknesses
+    wave_function = ([])
+    for t in thickness:
+        gamma_t = np.diag(np.exp(1j * t * gamma))
+        # calculate wave functions
+        wave_function.append(m_matrix @ eigenvecs @ gamma_t
+                          @ inv_eigenvecs @ inverted_m @ psi0)
+
+    # ... or, for all thicknesses at once! not working, boo
+    # would avoid the type change when making wave_functions a numpy array
+    # thickness = thickness[:, np.newaxis]
+    # gamma_t = np.array([np.diag(np.exp(1j * t * gamma))
+    #                          for t in thickness.flatten()])
+    # wave_functions = np.einsum(
+    #     'ij,jk,tkm,mn,nl,l->ti',
+    #     m_matrix,
+    #     eigenvecs,
+    #     gamma_t,
+    #     inv_eigenvecs,
+    #     inverted_m,
+    #     psi0
+    # )
     
-    return wave_functions
+    return np.array(wave_function)
 
 
 def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list, 

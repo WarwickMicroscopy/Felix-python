@@ -220,8 +220,9 @@ if error_flag is True:
 image_width = 2*image_radius
 n_pixels = (image_width)**2
 
-# thickness count
-thickness_count = int((final_thickness-initial_thickness)/delta_thickness) + 1
+# thickness array
+thickness = np.arange(initial_thickness, final_thickness, delta_thickness)
+n_thickness = len(thickness)
 
 # convert arrays to numpy
 incident_beam_direction = np.array(incident_beam_direction, dtype='float')
@@ -457,7 +458,7 @@ pool = time.time()
 k_dot_n = np.tensordot(tilted_k, norm_dir_m, axes=([2], [0]))
 
 # output LACBED patterns
-lacbed = np.zeros([image_width, image_width, len(g_output)], dtype=float)
+lacbed = np.zeros([n_thickness, image_width, image_width, len(g_output)], dtype=float)
 
 print("Bloch wave calculation...", end=' ')
 if debug:
@@ -473,15 +474,16 @@ for pix_x in range(image_width):
         s_g_pix = np.squeeze(s_g[pix_x, pix_y, :])
         k_dot_n_pix = k_dot_n[pix_x, pix_y]
 
+        # does this work for multiple thicknesses???
         wave_functions = px.wave_functions(
             g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl, big_k_mag,
-            g_dot_norm, k_dot_n_pix, initial_thickness, debug)
+            g_dot_norm, k_dot_n_pix, thickness, debug)
         
         intensities = np.abs(wave_functions)**2
 
         # Map diffracted intensities to required output g vectors
         # note x and y swapped!
-        lacbed[-pix_y, pix_x, :] = intensities[:len(g_output)]
+        lacbed[:, -pix_y, pix_x, :] = intensities[:, :len(g_output)]
         # for j in range(len(g_output)):
         #     for i in strong_beam_indices:
         #         if (i == g_output[j]):
@@ -493,19 +495,20 @@ done = time.time()
 # %% output LACBED patterns
 w = int(np.ceil(np.sqrt(n_out)))
 h = int(np.ceil(n_out/w))
-fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))
-text_effect = withStroke(linewidth=3, foreground='black')
-axes = axes.flatten()
-for i in range(n_out):
-    axes[i].imshow(lacbed[:, :, i], cmap='pink')
-    axes[i].axis('off')
-    annotation = f"{hkl[g_output[i], 0]}{hkl[g_output[i], 1]}{hkl[g_output[i], 2]}"
-    axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
-                     size=30, color='w', path_effects=[text_effect])
-for i in range(n_out, len(axes)):
-    axes[i].axis('off')
-plt.tight_layout()
-plt.show()
+for j in range(n_thickness):
+    fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))
+    text_effect = withStroke(linewidth=3, foreground='black')
+    axes = axes.flatten()
+    for i in range(n_out):
+        axes[i].imshow(lacbed[j, :, :, i], cmap='pink')
+        axes[i].axis('off')
+        annotation = f"{hkl[g_output[i], 0]}{hkl[g_output[i], 1]}{hkl[g_output[i], 2]}"
+        axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
+                         size=30, color='w', path_effects=[text_effect])
+    for i in range(n_out, len(axes)):
+        axes[i].axis('off')
+    plt.tight_layout()
+    plt.show()
 
 
 # %% set up refinement, TO BE TESTED
