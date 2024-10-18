@@ -34,67 +34,67 @@ print("felixrefine: see https://github.com/WarwickMicroscopy/Felix-python")
 print("-----------------------------------------------------------------")
 
 # variables to get from felix.inp
-scatter_factor_method = None
-holz_flag = None
+accelerating_voltage_kv = None
+acceptance_angle = None
 absorption_method = None
+absorption_per = None
+atomic_sites = None
+blur_radius = None
 byte_size = None
+convergence_angle = None
+correlation_type = None
+debye_waller_constant = None
+debug = None
+delta_thickness = None
+exit_criteria = None
+final_thickness = None
+g_limit = None
+holz_flag = None
+image_processing = None
 image_radius = None
+incident_beam_direction = None
+initial_thickness = None
 min_reflection_pool = None
 min_strong_beams = None
 min_weak_beams = None
-g_limit = None
-debye_waller_constant = None
-absorption_per = None
-convergence_angle = None
-incident_beam_direction = None
-x_direction = None
-normal_direction = None
-accelerating_voltage_kv = None
-acceptance_angle = None
-initial_thickness = None
-final_thickness = None
-delta_thickness = None
-precision = None
-refine_mode = None
-weighting_flag = None
-refine_method_flag = None
-correlation_flag = None
-image_processing_flag = None
-blur_radius = None
 no_of_ugs = None
-atomic_sites = None
-print_flag = None
-simplex_length_scale = None
-exit_criteria = None
-debug = None
+normal_direction = None
 plot = None
+precision = None
+print_flag = None
+refine_method_flag = None
+refine_mode = None
+scatter_factor_method = None
+simplex_length_scale = None
+weighting_flag = None
+x_direction = None
 
 # variables to get from felix.cif
-chemical_formula_structural = None
-chemical_formula_iupac = None
-chemical_formula_sum = None
-space_group_symbol = None
-space_group_name_h_m_alt = None
-space_group_it_number = None
-space_group_symop_operation_xyz = None
-symmetry_space_group_name_h_m = None
-symmetry_equiv_pos_as_xyz = None
-cell_length_a = None
-cell_length_b = None
-cell_length_c = None
-cell_angle_alpha = None
-cell_angle_beta = None
-cell_angle_gamma = None
-cell_volume = None
+atom_site_b_iso_or_equiv = None
 atom_site_label = None
 atom_site_type_symbol = None
-atom_site_wyckoff_symbol = None
 atom_site_fract_x = None
 atom_site_fract_y = None
 atom_site_fract_z = None
-atom_site_u_iso_or_equiv = None
-atom_site_b_iso_or_equiv = None
 atom_site_occupancy = None
+atom_site_u_iso_or_equiv = None
+atom_site_wyckoff_symbol = None
+cell_angle_alpha = None
+cell_angle_beta = None
+cell_angle_gamma = None
+cell_length_a = None
+cell_length_b = None
+cell_length_c = None
+cell_volume = None
+chemical_formula_iupac = None
+chemical_formula_structural = None
+chemical_formula_sum = None
+space_group_it_number = None
+space_group_name_h_m_alt = None
+space_group_symbol = None
+space_group_symop_operation_xyz = None
+symmetry_equiv_pos_as_xyz = None
+symmetry_space_group_name_h_m = None
 
 # %% read felix.cif
 
@@ -221,8 +221,13 @@ image_width = 2*image_radius
 n_pixels = (image_width)**2
 
 # thickness array
-thickness = np.arange(initial_thickness, final_thickness, delta_thickness)
-n_thickness = len(thickness)
+if (final_thickness > initial_thickness + delta_thickness):
+    thickness = np.arange(initial_thickness, final_thickness, delta_thickness)
+    n_thickness = len(thickness)
+else:
+    # need np.array rather than float so wave_functions works for 1 or many t's
+    thickness = np.array(initial_thickness)
+    n_thickness = 1
 
 # convert arrays to numpy
 incident_beam_direction = np.array(incident_beam_direction, dtype='float')
@@ -235,6 +240,10 @@ g_limit = g_limit * 2 * np.pi
 
 # output
 print(f"Zone axis: {incident_beam_direction.astype(int)}")
+if n_thickness ==1:
+    print(f"Specimen thickness {initial_thickness/10} nm")
+else:
+    print(f"{n_thickness} thicknesses: {', '.join(map(str, thickness/10))} nm")
 if 'S' in refine_mode:
     print("Simulation only, S")
 elif 'A' in refine_mode:
@@ -452,13 +461,12 @@ s_g, tilted_k = px.deviation_parameter(convergence_angle, image_radius,
                                        big_k_mag, g_pool, g_pool_mag)
 
 
-# %% choose strong beams and do the Bloch wave calculation
+# %% Bloch wave calculation
 pool = time.time()
 # Dot product of k with surface normal, size [image diameter, image diameter]
 k_dot_n = np.tensordot(tilted_k, norm_dir_m, axes=([2], [0]))
 
-# output LACBED patterns
-lacbed = np.zeros([n_thickness, image_width, image_width, len(g_output)], dtype=float)
+lacbed_sim = np.zeros([n_thickness, image_width, image_width, len(g_output)], dtype=float)
 
 print("Bloch wave calculation...", end=' ')
 if debug:
@@ -479,20 +487,17 @@ for pix_x in range(image_width):
             g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl, big_k_mag,
             g_dot_norm, k_dot_n_pix, thickness, debug)
         
-        intensities = np.abs(wave_functions)**2
+        intensity = np.abs(wave_functions)**2
 
-        # Map diffracted intensities to required output g vectors
+        # Map diffracted intensity to required output g vectors
         # note x and y swapped!
-        lacbed[:, -pix_y, pix_x, :] = intensities[:, :len(g_output)]
-        # for j in range(len(g_output)):
-        #     for i in strong_beam_indices:
-        #         if (i == g_output[j]):
-        #             lacbed[pix_x, pix_y, j] = intensities[i]
+        lacbed_sim[:, -pix_y, pix_x, :] = intensity[:, :len(g_output)]
+
 print("\rBloch wave calculation... done    ")
 done = time.time()
 
 
-# %% output LACBED patterns
+# %% output simulated LACBED patterns
 w = int(np.ceil(np.sqrt(n_out)))
 h = int(np.ceil(n_out/w))
 for j in range(n_thickness):
@@ -500,7 +505,7 @@ for j in range(n_thickness):
     text_effect = withStroke(linewidth=3, foreground='black')
     axes = axes.flatten()
     for i in range(n_out):
-        axes[i].imshow(lacbed[j, :, :, i], cmap='pink')
+        axes[i].imshow(lacbed_sim[j, :, :, i], cmap='pink')
         axes[i].axis('off')
         annotation = f"{hkl[g_output[i], 0]}{hkl[g_output[i], 1]}{hkl[g_output[i], 2]}"
         axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
@@ -532,7 +537,7 @@ for j in range(n_thickness):
 
 if 'S' not in refine_mode:
     # read in experimental images that will go in
-    expt_lacbed = np.zeros([image_width, image_width, n_out])
+    lacbed_expt = np.zeros([image_width, image_width, n_out])
     # get the list of available images
     x_str = str(image_width)
     dm3_folder = None
@@ -545,36 +550,38 @@ if 'S' not in refine_mode:
     if dm3_folder is not None:
         dm3_files = [file for file in os.listdir(dm3_folder)
                  if file.lower().endswith('.dm3')]
-    # match the indices
-    n_expt = n_out
-    for i in range(n_out):
-        g_string = px.hkl_string(hkl[g_output[i]])
-        found = False
-        for file_name in dm3_files:
-            if g_string in file_name:
-                file_path = os.path.join(dm3_folder, file_name)
-                expt_lacbed[:, :, i] = px.read_dm3(file_path, image_width)
-                found = True
-        if not found:
-            n_expt -= 1
-            print(f"{g_string} not found")
+        # just match the indices in the filename to felix.hkl, expect the user
+        # to ensure the data is of the right material!
+        n_expt = n_out
+        for i in range(n_out):
+            g_string = px.hkl_string(hkl[g_output[i]])
+            found = False
+            for file_name in dm3_files:
+                if g_string in file_name:
+                    file_path = os.path.join(dm3_folder, file_name)
+                    lacbed_expt[:, :, i] = px.read_dm3(file_path, image_width,
+                                                       debug)
+                    found = True
+            if not found:
+                n_expt -= 1
+                print(f"{g_string} not found")
 
-    # output experimental LACBED patterns
-    w = int(np.ceil(np.sqrt(n_out)))
-    h = int(np.ceil(n_out/w))
-    fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))
-    text_effect = withStroke(linewidth=3, foreground='black')
-    axes = axes.flatten()
-    for i in range(n_out):
-        axes[i].imshow(expt_lacbed[:, :, i], cmap='gist_earth')
-        axes[i].axis('off')
-        annotation = f"{hkl[g_output[i], 0]}{hkl[g_output[i], 1]}{hkl[g_output[i], 2]}"
-        axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
-                         size=30, color='w', path_effects=[text_effect])
-    for i in range(n_out, len(axes)):
-        axes[i].axis('off')
-    plt.tight_layout()
-    plt.show()
+        # output experimental LACBED patterns
+        w = int(np.ceil(np.sqrt(n_out)))
+        h = int(np.ceil(n_out/w))
+        fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))
+        text_effect = withStroke(linewidth=3, foreground='black')
+        axes = axes.flatten()
+        for i in range(n_out):
+            axes[i].imshow(lacbed_expt[:, :, i], cmap='gist_earth')
+            axes[i].axis('off')
+            annotation = f"{hkl[g_output[i], 0]}{hkl[g_output[i], 1]}{hkl[g_output[i], 2]}"
+            axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
+                             size=30, color='w', path_effects=[text_effect])
+        for i in range(n_out, len(axes)):
+            axes[i].axis('off')
+        plt.tight_layout()
+        plt.show()
             
     independent_variable = ([])
     independent_variable_type = ([])
@@ -721,9 +728,12 @@ if 'S' not in refine_mode:
     independent_variable_atom = np.array(atom_refine_flag[:n_variables])
 
 
-# %%
+# %% figure of merit and best thickness
 
-print(f"Setup took {1000*(setup-start):.1f} milliseconds")
+
+# %% final print
+print("-----------------------------------------------------------------")
 print(f"Beam pool calculation took {pool-setup:.3f} seconds")
-print(f"Bloch wave calculation took {done-pool:.3f} seconds \
-      ({1000*(done-pool)/(4*image_radius**2):.2f} ms per pixel)")
+print(f"Bloch wave calculation in {done-pool:.1f} s ({1000*(done-pool)/(4*image_radius**2):.2f} ms/pixel)")
+print("-----------------------------------------------------------------")
+print("|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||")

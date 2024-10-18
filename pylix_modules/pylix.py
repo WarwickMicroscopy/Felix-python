@@ -1178,11 +1178,16 @@ def wave_functions(g_output, s_g_pix, ug_matrix, min_strong_beams,
 
     # evaluate for the range of thicknesses
     wave_function = ([])
-    for t in thickness:
-        gamma_t = np.diag(np.exp(1j * t * gamma))
-        # calculate wave functions
+    if thickness.ndim ==0:  # just one thickness
+        gamma_t = np.diag(np.exp(1j * thickness * gamma))
         wave_function.append(m_matrix @ eigenvecs @ gamma_t
                           @ inv_eigenvecs @ inverted_m @ psi0)
+    else:  # multiple thicknesses
+        for t in thickness:
+            gamma_t = np.diag(np.exp(1j * t * gamma))
+            # calculate wave functions
+            wave_function.append(m_matrix @ eigenvecs @ gamma_t
+                              @ inv_eigenvecs @ inverted_m @ psi0)
 
     # ... or, for all thicknesses at once! not working, boo
     # would avoid the type change when making wave_functions a numpy array
@@ -1425,7 +1430,7 @@ def f_thomas(g, B, Z, v):
     return f_prime
 
 
-def read_dm3(file_path, x):
+def read_dm3(file_path, x, debug):
     """
     Reads a .dm3 file, finds tags (ignores their structure and content),
     and extracts image data.
@@ -1529,7 +1534,8 @@ def read_dm3(file_path, x):
                             find_tags = False
     
             # Read the image
-            print(f"Reading image {file_path}")
+            if debug:
+                print(f"Reading image {file_path}")
             # next 4 bytes is data_type (again?_
             tag_type = struct.unpack('>I', f.read(4))[0]
             if tag_type == 2:
@@ -1586,6 +1592,15 @@ def read_dm3(file_path, x):
     except FileNotFoundError:
         print(f"{file_path} not found")
 
+
+def figure_of_merit_and_thickness(lacbed_sim, lacbed_expt, image_processing,
+                                  blur_radius, correlation_type):
+    #
+    i=0
+    j=0
+    simulated_image = lacbed_sim[:, :, i, j]
+
+    
 def get_git():
     try:
         # Run the git command to get the latest commit ID
