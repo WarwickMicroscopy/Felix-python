@@ -13,13 +13,14 @@ from scipy.constants import c, h, e, m_e, angstrom
 import matplotlib.pyplot as plt
 from matplotlib.patheffects import withStroke
 import matplotlib.colors as mcolors
+from matplotlib.ticker import PercentFormatter
 import time
 
 start = time.time()
 # %% Main felix program
 # go to the pylix folder
-# path = r"C:\Users\rbean\Documents\GitHub\Felix-python"
-path = r"C:\Users\Richard\Documents\GitHub\Felix-python"
+path = r"C:\Users\rbean\Documents\GitHub\Felix-python"
+# path = r"C:\Users\Richard\Documents\GitHub\Felix-python"
 os.chdir(path)
 
 # felix modules
@@ -308,6 +309,7 @@ relativistic_mass = relativistic_correction * m_e
 input_hkls, i_obs, sigma_obs = px.read_hkl_file("felix.hkl")
 n_out = len(input_hkls)+1  # we expect 000 NOT to be in the hkl list
 
+
 # %% fill the unit cell and get mean inner potential
 atom_position, atom_label, atom_name, B_iso, occupancy = \
     px.unique_atom_positions(
@@ -403,18 +405,20 @@ if plot:
     w_f = 10
     fig.set_size_inches(w_f, w_f)
     ax.set_facecolor('black')
-    #colour according to Laue zone
+    # colour according to Laue zone
     lz_cvals = mcolors.Normalize(vmin=np.min(g_pool[:, 2]),
-                                   vmax=np.max(g_pool[:, 2]))
+                                 vmax=np.max(g_pool[:, 2]))
     lz_cmap = plt.cm.brg
     lz_colours = lz_cmap(lz_cvals(g_pool[:, 2]))
     # plots the g-vectors in the pool, colours for different Laue zones
     plt.scatter(g_pool[:, 0]/(2*np.pi), g_pool[:, 1]/(2*np.pi),
                 s=20, color=lz_colours)
     # title
-    plt.annotate("Beam pool", xy=(5, 5), color='white', xycoords='axes pixels', size=24)
+    plt.annotate("Beam pool", xy=(5, 5), color='white',
+                 xycoords='axes pixels', size=24)
     # major grid at 1 1/Å
-    plt.grid(True,  which='major', color='lightgrey', linestyle='-', linewidth=1.0)
+    plt.grid(True,  which='major', color='lightgrey',
+             linestyle='-', linewidth=1.0)
     plt.gca().set_xticks(np.arange(-xm, xm, 1))
     plt.gca().set_yticks(np.arange(-xm, xm, 1))
     plt.grid(True, which='minor', color='grey', linestyle='--',
@@ -454,68 +458,6 @@ if debug:
     print(100*ug_matrix[:5, :5])
 
 
-# %% deviation parameter for each pixel and g-vector
-# s_g [n_hkl, image diameter, image diameter]
-# and k vector for each pixel, tilted_k [image diameter, image diameter, 3]
-s_g, tilted_k = px.deviation_parameter(convergence_angle, image_radius,
-                                       big_k_mag, g_pool, g_pool_mag)
-
-
-# %% Bloch wave calculation
-pool = time.time()
-# Dot product of k with surface normal, size [image diameter, image diameter]
-k_dot_n = np.tensordot(tilted_k, norm_dir_m, axes=([2], [0]))
-
-lacbed_sim = np.zeros([n_thickness, image_width, image_width, len(g_output)], dtype=float)
-
-print("Bloch wave calculation...", end=' ')
-if debug:
-    print("")
-    print("output indices")
-    print(g_output[:15])
-# pixel by pixel calculations from here
-for pix_x in range(image_width):
-    # progess
-    print(f"\rBloch wave calculation... {50*pix_x/image_radius:.0f}%", end="")
-    
-    for pix_y in range(image_width):
-        s_g_pix = np.squeeze(s_g[pix_x, pix_y, :])
-        k_dot_n_pix = k_dot_n[pix_x, pix_y]
-
-        # does this work for multiple thicknesses???
-        wave_functions = px.wave_functions(
-            g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl, big_k_mag,
-            g_dot_norm, k_dot_n_pix, thickness, debug)
-        
-        intensity = np.abs(wave_functions)**2
-
-        # Map diffracted intensity to required output g vectors
-        # note x and y swapped!
-        lacbed_sim[:, -pix_y, pix_x, :] = intensity[:, :len(g_output)]
-
-print("\rBloch wave calculation... done    ")
-done = time.time()
-
-
-# %% output simulated LACBED patterns
-w = int(np.ceil(np.sqrt(n_out)))
-h = int(np.ceil(n_out/w))
-for j in range(n_thickness):
-    fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))
-    text_effect = withStroke(linewidth=3, foreground='black')
-    axes = axes.flatten()
-    for i in range(n_out):
-        axes[i].imshow(lacbed_sim[j, :, :, i], cmap='pink')
-        axes[i].axis('off')
-        annotation = f"{hkl[g_output[i], 0]}{hkl[g_output[i], 1]}{hkl[g_output[i], 2]}"
-        axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
-                         size=30, color='w', path_effects=[text_effect])
-    for i in range(n_out, len(axes)):
-        axes[i].axis('off')
-    plt.tight_layout()
-    plt.show()
-
-
 # %% set up refinement, TO BE TESTED
 # --------------------------------------------------------------------
 # n_variables calculated depending upon Ug and non-Ug refinement
@@ -524,16 +466,16 @@ for j in range(n_thickness):
 # We count the independent variables:
 # independent_variable = variable to be refined
 # independent_variable_type = what kind of variable, as follows
-# 1 = Ug amplitude
-# 2 = Ug phase
-# 3 = atom coordinate *** PARTIALLY IMPLEMENTED *** not all space groups
-# 4 = occupancy
-# 5 = B_iso
-# 6 = B_aniso *** NOT YET IMPLEMENTED ***
-# 71,72,73 = lattice parameters *** PARTIALLY IMPLEMENTED *** not rhombohedral
-# 8 = unit cell angles *** NOT YET IMPLEMENTED ***
-# 9 = convergence angle
-# 10 = kV *** NOT YET IMPLEMENTED ***
+# 0 = Ug amplitude
+# 1 = Ug phase
+# 2 = atom coordinate *** PARTIALLY IMPLEMENTED *** not all space groups
+# 3 = occupancy
+# 4 = B_iso
+# 5 = B_aniso *** NOT YET IMPLEMENTED ***
+# 61,62,63 = lattice parameters *** PARTIALLY IMPLEMENTED *** not rhombohedral
+# 7 = unit cell angles *** NOT YET IMPLEMENTED ***
+# 8 = convergence angle
+# 9 = kV *** NOT YET IMPLEMENTED ***
 
 if 'S' not in refine_mode:
     # read in experimental images that will go in
@@ -549,7 +491,7 @@ if 'S' not in refine_mode:
                 dm3_folder = os.path.join(dirpath, dirname)
     if dm3_folder is not None:
         dm3_files = [file for file in os.listdir(dm3_folder)
-                 if file.lower().endswith('.dm3')]
+                     if file.lower().endswith('.dm3')]
         # just match the indices in the filename to felix.hkl, expect the user
         # to ensure the data is of the right material!
         n_expt = n_out
@@ -582,7 +524,7 @@ if 'S' not in refine_mode:
             axes[i].axis('off')
         plt.tight_layout()
         plt.show()
-            
+
     independent_variable = ([])
     independent_variable_type = ([])
     atom_refine_flag = ([])
@@ -637,10 +579,10 @@ if 'S' not in refine_mode:
                 np.imag(ug_matrix[i_ug, 0]))
             # amplitude is type 1, always a variable
             independent_variable.append(ug_matrix[i_ug, 0])
-            independent_variable_type.append(1)
+            independent_variable_type.append(0)
             if vars_per_ug == 2:  # we also adjust phase
                 independent_variable.append(ug_matrix[i_ug, 0])
-                independent_variable_type.append(2)
+                independent_variable_type.append(1)
             j += 1
 
     else:  # Not a Ug refinement, count refinement variables
@@ -658,13 +600,13 @@ if 'S' not in refine_mode:
                     r_dot_v = np.dot(basis_atom_position[atomic_sites[i]],
                                      moves[j, :])
                     independent_variable.append(r_dot_v)
-                    independent_variable_type.append(3)
+                    independent_variable_type.append(2)
                     atom_refine_flag.append(atomic_sites[i])
 
         if 'C' in refine_mode:  # Occupancy
             for i in range(len(atomic_sites)):
                 independent_variable.append(basis_occupancy[atomic_sites[i]])
-                independent_variable_type.append(4)
+                independent_variable_type.append(3)
                 atom_refine_flag.append(atomic_sites[i])
 
         if 'D' in refine_mode:  # Isotropic DW
@@ -728,7 +670,156 @@ if 'S' not in refine_mode:
     independent_variable_atom = np.array(atom_refine_flag[:n_variables])
 
 
+# %% deviation parameter for each pixel and g-vector
+# s_g [n_hkl, image diameter, image diameter]
+# and k vector for each pixel, tilted_k [image diameter, image diameter, 3]
+s_g, tilted_k = px.deviation_parameter(convergence_angle, image_radius,
+                                       big_k_mag, g_pool, g_pool_mag)
+
+
+# %% Bloch wave calculation
+pool = time.time()
+# Dot product of k with surface normal, size [image diameter, image diameter]
+k_dot_n = np.tensordot(tilted_k, norm_dir_m, axes=([2], [0]))
+
+lacbed_sim = np.zeros([n_thickness, image_width, image_width, len(g_output)],
+                      dtype=float)
+
+print("Bloch wave calculation...", end=' ')
+if debug:
+    print("")
+    print("output indices")
+    print(g_output[:15])
+# pixel by pixel calculations from here
+for pix_x in range(image_width):
+    # progess
+    print(f"\rBloch wave calculation... {50*pix_x/image_radius:.0f}%", end="")
+
+    for pix_y in range(image_width):
+        s_g_pix = np.squeeze(s_g[pix_x, pix_y, :])
+        k_dot_n_pix = k_dot_n[pix_x, pix_y]
+
+        # works for multiple thicknesses
+        wave_functions = px.wave_functions(
+            g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl, big_k_mag,
+            g_dot_norm, k_dot_n_pix, thickness, debug)
+
+        intensity = np.abs(wave_functions)**2
+
+        # Map diffracted intensity to required output g vectors
+        # note x and y swapped!
+        lacbed_sim[:, -pix_y, pix_x, :] = intensity[:, :len(g_output)]
+
+print("\rBloch wave calculation... done    ")
+done = time.time()
+
+
+# %% output simulated LACBED patterns
+w = int(np.ceil(np.sqrt(n_out)))
+h = int(np.ceil(n_out/w))
+for j in range(n_thickness):
+    fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))
+    text_effect = withStroke(linewidth=3, foreground='black')
+    axes = axes.flatten()
+    for i in range(n_out):
+        axes[i].imshow(lacbed_sim[j, :, :, i], cmap='pink')
+        axes[i].axis('off')
+        annotation = f"{hkl[g_output[i], 0]}{hkl[g_output[i], 1]}{hkl[g_output[i], 2]}"
+        axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
+                         size=30, color='w', path_effects=[text_effect])
+    for i in range(n_out, len(axes)):
+        axes[i].axis('off')
+    plt.tight_layout()
+    plt.show()
+
+
+
 # %% figure of merit and best thickness
+
+fom = px.figure_of_merit(lacbed_sim, lacbed_expt, image_processing,
+                         blur_radius, correlation_type, plot)
+# plot
+if plot:
+    fig, ax = plt.subplots(1, 1)
+    w_f = 10
+    fig.set_size_inches(w_f, w_f)
+    plt.plot(thickness/10, np.mean(fom, axis=0))
+    ax.set_xlabel('Thickness (nm)', size=24)
+    ax.set_ylabel('Figure of merit', size=24)
+    plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1.0))
+    plt.xticks(fontsize=22)
+    plt.yticks(fontsize=22)
+    plt.show()
+
+
+# %% update variables
+j, k, m = 1, 1, 1  # Counting indices for refinement types
+basis_atom_delta.fill(0)  # Reset atom coordinate uncertainties to zero
+
+for i in range(n_variables):
+    # Check the type of variable by the last digit of independent_variable_type
+    variable_type = independent_variable_type[i] % 10
+
+    if variable_type == 0:
+        # Structure factor refinement (handled elsewhere)
+        variable_check = 1
+
+    elif variable_type == 2:
+        # Atomic coordinates
+        atom_id = atom_refine_flag[j]
+
+        # # Update position: r' = r - v*(r.v) + v*independent_variable
+        # dot_product = np.dot(basis_atom_position[atom_id, :], vector[j - 1, :])
+        # basis_atom_position[atom_id, :] = np.mod(
+        #     basis_atom_position[atom_id, :] - vector[j - 1, :] * dot_product + 
+        #     vector[jnd - 1, :] * independent_variable[i], 1
+        # )
+
+        # # Update uncertainty if iependent_delta is non-zero
+        # if abs(independent_delta[i]) > 1e-10:  # Tiny threshold
+        #     basis_atom_delta[atom_id, :] += vector[j - 1, :] * independent_delta[i]
+        # j += 1
+
+    elif variable_type == 3:
+        # Occupancy
+        basis_occupancy[independent_variable_atom[k]] = independent_variable[i]
+        k += 1
+
+    elif variable_type == 4:
+        # Iso Debye-Waller factor
+        basis_B_iso[atom_refine_flag[m]] = independent_variable[i]
+        m += 1
+
+    elif variable_type == 5:
+        # Aniso Debye-Waller factor (not implemented)
+        raise NotImplementedError("Anisotropic DWF not implemented")
+
+    elif variable_type == 6:
+        # Lattice parameters a, b, c
+        if independent_variable_type[i] == 6:
+            length_x = length_y = length_z = independent_variable[i]
+        elif independent_variable_type[i] == 16:
+            length_y = independent_variable[i]
+        elif independent_variable_type[i] == 26:
+            length_z = independent_variable[i]
+
+    elif variable_type == 7:
+        # Lattice angles alpha, beta, gamma
+        variable_check[6] = 1
+        if j == 1:
+            cell_alpha = independent_variable[i]
+        elif j == 2:
+            cell_beta = independent_variable[i]
+        elif j == 3:
+            cell_gamma = independent_variable[i]
+
+    elif variable_type == 8:
+        # Convergence angle
+        convergence_angle = independent_variable[i]
+
+    elif variable_type == 9:
+        # Accelerating voltage
+        accelerating_voltage = independent_variable[i]
 
 
 # %% final print

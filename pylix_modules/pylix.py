@@ -8,6 +8,7 @@ from CifFile import CifFile
 import struct
 from pylix_modules import pylix_dicts as fu
 
+
 def read_inp_file(filename):
     """
     Reads in the file felix.inp and assigns values based on text labels.
@@ -1034,7 +1035,8 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
     return Fg_matrix
 
 
-def deviation_parameter(convergence_angle, image_radius, big_k_mag, g_pool, g_pool_mag):
+def deviation_parameter(convergence_angle, image_radius, big_k_mag, g_pool,
+                        g_pool_mag):
     # for LACBED pattern of size [m, m] and a set of g-vectors [n, 3]
     # this returns a 3D array of deviation parameters [m, m, n]
 
@@ -1157,7 +1159,7 @@ def bloch(g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl,
 def wave_functions(g_output, s_g_pix, ug_matrix, min_strong_beams,
                    n_hkl, big_k_mag, g_dot_norm,
                    k_dot_n_pix, thickness, debug):
-    #calculates wave functions for a given thickness by calling the bloch
+    # calculates wave functions for a given thickness by calling the bloch
     # subroutine to get the eigenvector matrices
     # and evaluating for a range of thicknesses
 
@@ -1178,16 +1180,16 @@ def wave_functions(g_output, s_g_pix, ug_matrix, min_strong_beams,
 
     # evaluate for the range of thicknesses
     wave_function = ([])
-    if thickness.ndim ==0:  # just one thickness
+    if thickness.ndim == 0:  # just one thickness
         gamma_t = np.diag(np.exp(1j * thickness * gamma))
         wave_function.append(m_matrix @ eigenvecs @ gamma_t
-                          @ inv_eigenvecs @ inverted_m @ psi0)
+                             @ inv_eigenvecs @ inverted_m @ psi0)
     else:  # multiple thicknesses
         for t in thickness:
             gamma_t = np.diag(np.exp(1j * t * gamma))
             # calculate wave functions
             wave_function.append(m_matrix @ eigenvecs @ gamma_t
-                              @ inv_eigenvecs @ inverted_m @ psi0)
+                                 @ inv_eigenvecs @ inverted_m @ psi0)
 
     # ... or, for all thicknesses at once! not working, boo
     # would avoid the type change when making wave_functions a numpy array
@@ -1207,7 +1209,7 @@ def wave_functions(g_output, s_g_pix, ug_matrix, min_strong_beams,
     return np.array(wave_function)
 
 
-def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list, 
+def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list,
                min_weak_beams, big_k_mag):
     """
     Updates the Ug-Sg matrix usingweak beams according to their perturbation
@@ -1216,11 +1218,11 @@ def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list,
     min_weak_beams in the list.  These are the strongest beams not included
     in strong_beam_list.
     """
-    
+
     # Perturbation strength |Ug/Sg|, put 100 where we have s_g=0
     u_g = np.abs(ug_matrix[:, 0])
     pert = np.divide(u_g, np.abs(s_g_pix),
-              out=np.full_like(s_g_pix, 100.0), where=s_g_pix != 0)
+                     out=np.full_like(s_g_pix, 100.0), where=s_g_pix != 0)
 
     # We start with all non-strong beams in the list.
     weak = np.ones_like(s_g_pix)
@@ -1434,9 +1436,9 @@ def read_dm3(file_path, x, debug):
     """
     Reads a .dm3 file, finds tags (ignores their structure and content),
     and extracts image data.
-    
+
     We assume a square image of size[x, x]
-    
+
     In principle it is possible to get the dimensions of the image from the
     tags and use this to determine image size x.  However if the image
     size doesn't match the simulation there's not much point (at the moment)
@@ -1452,12 +1454,12 @@ def read_dm3(file_path, x, debug):
             tag_label = ""
             # Initialize an empty image
             image = np.zeros((y, x), dtype=np.float32)
-    
-            # Create a buffer for 40 bytes
+
+            # Create a buffer for 60 bytes
             buffersize = 60
             prev_bytes = bytearray(buffersize)
             prev_4_bytes = bytearray(4)
-    
+
             # first go through the tags
             find_tags = True
             while find_tags is True:
@@ -1469,20 +1471,20 @@ def read_dm3(file_path, x, debug):
                     break
                 prev_bytes = prev_bytes[1:] + byte
                 prev_4_bytes = prev_4_bytes[1:] + byte
-    
+
                 if prev_4_bytes == tag_delimiter:
                     n_tags += 1
                     tag_label = ""
                     # The tag label is in the bytes before delimiter
                     for j in range(buffersize-5, 0, -1):
                         char_byte = prev_bytes[j]
-                        if chr(char_byte) == '%':  # we've reached the previous tag
+                        if chr(char_byte) == '%':  # previous tag
                             break
                         if 32 <= char_byte <= 126:  # ASCII character
                             tag_label = chr(char_byte) + tag_label
                         else:
                             break
-    
+
                     # 16 bytes of tag information
                     # first 4 bytes = tag type
                     tag_type = struct.unpack('>I', f.read(4))[0]
@@ -1511,7 +1513,7 @@ def read_dm3(file_path, x, debug):
                     else:
                         data_type = str(tag_type)
                         # raise ValueError("Data type not recognised")
-                        
+
                     # next 4 bytes is the tag form (not sure about these)
                     tag_form = struct.unpack('>I', f.read(4))[0]
                     if tag_form == 15:
@@ -1524,15 +1526,15 @@ def read_dm3(file_path, x, debug):
                         data_form = "bool"
                     elif tag_form == 20:
                         data_form = "2D array"
-    
+
                     # print(f"{tag_label}: {data_type}, {data_form}")
-    
+
                     # Check if it's the second 'Data' tag
                     if tag_label == 'Data':
                         n_datatags += 1
                         if n_datatags == 2:  # found it
                             find_tags = False
-    
+
             # Read the image
             if debug:
                 print(f"Reading image {file_path}")
@@ -1556,20 +1558,20 @@ def read_dm3(file_path, x, debug):
                 pix_bytes = 1  # Unsigned 1-byte integer
             else:
                 raise ValueError(f"data type [{tag_type}] not recognised")
-                  
+
             # final 4 bytes is data length
             data_length = struct.unpack('>I', f.read(4))[0]
             # Check data array length, error if things don't match
             expected_data_length = y * x
             if data_length != expected_data_length:
                 raise ValueError(f"Data length mismatch. Expected: {expected_data_length}, Got: {data_length}")
-            
+
             total_bytes = data_length * pix_bytes  # 4 bytes per float32
             raw_data = f.read(total_bytes)
             # Error if things don't match
             if len(raw_data) != total_bytes:
                 raise ValueError(f"Error: Incomplete data read. Expected {total_bytes} bytes, got {len(raw_data)} bytes.")
-    
+
             # put the data into a 2D image according to its data type
             if tag_type == 2:
                 image = np.frombuffer(raw_data, dtype='<i2').reshape((x, y))
@@ -1593,14 +1595,35 @@ def read_dm3(file_path, x, debug):
         print(f"{file_path} not found")
 
 
-def figure_of_merit_and_thickness(lacbed_sim, lacbed_expt, image_processing,
-                                  blur_radius, correlation_type):
-    #
-    i=0
-    j=0
-    simulated_image = lacbed_sim[:, :, i, j]
+def zncc(img1, img2):
+    # accepts sets of n images, size [m, m, n]
+    # zncc is -1 = perfect anticorrelation, +1 = perfect correlation
+    n_pix = img1.shape[0]**2
+    img1_normalised = (img1 - np.mean(img1, axis=(0, 1), keepdims=True)) / (
+        np.std(img1, axis=(0, 1), keepdims=True))
+    img2_normalised = (img2 - np.mean(img2, axis=(0, 1), keepdims=True)) / (
+        np.std(img2, axis=(0, 1), keepdims=True))
 
-    
+    # zero-mean normalised 2D cross-correlation
+    cc = np.sum(img1_normalised * img2_normalised, axis=(0, 1))/n_pix
+    return cc
+
+
+def figure_of_merit(lacbed_sim, lacbed_expt, image_processing,
+                    blur_radius, correlation_type, plot):
+
+    # needs fleshing out with image processing & correlation options
+
+    fom = np.ones([lacbed_expt.shape[2], lacbed_sim.shape[0]])
+    for i in range(lacbed_sim.shape[0]):
+        # image processing, if asked for
+
+        # figure of merit for this image
+        fom[:, i] = 1.0 - zncc(lacbed_expt, lacbed_sim[i, :, :, :])
+
+    return fom
+
+
 def get_git():
     try:
         # Run the git command to get the latest commit ID
@@ -1608,7 +1631,7 @@ def get_git():
                                             ).strip().decode('utf-8')
         return commit_id
     except subprocess.CalledProcessError as e:
-        raise ValueError(f"Error retrieving commit ID: {e}")
+        print(f"Error retrieving commit ID: {e}")
         return None
 
 

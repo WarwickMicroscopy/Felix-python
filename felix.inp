@@ -11,13 +11,13 @@ absorption_method         = 2
 byte_size                 = 2
 
 # Radius of the beam in pixels
-image_radius              = 8
+image_radius              = 42
 
 # Beam selection criteria
 min_reflection_pool       = 250
 min_strong_beams          = 50
 min_weak_beams            = 0
-g_limit                   = 1.0
+g_limit                   = 0.0
 
 # Crystal settings
 debye_waller_constant     = 0.0
@@ -32,13 +32,13 @@ accelerating_voltage_kv   = 200.0
 acceptance_angle          = 0.0
 
 # Image output options
-initial_thickness         = 130.0
-final_thickness           = 540.0
-delta_thickness           = 100.0
+initial_thickness         = 800.0
+final_thickness           = 1200.0
+delta_thickness           = 50.0
 precision                 = 0.00002
 
 # Refinement specific flags
-refine_mode               = 'S'
+refine_mode               = 'H'
 weighting_flag            = 0
 refine_method_flag        = 3
 correlation_type          = 2
@@ -50,4 +50,4 @@ print_flag                = 0
 simplex_length_scale      = 0.1
 exit_criteria             = 0.000001
 debug                     = 0
-plot                      = 0
+plot                      = 1
