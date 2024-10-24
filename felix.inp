@@ -33,7 +33,7 @@ acceptance_angle          = 0.0
 
 # Image output options
 initial_thickness         = 800.0
-final_thickness           = 1200.0
+final_thickness           = 800.0
 delta_thickness           = 50.0
 precision                 = 0.00002
 

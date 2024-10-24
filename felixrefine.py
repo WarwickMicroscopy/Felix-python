@@ -745,7 +745,7 @@ if plot:
     fig, ax = plt.subplots(1, 1)
     w_f = 10
     fig.set_size_inches(w_f, w_f)
-    plt.plot(thickness/10, cp.mean(fom, axis=0))
+    plt.plot(thickness.get()/10, cp.mean(fom.get(), axis=0))
     ax.set_xlabel('Thickness (nm)', size=24)
     ax.set_ylabel('Figure of merit', size=24)
     plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1.0))
