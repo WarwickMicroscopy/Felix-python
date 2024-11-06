@@ -1614,14 +1614,15 @@ def figure_of_merit(lacbed_sim, lacbed_expt, image_processing,
 
     # needs fleshing out with image processing & correlation options
 
-    fom = np.ones([lacbed_expt.shape[2], lacbed_sim.shape[0]])
+    # figure of merit - might need a NaN check? size [n_thick, n_out]
+    fom_array = np.ones([lacbed_sim.shape[0], lacbed_expt.shape[2]])
     for i in range(lacbed_sim.shape[0]):
         # image processing, if asked for
 
         # figure of merit for this image
-        fom[:, i] = 1.0 - zncc(lacbed_expt, lacbed_sim[i, :, :, :])
+        fom_array[i, :] = 1.0 - zncc(lacbed_expt, lacbed_sim[i, :, :, :])
 
-    return fom
+    return fom_array
 
 
 def get_git():

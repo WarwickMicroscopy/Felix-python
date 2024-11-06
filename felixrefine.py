@@ -19,13 +19,14 @@ import time
 start = time.time()
 # %% Main felix program
 # go to the pylix folder
-path = r"C:\Users\rbean\Documents\GitHub\Felix-python"
-# path = r"C:\Users\Richard\Documents\GitHub\Felix-python"
+# path = r"C:\Users\rbean\Documents\GitHub\Felix-python"
+path = r"C:\Users\Richard\Documents\GitHub\Felix-python"
 os.chdir(path)
 
 # felix modules
 # from pylix_modules import pylix_dicts as fu
 from pylix_modules import pylix as px
+from pylix_modules import simulate as sim
 from pylix_modules import pylix_dicts as fu
 latest_commit_id = px.get_git()
 # outputs
@@ -310,6 +311,114 @@ input_hkls, i_obs, sigma_obs = px.read_hkl_file("felix.hkl")
 n_out = len(input_hkls)+1  # we expect 000 NOT to be in the hkl list
 
 
+# %% set up refinement, TO BE TESTED
+# --------------------------------------------------------------------
+# n_variables calculated depending upon Ug and non-Ug refinement
+# --------------------------------------------------------------------
+# Ug refinement is a special case, cannot do any other refinement alongside
+# We count the independent variables:
+# independent_variable = variable to be refined
+# independent_variable_type = what kind of variable, as follows
+# 0 = Ug amplitude
+# 1 = Ug phase
+# 2 = atom coordinate *** PARTIALLY IMPLEMENTED *** not all space groups
+# 3 = occupancy
+# 4 = B_iso
+# 5 = B_aniso *** NOT YET IMPLEMENTED ***
+# 61,62,63 = lattice parameters *** PARTIALLY IMPLEMENTED *** not rhombohedral
+# 7 = unit cell angles *** NOT YET IMPLEMENTED ***
+# 8 = convergence angle
+# 9 = kV *** NOT YET IMPLEMENTED ***
+independent_variable = ([])
+independent_variable_type = ([])
+atom_refine_flag = ([])
+if 'S' not in refine_mode:
+    n_vars = 0
+    # count refinement variables
+    if 'B' in refine_mode:  # Atom coordinate refinement
+        for i in range(len(atomic_sites)):
+            # the [3, 3] matrix 'moves' returned by atom_move gives the
+            # allowed movements for an atom (depending on its Wyckoff
+            # symbol and space group) as row vectors with magnitude 1.
+            # ***NB NOT ALL SPACE GROUPS IMPLEMENTED ***
+            moves = px.atom_move(space_group_number, basis_wyckoff[i])
+            degrees_of_freedom = int(np.sum(moves**2))
+            if degrees_of_freedom == 0:
+                raise ValueError("Atom coord refinement not possible")
+            for j in range(degrees_of_freedom):
+                r_dot_v = np.dot(basis_atom_position[atomic_sites[i]],
+                                 moves[j, :])
+                independent_variable.append(r_dot_v)
+                independent_variable_type.append(2)
+                atom_refine_flag.append(atomic_sites[i])
+
+    if 'C' in refine_mode:  # Occupancy
+        for i in range(len(atomic_sites)):
+            independent_variable.append(basis_occupancy[atomic_sites[i]])
+            independent_variable_type.append(3)
+            atom_refine_flag.append(atomic_sites[i])
+
+    if 'D' in refine_mode:  # Isotropic DW
+        for i in range(len(atomic_sites)):
+            independent_variable.append(basis_B_iso[atomic_sites[i]])
+            independent_variable_type.append(5)
+            atom_refine_flag.append(atomic_sites[i])
+
+    if 'E' in refine_mode:  # Anisotropic DW
+        # Not yet implemented!!!
+        raise ValueError("Anisotropic Debye-Waller factor refinement \
+                         not yet implemented")
+
+    if 'F' in refine_mode:  # Lattice parameters
+        # This section needs work to include rhombohedral cells and
+        # non-standard settings!!!
+        independent_variable.append(cell_a)  # is in all lattice types
+        independent_variable_type.append(71)
+        if space_group_number < 75:  # Triclinic, monoclinic, orthorhombic
+            independent_variable.append(cell_b)
+            independent_variable_type.append(72)
+            independent_variable.append(cell_c)
+            independent_variable_type.append(73)
+        elif 142 < space_group_number < 168:  # Rhombohedral
+            err = 1  # Need to work out R- vs H- settings!!!
+            print("Rhombohedral R- and H- cells not yet implemented \
+                  for unit cell refinement")
+        elif (167 < space_group_number < 195) or \
+             (74 < space_group_number < 143):  # Hexagonal or Tetragonal
+            independent_variable.append(cell_c)
+            independent_variable_type.append(73)
+
+    if 'G' in refine_mode:  # Unit cell angles
+        # Not yet implemented!!!
+        raise ValueError("Unit cell angle refinement not yet implemented")
+
+    if 'H' in refine_mode:  # Convergence angle
+        independent_variable.append(convergence_angle)
+        independent_variable_type.append(9)
+
+    if 'I' in refine_mode:  # kV
+        independent_variable.append(accelerating_voltage_kv)
+        independent_variable_type.append(10)
+        # Not yet implemented!!!
+        raise ValueError("kV refinement not yet implemented")
+
+# Total number of independent variables
+n_variables = len(independent_variable)
+if n_variables == 0:
+    raise ValueError("No refinement variables! \
+    Check refine_mode flag in felix.inp. \
+        Valid refine modes are A,B,C,D,F,H,S")
+if n_variables == 1:
+    print("Only one independent variable")
+else:
+    print(f"Number of independent variables = {n_variables}")
+
+independent_variable = np.array(independent_variable)
+independent_delta = np.zeros(n_variables)
+independent_variable_type = np.array(independent_variable_type)
+independent_variable_atom = np.array(atom_refine_flag[:n_variables])
+
+
 # %% fill the unit cell and get mean inner potential
 atom_position, atom_label, atom_name, B_iso, occupancy = \
     px.unique_atom_positions(
@@ -458,27 +567,14 @@ if debug:
     print(100*ug_matrix[:5, :5])
 
 
-# %% set up refinement, TO BE TESTED
-# --------------------------------------------------------------------
-# n_variables calculated depending upon Ug and non-Ug refinement
-# --------------------------------------------------------------------
-# Ug refinement is a special case, cannot do any other refinement alongside
-# We count the independent variables:
-# independent_variable = variable to be refined
-# independent_variable_type = what kind of variable, as follows
-# 0 = Ug amplitude
-# 1 = Ug phase
-# 2 = atom coordinate *** PARTIALLY IMPLEMENTED *** not all space groups
-# 3 = occupancy
-# 4 = B_iso
-# 5 = B_aniso *** NOT YET IMPLEMENTED ***
-# 61,62,63 = lattice parameters *** PARTIALLY IMPLEMENTED *** not rhombohedral
-# 7 = unit cell angles *** NOT YET IMPLEMENTED ***
-# 8 = convergence angle
-# 9 = kV *** NOT YET IMPLEMENTED ***
+# %% deviation parameter for each pixel and g-vector
+# s_g [n_hkl, image diameter, image diameter]
+# and k vector for each pixel, tilted_k [image diameter, image diameter, 3]
+s_g, tilted_k = px.deviation_parameter(convergence_angle, image_radius,
+                                       big_k_mag, g_pool, g_pool_mag)
 
+# %% read in experimental images
 if 'S' not in refine_mode:
-    # read in experimental images that will go in
     lacbed_expt = np.zeros([image_width, image_width, n_out])
     # get the list of available images
     x_str = str(image_width)
@@ -508,7 +604,7 @@ if 'S' not in refine_mode:
                 n_expt -= 1
                 print(f"{g_string} not found")
 
-        # output experimental LACBED patterns
+        # print experimental LACBED patterns
         w = int(np.ceil(np.sqrt(n_out)))
         h = int(np.ceil(n_out/w))
         fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))
@@ -524,158 +620,66 @@ if 'S' not in refine_mode:
             axes[i].axis('off')
         plt.tight_layout()
         plt.show()
+        # initialise correlation
+        best_corr = np.ones(n_out)
 
-    independent_variable = ([])
-    independent_variable_type = ([])
-    atom_refine_flag = ([])
-    n_vars = 0
-    if 'A' in refine_mode:  # Ug refinement
-        print("Refining Structure Factors, A")
-        # needs error check for any other refinement
-        # raise ValueError("Structure factor refinement incompatible
-        # with anything else")
-        # we refine magnitude and phase for each Ug.  However for space groups
-        # with a centre of symmetry phases are fixed at 0 or pi, so only
-        # amplitude is refined (1 independent variable per Ug)
-        # Identify the 92 centrosymmetric space groups
-        centrosymmetric = [2, 10, 11, 12, 13, 14, 15, 47, 48, 49, 50, 51, 52,
-                           53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65,
-                           66, 67, 68, 69, 70, 71, 72, 73, 74, 83, 84, 85,
-                           86, 87, 88, 123, 124, 125, 126, 127, 128, 129, 130,
-                           131, 132, 133, 134, 135, 136, 137, 138, 139, 140,
-                           141, 142, 147, 148, 162, 163, 164, 165, 166, 167,
-                           175, 176, 191, 192, 193, 194, 200, 201, 202,
-                           203, 204, 205, 206, 221, 222, 223, 224, 225, 226,
-                           227, 228, 229, 230]
-        if space_group_number in centrosymmetric:
-            vars_per_ug = 1
-        else:
-            vars_per_ug = 2
 
-        # set up Ug refinement
-        # equivalent g's identified by abs(h)+abs(k)+abs(l)+a*h^2+b*k^2+c*l^2
-        g_eqv = (10000*(np.sum(np.abs(g_matrix), axis=2) +
-                        g_magnitude**2)).astype(int)
-        # we keep track of individual Ug's in a matrix ug_eqv
-        ug_eqv = np.zeros([n_hkl, n_hkl], dtype=int)
-        # bit of a hack here - can skip Ug's in refinement using ug_offset, but
-        # should really be an input in felix.inp if it's going to be used
-        ug_offset = 0
-        # Ug number (position in ug_matrix)
-        i_ug = 1 + ug_offset
-        # the first column of the Ug matrix has g-vectors in ascending order
-        # we work through this list until we have identified the required no.
-        # of Ugs. The matrix ug_eqv identifies equivalent Ug's with an integer
-        # whose sign is that of the imaginary part of Ug. (may need to take
-        # care of floating point residuals where im(Ug) is nominally zero???)
-        j = 1  # number of Ug's processed
-        while j < no_of_ugs+1:
-            if ug_eqv[i_ug, 0] != 0:  # already in the list, skip it
-                i_ug += 1
-                continue
-            g_id = abs(g_eqv[i_ug, 0])
-            # update relevant locations in ug_eqv
-            ug_eqv[np.abs(g_eqv) == g_id] = j*np.sign(
-                np.imag(ug_matrix[i_ug, 0]))
-            # amplitude is type 1, always a variable
-            independent_variable.append(ug_matrix[i_ug, 0])
-            independent_variable_type.append(0)
-            if vars_per_ug == 2:  # we also adjust phase
-                independent_variable.append(ug_matrix[i_ug, 0])
-                independent_variable_type.append(1)
-            j += 1
-
-    else:  # Not a Ug refinement, count refinement variables
-        if 'B' in refine_mode:  # Atom coordinate refinement
-            for i in range(len(atomic_sites)):
-                # the [3, 3] matrix 'moves' returned by atom_move gives the
-                # allowed movements for an atom (depending on its Wyckoff
-                # symbol and space group) as row vectors with magnitude 1.
-                # ***NB NOT ALL SPACE GROUPS IMPLEMENTED ***
-                moves = px.atom_move(space_group_number, basis_wyckoff[i])
-                degrees_of_freedom = int(np.sum(moves**2))
-                if degrees_of_freedom == 0:
-                    raise ValueError("Atom coord refinement not possible")
-                for j in range(degrees_of_freedom):
-                    r_dot_v = np.dot(basis_atom_position[atomic_sites[i]],
-                                     moves[j, :])
-                    independent_variable.append(r_dot_v)
-                    independent_variable_type.append(2)
-                    atom_refine_flag.append(atomic_sites[i])
-
-        if 'C' in refine_mode:  # Occupancy
-            for i in range(len(atomic_sites)):
-                independent_variable.append(basis_occupancy[atomic_sites[i]])
-                independent_variable_type.append(3)
-                atom_refine_flag.append(atomic_sites[i])
-
-        if 'D' in refine_mode:  # Isotropic DW
-            for i in range(len(atomic_sites)):
-                independent_variable.append(basis_B_iso[atomic_sites[i]])
-                independent_variable_type.append(5)
-                atom_refine_flag.append(atomic_sites[i])
-
-        if 'E' in refine_mode:  # Anisotropic DW
-            # Not yet implemented!!!
-            raise ValueError("Anisotropic Debye-Waller factor refinement \
-                             not yet implemented")
-
-        if 'F' in refine_mode:  # Lattice parameters
-            # This section needs work to include rhombohedral cells and
-            # non-standard settings!!!
-            independent_variable.append(cell_a)  # is in all lattice types
-            independent_variable_type.append(71)
-            if space_group_number < 75:  # Triclinic, monoclinic, orthorhombic
-                independent_variable.append(cell_b)
-                independent_variable_type.append(72)
-                independent_variable.append(cell_c)
-                independent_variable_type.append(73)
-            elif 142 < space_group_number < 168:  # Rhombohedral
-                err = 1  # Need to work out R- vs H- settings!!!
-                print("Rhombohedral R- and H- cells not yet implemented \
-                      for unit cell refinement")
-            elif (167 < space_group_number < 195) or \
-                 (74 < space_group_number < 143):  # Hexagonal or Tetragonal
-                independent_variable.append(cell_c)
-                independent_variable_type.append(73)
-
-        if 'G' in refine_mode:  # Unit cell angles
-            # Not yet implemented!!!
-            raise ValueError("Unit cell angle refinement not yet implemented")
-
-        if 'H' in refine_mode:  # Convergence angle
-            independent_variable.append(convergence_angle)
-            independent_variable_type.append(9)
-
-        if 'I' in refine_mode:  # kV
-            independent_variable.append(accelerating_voltage_kv)
-            independent_variable_type.append(10)
-            # Not yet implemented!!!
-            raise ValueError("kV refinement not yet implemented")
-
-    # Total number of independent variables
-    n_variables = len(independent_variable)
-    if n_variables == 0:
-        raise ValueError("No refinement variables! \
-        Check refine_mode flag in felix.inp. \
-            Valid refine modes are A,B,C,D,F,H,S")
-    if n_variables == 1:
-        print("Only one independent variable")
+# %% set up Ug refinement
+if 'A' in refine_mode:  # Ug refinement
+    print("Refining Structure Factors, A")
+    # needs error check for any other refinement
+    # raise ValueError("Structure factor refinement incompatible
+    # with anything else")
+    # we refine magnitude and phase for each Ug.  However for space groups
+    # with a centre of symmetry phases are fixed at 0 or pi, so only
+    # amplitude is refined (1 independent variable per Ug)
+    # Identify the 92 centrosymmetric space groups
+    centrosymmetric = [2, 10, 11, 12, 13, 14, 15, 47, 48, 49, 50, 51, 52,
+                       53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65,
+                       66, 67, 68, 69, 70, 71, 72, 73, 74, 83, 84, 85,
+                       86, 87, 88, 123, 124, 125, 126, 127, 128, 129, 130,
+                       131, 132, 133, 134, 135, 136, 137, 138, 139, 140,
+                       141, 142, 147, 148, 162, 163, 164, 165, 166, 167,
+                       175, 176, 191, 192, 193, 194, 200, 201, 202,
+                       203, 204, 205, 206, 221, 222, 223, 224, 225, 226,
+                       227, 228, 229, 230]
+    if space_group_number in centrosymmetric:
+        vars_per_ug = 1
     else:
-        print(f"Number of independent variables = {n_variables}")
+        vars_per_ug = 2
 
-    independent_variable = np.array(independent_variable)
-    independent_delta = np.zeros(n_variables)
-    independent_variable_type = np.array(independent_variable_type)
-    independent_variable_atom = np.array(atom_refine_flag[:n_variables])
-
-
-# %% deviation parameter for each pixel and g-vector
-# s_g [n_hkl, image diameter, image diameter]
-# and k vector for each pixel, tilted_k [image diameter, image diameter, 3]
-s_g, tilted_k = px.deviation_parameter(convergence_angle, image_radius,
-                                       big_k_mag, g_pool, g_pool_mag)
-
+    # set up Ug refinement
+    # equivalent g's identified by abs(h)+abs(k)+abs(l)+a*h^2+b*k^2+c*l^2
+    g_eqv = (10000*(np.sum(np.abs(g_matrix), axis=2) +
+                    g_magnitude**2)).astype(int)
+    # we keep track of individual Ug's in a matrix ug_eqv
+    ug_eqv = np.zeros([n_hkl, n_hkl], dtype=int)
+    # bit of a hack here - can skip Ug's in refinement using ug_offset, but
+    # should really be an input in felix.inp if it's going to be used
+    ug_offset = 0
+    # Ug number (position in ug_matrix)
+    i_ug = 1 + ug_offset
+    # the first column of the Ug matrix has g-vectors in ascending order
+    # we work through this list until we have identified the required no.
+    # of Ugs. The matrix ug_eqv identifies equivalent Ug's with an integer
+    # whose sign is that of the imaginary part of Ug. (may need to take
+    # care of floating point residuals where im(Ug) is nominally zero???)
+    j = 1  # number of Ug's processed
+    while j < no_of_ugs+1:
+        if ug_eqv[i_ug, 0] != 0:  # already in the list, skip it
+            i_ug += 1
+            continue
+        g_id = abs(g_eqv[i_ug, 0])
+        # update relevant locations in ug_eqv
+        ug_eqv[np.abs(g_eqv) == g_id] = j*np.sign(
+            np.imag(ug_matrix[i_ug, 0]))
+        # amplitude is type 1, always a variable
+        independent_variable.append(ug_matrix[i_ug, 0])
+        independent_variable_type.append(0)
+        if vars_per_ug == 2:  # we also adjust phase
+            independent_variable.append(ug_matrix[i_ug, 0])
+            independent_variable_type.append(1)
+        j += 1
 
 # %% Bloch wave calculation
 pool = time.time()
@@ -736,14 +740,20 @@ for j in range(n_thickness):
 
 # %% figure of merit and best thickness
 
-fom = px.figure_of_merit(lacbed_sim, lacbed_expt, image_processing,
+# figure of merit - might need a NaN check? size [n_thick, n_out]
+fom_array = px.figure_of_merit(lacbed_sim, lacbed_expt, image_processing,
                          blur_radius, correlation_type, plot)
+best_t = np.argmin(np.mean(fom_array, axis=1))
+fom = np.mean(fom_array[best_t])
+print(f"Figure of merit {100*fom:.2f}%")
+best_corr = np.minimum(best_corr, fom_array[best_t])
+
 # plot
 if plot:
     fig, ax = plt.subplots(1, 1)
     w_f = 10
     fig.set_size_inches(w_f, w_f)
-    plt.plot(thickness/10, np.mean(fom, axis=0))
+    plt.plot(thickness/10, np.mean(fom_array, axis=1))
     ax.set_xlabel('Thickness (nm)', size=24)
     ax.set_ylabel('Figure of merit', size=24)
     plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1.0))

@@ -7,15 +7,15 @@
 write_flag                = 1
 scatter_factor_method     = 0
 holz_flag                 = 0
-absorption_method         = 2
+absorption_method         = 0
 byte_size                 = 2
 
 # Radius of the beam in pixels
 image_radius              = 42
 
 # Beam selection criteria
-min_reflection_pool       = 250
-min_strong_beams          = 50
+min_reflection_pool       = 100
+min_strong_beams          = 30
 min_weak_beams            = 0
 g_limit                   = 0.0
 
@@ -33,7 +33,7 @@ acceptance_angle          = 0.0
 
 # Image output options
 initial_thickness         = 800.0
-final_thickness           = 1200.0
+final_thickness           = 1100.0
 delta_thickness           = 50.0
 precision                 = 0.00002
 
