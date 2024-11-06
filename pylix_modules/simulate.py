@@ -60,7 +60,7 @@ def simulate(plot, debug, space_group, lattice_type, symmetry_matrix,
     atomic_number = np.array([fu.atomic_number_map[name] for name in atom_name])
     
     n_atoms = len(atom_label)
-    print("There are "+str(n_atoms)+" atoms in the unit cell")
+    print("  There are "+str(n_atoms)+" atoms in the unit cell")
     # plot
     if plot:
         atom_cvals = mcolors.Normalize(vmin=1, vmax=103)
@@ -98,10 +98,9 @@ def simulate(plot, debug, space_group, lattice_type, symmetry_matrix,
         elif scatter_factor_method == 3:
             mip += px.f_doyle_turner(atomic_number[i], 0.0)
         else:
-            error_flag = True
             raise ValueError("No scattering factors chosen in felix.inp")
     mip = mip.item()*scatt_fac_to_volts  # comes back as an array, convert to float
-    print(f"Mean inner potential = {mip:.1f} Volts")
+    print(f"  Mean inner potential = {mip:.1f} Volts")
     # Wave vector magnitude in crystal
     # high-energy approximation (not HOLZ compatible)
     # K^2=k^2+U0
@@ -135,10 +134,10 @@ def simulate(plot, debug, space_group, lattice_type, symmetry_matrix,
     # NEEDS SOME MORE WORK TO MATCH SIM/EXPT PATTERNS if this happens
     
     # outputs
-    print(f"Beam pool: {n_hkl} reflexions ({min_strong_beams} strong beams)")
+    print(f"  Beam pool: {n_hkl} reflexions ({min_strong_beams} strong beams)")
     # we will have larger g-vectors in g_matrix since this has differences g - h
     # but the maximum of the g pool is probably a more useful thing to know
-    print(f"Maximum |g| = {np.max(g_pool_mag)/(2*np.pi):.3f} 1/Å")
+    print(f"  Maximum |g| = {np.max(g_pool_mag)/(2*np.pi):.3f} 1/Å")
     
     # plot
     if plot:
@@ -194,7 +193,7 @@ def simulate(plot, debug, space_group, lattice_type, symmetry_matrix,
     # matrix of dot products with the surface normal
     g_dot_norm = np.dot(g_pool, norm_dir_m)
     
-    print("Ug matrix constructed")
+    print("    Ug matrix constructed")
     if debug:
         np.set_printoptions(precision=3, suppress=True)
         print(100*ug_matrix[:5, :5])

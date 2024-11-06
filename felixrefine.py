@@ -11,7 +11,6 @@ import re
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patheffects import withStroke
-from matplotlib.ticker import PercentFormatter
 import time
 
 start = time.time()
@@ -64,7 +63,7 @@ print_flag = None
 refine_method_flag = None
 refine_mode = None
 scatter_factor_method = None
-simplex_length_scale = None
+refinement_scale = None
 weighting_flag = None
 x_direction = None
 
@@ -285,14 +284,14 @@ input_hkls, i_obs, sigma_obs = px.read_hkl_file("felix.hkl")
 n_out = len(input_hkls)+1  # we expect 000 NOT to be in the hkl list
 
 
-# %% set up refinement, TO BE TESTED
+# %% set up refinement
 # --------------------------------------------------------------------
 # n_variables calculated depending upon Ug and non-Ug refinement
 # --------------------------------------------------------------------
 # Ug refinement is a special case, cannot do any other refinement alongside
 # We count the independent variables:
-# independent_variable = variable to be refined
-# independent_variable_type = what kind of variable, as follows
+# variable = variable to be refined
+# variable_type = what kind of variable, as follows
 # 0 = Ug amplitude
 # 1 = Ug phase
 # 2 = atom coordinate *** PARTIALLY IMPLEMENTED *** not all space groups
@@ -303,8 +302,8 @@ n_out = len(input_hkls)+1  # we expect 000 NOT to be in the hkl list
 # 7 = unit cell angles *** NOT YET IMPLEMENTED ***
 # 8 = convergence angle
 # 9 = accelerating_voltage_kv *** NOT YET IMPLEMENTED ***
-independent_variable = ([])
-independent_variable_type = ([])
+variable = ([])
+variable_type = ([])
 atom_refine_flag = ([])
 if 'S' not in refine_mode:
     n_vars = 0
@@ -322,62 +321,69 @@ if 'S' not in refine_mode:
             for j in range(degrees_of_freedom):
                 r_dot_v = np.dot(basis_atom_position[atomic_sites[i]],
                                  moves[j, :])
-                independent_variable.append(r_dot_v)
-                independent_variable_type.append(2)
+                variable.append(r_dot_v)
+                variable_type.append(2)
                 atom_refine_flag.append(atomic_sites[i])
 
     if 'C' in refine_mode:  # Occupancy
         for i in range(len(atomic_sites)):
-            independent_variable.append(basis_occupancy[atomic_sites[i]])
-            independent_variable_type.append(3)
+            variable.append(basis_occupancy[atomic_sites[i]])
+            variable_type.append(3)
             atom_refine_flag.append(atomic_sites[i])
 
     if 'D' in refine_mode:  # Isotropic DW
         for i in range(len(atomic_sites)):
-            independent_variable.append(basis_B_iso[atomic_sites[i]])
-            independent_variable_type.append(5)
+            variable.append(basis_B_iso[atomic_sites[i]])
+            variable_type.append(4)
             atom_refine_flag.append(atomic_sites[i])
 
     if 'E' in refine_mode:  # Anisotropic DW
-        # Not yet implemented!!!
+        # Not yet implemented!!! variable_type 5
         raise ValueError("Anisotropic Debye-Waller factor refinement \
                          not yet implemented")
 
     if 'F' in refine_mode:  # Lattice parameters
+        # variable_type first digit=6 indicates lattice parameter
+        # second digit=1,2,3 indicates a,b,c
         # This section needs work to include rhombohedral cells and
         # non-standard settings!!!
-        independent_variable.append(cell_a)  # is in all lattice types
-        independent_variable_type.append(71)
+        variable.append(cell_a)  # is in all lattice types
+        variable_type.append(61)
+        atom_refine_flag.append(-1)  # -1 indicates not an atom
         if space_group_number < 75:  # Triclinic, monoclinic, orthorhombic
-            independent_variable.append(cell_b)
-            independent_variable_type.append(72)
-            independent_variable.append(cell_c)
-            independent_variable_type.append(73)
+            variable.append(cell_b)
+            variable_type.append(62)
+            atom_refine_flag.append(-1)
+            variable.append(cell_c)
+            variable_type.append(63)
+            atom_refine_flag.append(-1)
         elif 142 < space_group_number < 168:  # Rhombohedral
-            err = 1  # Need to work out R- vs H- settings!!!
-            print("Rhombohedral R- and H- cells not yet implemented \
-                  for unit cell refinement")
+            # Need to work out R- vs H- settings!!!
+            raise ValueError("Rhombohedral R- vs H- not yet implemented")
         elif (167 < space_group_number < 195) or \
              (74 < space_group_number < 143):  # Hexagonal or Tetragonal
-            independent_variable.append(cell_c)
-            independent_variable_type.append(73)
+            variable.append(cell_c)
+            variable_type.append(63)
+            atom_refine_flag.append(-1)
 
     if 'G' in refine_mode:  # Unit cell angles
-        # Not yet implemented!!!
+        # Not yet implemented!!! variable_type 7
         raise ValueError("Unit cell angle refinement not yet implemented")
 
     if 'H' in refine_mode:  # Convergence angle
-        independent_variable.append(convergence_angle)
-        independent_variable_type.append(9)
+        variable.append(convergence_angle)
+        variable_type.append(8)
+        atom_refine_flag.append(-1)
 
     if 'I' in refine_mode:  # accelerating_voltage_kv
-        independent_variable.append(accelerating_voltage_kv)
-        independent_variable_type.append(10)
+        variable.append(accelerating_voltage_kv)
+        variable_type.append(9)
+        atom_refine_flag.append(-1)
         # Not yet implemented!!!
         raise ValueError("accelerating_voltage_kv refinement not yet implemented")
 
 # Total number of independent variables
-n_variables = len(independent_variable)
+n_variables = len(variable)
 if n_variables == 0:
     raise ValueError("No refinement variables! \
     Check refine_mode flag in felix.inp. \
@@ -387,10 +393,10 @@ if n_variables == 1:
 else:
     print(f"Number of independent variables = {n_variables}")
 
-independent_variable = np.array(independent_variable)
+variable = np.array(variable)
 independent_delta = np.zeros(n_variables)
-independent_variable_type = np.array(independent_variable_type)
-independent_variable_atom = np.array(atom_refine_flag[:n_variables])
+variable_type = np.array(variable_type)
+variable_atom = np.array(atom_refine_flag[:n_variables])
 
 
 # # %% set up Ug refinement
@@ -443,16 +449,17 @@ independent_variable_atom = np.array(atom_refine_flag[:n_variables])
 #         ug_eqv[np.abs(g_eqv) == g_id] = j*np.sign(
 #             np.imag(ug_matrix[i_ug, 0]))
 #         # amplitude is type 1, always a variable
-#         independent_variable.append(ug_matrix[i_ug, 0])
-#         independent_variable_type.append(0)
+#         variable.append(ug_matrix[i_ug, 0])
+#         variable_type.append(0)
 #         if vars_per_ug == 2:  # we also adjust phase
-#             independent_variable.append(ug_matrix[i_ug, 0])
-#             independent_variable_type.append(1)
+#             variable.append(ug_matrix[i_ug, 0])
+#             variable_type.append(1)
 #         j += 1
 
 
-# %% simulate
-
+# %% baseline simulation
+print("-------------------------------")
+print("Baseline simulation:")
 # variable passing needs to be changed to something more efficient!
 hkl, g_output, lacbed_sim, setup, bwc = \
     sim.simulate(plot, debug, space_group, lattice_type, symmetry_matrix,
@@ -534,100 +541,410 @@ for j in range(n_thickness):
     plt.show()
 
 
-# %% figure of merit and best thickness
+# %% start refinement loop
 
-# figures of merit - might need a NaN check? size [n_thick, n_out]
-fom_array = px.figure_of_merit(lacbed_sim, lacbed_expt, image_processing,
-                         blur_radius, correlation_type, plot)
-best_t = np.argmin(np.mean(fom_array, axis=1))
-# mean figure of merit
-fom = np.mean(fom_array[best_t])
-print(f"Figure of merit {100*fom:.2f}%")
-# not sure if this is really needed?
-best_corr = np.minimum(best_corr, fom_array[best_t])
+# figure of merit
+fom = px.figure_of_merit(lacbed_sim, thickness, lacbed_expt,
+                               image_processing, blur_radius, correlation_type,
+                               plot)
+print(f"  Figure of merit {100*fom:.2f}%")
+print("-------------------------------")
 
-# plot
-if plot:
-    fig, ax = plt.subplots(1, 1)
-    w_f = 10
-    fig.set_size_inches(w_f, w_f)
-    plt.plot(thickness/10, np.mean(fom_array, axis=1))
-    ax.set_xlabel('Thickness (nm)', size=24)
-    ax.set_ylabel('Figure of merit', size=24)
-    plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1.0))
-    plt.xticks(fontsize=22)
-    plt.yticks(fontsize=22)
-    plt.show()
+# Initialise variables for refinement
+iter_count = 0
+best_fit = fom
+last_fit = best_fit
+last_p = np.ones(n_variables)
+p = np.ones(n_variables)
+current_var = np.ones(n_variables)
+df = 1.0
+r3_var = np.zeros(3)  # for parabolic minimum
+r3_fit = np.zeros(3)
+independent_delta = 0.0
 
+# Refinement loop
+while df >= exit_criteria:
+    # reset the variables (n-dimensional parameter space)
+    current_var = np.copy(variable) # used for simulations, start at current best point
+    var0 = np.copy(variable)  #running best fit during this refinement cycle
+    fit0 = fom  # incoming fit
 
-# %% update variables
-j, k, m = 1, 1, 1  # Counting indices for refinement types
-basis_atom_delta.fill(0)  # Reset atom coordinate uncertainties to zero
+    # if all parameters have been refined and we're still in the loop, reset
+    if np.sum(np.abs(last_p)) < 1e-10:
+        last_p = np.ones(n_variables)
 
-for i in range(n_variables):
-    # Check the type of variable by the last digit of independent_variable_type
-    variable_type = independent_variable_type[i] % 10
+    #===========individual variable minimisation
+    # we go through the variables - if there's an easy minimisation
+    # we take it and remove it from the list of variables to refine in
+    # vector descent.  If it's been refined, last_p[i] = 0
+    for i in range(n_variables):
+        # Skip variables already optimized in previous refinements
+        if abs(last_p[i]) < 1e-10:
+            p[i] = 0.0
+            continue
+        # Check if Debye-Waller factor is zero, skip if so
+        if current_var[i] <= 1e-10 and variable_type == 4:
+            p[i] = 1e-10
+            continue
 
-    if variable_type == 0:
-        # Structure factor refinement (handled elsewhere)
-        variable_check = 1
+        # Update iteration
+        iter_count += 1
 
-    elif variable_type == 2:
-        # Atomic coordinates
-        atom_id = atom_refine_flag[j]
+        # Display messages based on variable type (last digit)
+        if variable_type[i] % 10 == 1:
+            print("Changing Ug")
+        elif variable_type[i] % 10 == 2:
+            print("Changing atomic coordinate")
+        elif variable_type[i] % 10 == 3:
+            print("Changing occupancy")
+        elif variable_type[i] % 10 == 4:
+            print("Changing isotropic Debye-Waller factor")
+        elif variable_type[i] % 10 == 5:
+            print("Changing anisotropic Debye-Waller factor")
+        elif variable_type[i] % 10 == 6:
+            print("Changing lattice parameter")
+        elif variable_type[i] % 10 == 8:
+            print("Changing convergence angle")
 
-        # # Update position: r' = r - v*(r.v) + v*independent_variable
-        # dot_product = np.dot(basis_atom_position[atom_id, :], vector[j - 1, :])
-        # basis_atom_position[atom_id, :] = np.mod(
-        #     basis_atom_position[atom_id, :] - vector[j - 1, :] * dot_product + 
-        #     vector[jnd - 1, :] * independent_variable[i], 1
-        # )
+        print(f"Finding gradient, {i+1} of {n_variables}")
 
-        # # Update uncertainty if iependent_delta is non-zero
-        # if abs(independent_delta[i]) > 1e-10:  # Tiny threshold
-        #     basis_atom_delta[atom_id, :] += vector[j - 1, :] * independent_delta[i]
-        # j += 1
+        # dx is a small change in the current variable determined by RScale
+        # which is either refinement_scale for atomic coordinates and
+        # refinement_scale*variable for everything else
+        dx = abs(refinement_scale * current_var[i])
+        if variable_type == 2:
+            dx = abs(refinement_scale)
 
-    elif variable_type == 3:
-        # Occupancy
-        basis_occupancy[independent_variable_atom[k]] = independent_variable[i]
-        k += 1
+        # Three-point gradient measurement, starting with plus
+        current_var[i] = var0[i] + dx
+        #update variables
+        [basis_atom_position, basis_atom_delta, basis_occupancy, basis_B_iso,
+                cell_a, cell_b, cell_c,
+                convergence_angle, accelerating_voltage_kv] = \
+            px.update_variables(current_var, variable_type,
+                                atom_refine_flag,
+                                basis_atom_position, basis_atom_delta,
+                                basis_occupancy, basis_B_iso, cell_a, cell_b,
+                                cell_c, convergence_angle, accelerating_voltage_kv)
+        # simulate
+        hkl, g_output, lacbed_sim, setup, bwc = \
+            sim.simulate(plot, debug, space_group, lattice_type, symmetry_matrix,
+                         symmetry_vector, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
+                         cell_gamma, basis_atom_label, basis_atom_name, basis_atom_position,
+                         basis_B_iso, basis_occupancy, scatter_factor_method, accelerating_voltage_kv,
+                         x_direction, incident_beam_direction, normal_direction,
+                         min_reflection_pool, min_strong_beams, g_limit, input_hkls,
+                         absorption_method, absorption_per, convergence_angle,
+                         image_radius, thickness)
+        # figure of merit
+        fom = px.figure_of_merit(lacbed_sim, thickness, lacbed_expt,
+                                       image_processing, blur_radius, correlation_type,
+                                       plot)        
+        print(f"  Figure of merit {100*fom:.2f}%")
+        if (fom < best_fit):
+            best_fit = fom
+        print(f"    Best figure of merit {100*best_fit:.2f}%")
+        print("-------------------------------")
+        r_plus = fom
+    
+        # Now minus dx
+        current_var[i] = var0[i] - dx
 
-    elif variable_type == 4:
-        # Iso Debye-Waller factor
-        basis_B_iso[atom_refine_flag[m]] = independent_variable[i]
-        m += 1
+        #update variables
+        [basis_atom_position, basis_atom_delta, basis_occupancy, basis_B_iso,
+                cell_a, cell_b, cell_c,
+                convergence_angle, accelerating_voltage_kv] = \
+            px.update_variables(current_var, variable_type,
+                                atom_refine_flag,
+                                basis_atom_position, basis_atom_delta,
+                                basis_occupancy, basis_B_iso, cell_a, cell_b,
+                                cell_c, convergence_angle, accelerating_voltage_kv)
+        # simulate
+        hkl, g_output, lacbed_sim, setup, bwc = \
+            sim.simulate(plot, debug, space_group, lattice_type, symmetry_matrix,
+                         symmetry_vector, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
+                         cell_gamma, basis_atom_label, basis_atom_name, basis_atom_position,
+                         basis_B_iso, basis_occupancy, scatter_factor_method, accelerating_voltage_kv,
+                         x_direction, incident_beam_direction, normal_direction,
+                         min_reflection_pool, min_strong_beams, g_limit, input_hkls,
+                         absorption_method, absorption_per, convergence_angle,
+                         image_radius, thickness)
+        # figure of merit
+        fom = px.figure_of_merit(lacbed_sim, thickness, lacbed_expt,
+                                       image_processing, blur_radius, correlation_type,
+                                       plot)        
+        print(f"  Figure of merit {100*fom:.2f}%")
+        if (fom < best_fit):
+            best_fit = fom
+        print(f"    Best figure of merit {100*best_fit:.2f}%")
+        print("-------------------------------")
+        r_minus = fom
 
-    elif variable_type == 5:
-        # Aniso Debye-Waller factor (not implemented)
-        raise NotImplementedError("Anisotropic DWF not implemented")
+        # Reset current point so it's correct for the next variable
+        current_var[i] = var0[i]
+        # If the three points contain a minimum, predict its position using Kramer's rule
+        if min(fit0, r_plus, r_minus) == fit0:
+            r3_var = np.array([var0[i] - dx, var0[i], var0[i] + dx])
+            r3_fit = np.array([r_minus, fit0, r_plus])
 
-    elif variable_type == 6:
-        # Lattice parameters a, b, c
-        if independent_variable_type[i] == 6:
-            length_x = length_y = length_z = independent_variable[i]
-        elif independent_variable_type[i] == 16:
-            length_y = independent_variable[i]
-        elif independent_variable_type[i] == 26:
-            length_z = independent_variable[i]
+            var_min, fit_min = px.parabo3(r3_var, r3_fit)
+            
+            # error estimate goes here
+            # independent_delta[i] = delta_x(r3_var, r3_fit, precision, err)
+            # uncert_brak(var_min, independent_delta[i])
 
-    elif variable_type == 7:
-        # Lattice angles alpha, beta, gamma
-        variable_check[6] = 1
-        if j == 1:
-            cell_alpha = independent_variable[i]
-        elif j == 2:
-            cell_beta = independent_variable[i]
-        elif j == 3:
-            cell_gamma = independent_variable[i]
+            # We update RVar0 with the best points as we go along
+            # But keep RCurrentVar the same so that the measurements of gradient
+            # are accurate.  
+            var0[i] = var_min
+            p[i] = 0.0
+            print(f"Expect minimum at {var_min} with fit index {100*fit_min:.2f}%")
+        else:  # this variable will be part of vector gradient descent
+            p[i] = -(r_plus - r_minus) / (2 * dx)  # -df/dx
+            if min(fit0, r_plus, r_minus) == r_plus:
+                var0[i] = var0[i] + dx
+            elif min(fit0, r_plus, r_minus) == r_minus:
+                var0[i] = var0[i] - dx
 
-    elif variable_type == 8:
-        # Convergence angle
-        convergence_angle = independent_variable[i]
+    #===========vector descent
+    # point 1 of 3 using the prediction var0
+    print("Refining, point 1 of 3")
+    current_var = np.copy(var0)
+    #update variables
+    [basis_atom_position, basis_atom_delta, basis_occupancy, basis_B_iso,
+            cell_a, cell_b, cell_c,
+            convergence_angle, accelerating_voltage_kv] = \
+        px.update_variables(current_var, variable_type,
+                            atom_refine_flag,
+                            basis_atom_position, basis_atom_delta,
+                            basis_occupancy, basis_B_iso, cell_a, cell_b,
+                            cell_c, convergence_angle, accelerating_voltage_kv)
+    # simulate
+    hkl, g_output, lacbed_sim, setup, bwc = \
+        sim.simulate(plot, debug, space_group, lattice_type, symmetry_matrix,
+                     symmetry_vector, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
+                     cell_gamma, basis_atom_label, basis_atom_name, basis_atom_position,
+                     basis_B_iso, basis_occupancy, scatter_factor_method, accelerating_voltage_kv,
+                     x_direction, incident_beam_direction, normal_direction,
+                     min_reflection_pool, min_strong_beams, g_limit, input_hkls,
+                     absorption_method, absorption_per, convergence_angle,
+                     image_radius, thickness)
+    # figure of merit
+    fom = px.figure_of_merit(lacbed_sim, thickness, lacbed_expt,
+                                   image_processing, blur_radius, correlation_type,
+                                   plot)        
+    print(f"  Figure of merit {100*fom:.2f}%")
+    if (fom < best_fit):
+        best_fit = fom
+    print(f"    Best figure of merit {100*best_fit:.2f}%")
+    print("-------------------------------")
+    
+    # Reset the gradient vector magnitude and initialize vector descent
+    p_mag = np.linalg.norm(p)
+    if np.isinf(p_mag) or np.isnan(p_mag):
+        error = 1
+        raise ValueError(f"Infinite or NaN gradient! Refinement vector = {p}")
 
-    elif variable_type == 9:
-        # Accelerating voltage
-        accelerating_voltage = independent_variable[i]
+    if abs(p_mag) > 1e-10:
+        p = p / p_mag   # Normalize direction of max/min gradient
+        print(f"Refinement vector [{p:.2f}]")
+        # Find index of the first non-zero element in the gradient vector
+        j = np.where(np.abs(p) >= 1e-10)[0][0]
+        # reset the refinement scale
+        p_mag = var0[j] * refinement_scale
+
+        # Three points for concavity test
+        r3_var[0] = var0[j]
+        r3_fit[0] = fom
+
+        # point 2
+        print("Refining, point 2 of 3")
+        current_var = var0 + p * p_mag
+        #update variables
+        [basis_atom_position, basis_atom_delta, basis_occupancy, basis_B_iso,
+                cell_a, cell_b, cell_c,
+                convergence_angle, accelerating_voltage_kv] = \
+            px.update_variables(current_var, variable_type,
+                                atom_refine_flag,
+                                basis_atom_position, basis_atom_delta,
+                                basis_occupancy, basis_B_iso, cell_a, cell_b,
+                                cell_c, convergence_angle, accelerating_voltage_kv)
+        # simulate
+        hkl, g_output, lacbed_sim, setup, bwc = \
+            sim.simulate(plot, debug, space_group, lattice_type, symmetry_matrix,
+                         symmetry_vector, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
+                         cell_gamma, basis_atom_label, basis_atom_name, basis_atom_position,
+                         basis_B_iso, basis_occupancy, scatter_factor_method, accelerating_voltage_kv,
+                         x_direction, incident_beam_direction, normal_direction,
+                         min_reflection_pool, min_strong_beams, g_limit, input_hkls,
+                         absorption_method, absorption_per, convergence_angle,
+                         image_radius, thickness)
+        # figure of merit
+        fom = px.figure_of_merit(lacbed_sim, thickness, lacbed_expt,
+                                       image_processing, blur_radius, correlation_type,
+                                       plot)        
+        print(f"  Figure of merit {100*fom:.2f}%")
+        if (fom < best_fit):
+            best_fit = fom
+        print(f"    Best figure of merit {100*best_fit:.2f}%")
+        print("-------------------------------")
+        r3_var[1] = current_var[j]
+        r3_fit[1] = fom
+        
+        # Point 3 of 3
+        print("Refining, point 3 of 3")
+        if r3_fit[1] > r3_fit[0]:  #if second point is worse
+            p_mag = -p_mag  # Go in the opposite direction
+        else:  # keep going
+            var0 = np.copy(current_var)
+        current_var = var0 + p * p_mag
+
+        #update variables
+        [basis_atom_position, basis_atom_delta, basis_occupancy, basis_B_iso,
+                cell_a, cell_b, cell_c,
+                convergence_angle, accelerating_voltage_kv] = \
+            px.update_variables(current_var, variable_type,
+                                atom_refine_flag,
+                                basis_atom_position, basis_atom_delta,
+                                basis_occupancy, basis_B_iso, cell_a, cell_b,
+                                cell_c, convergence_angle, accelerating_voltage_kv)
+        # simulate
+        hkl, g_output, lacbed_sim, setup, bwc = \
+            sim.simulate(plot, debug, space_group, lattice_type, symmetry_matrix,
+                         symmetry_vector, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
+                         cell_gamma, basis_atom_label, basis_atom_name, basis_atom_position,
+                         basis_B_iso, basis_occupancy, scatter_factor_method, accelerating_voltage_kv,
+                         x_direction, incident_beam_direction, normal_direction,
+                         min_reflection_pool, min_strong_beams, g_limit, input_hkls,
+                         absorption_method, absorption_per, convergence_angle,
+                         image_radius, thickness)
+        # figure of merit
+        fom = px.figure_of_merit(lacbed_sim, thickness, lacbed_expt,
+                                       image_processing, blur_radius, correlation_type,
+                                       plot)        
+        print(f"  Figure of merit {100*fom:.2f}%")
+        if (fom < best_fit):
+            best_fit = fom
+        print(f"    Best figure of merit {100*best_fit:.2f}%")
+        print("-------------------------------")
+        r3_var[2] = current_var[j]
+        r3_fit[2] = fom
+
+        # Concavity check and further refinement
+        max_var_idx = np.argmax(r3_var)
+        min_var_idx = np.argmin(r3_var)
+        if max_var_idx != min_var_idx:
+            mid_idx = 3 - max_var_idx - min_var_idx
+            convexity_test = -abs(r3_fit[max_var_idx] - r3_fit[min_var_idx])
+            convexity_adjust = r3_fit[mid_idx] - (
+                r3_fit[min_var_idx] + (r3_var[mid_idx] - r3_var[min_var_idx]) * 
+                (r3_fit[max_var_idx] - r3_fit[min_var_idx]) / 
+                (r3_var[max_var_idx] - r3_var[min_var_idx])
+            )
+
+            while convexity_adjust > 0.1 * convexity_test:
+                print("Convex, continuing")
+                max_fit_idx = np.argmax(r3_fit)
+                min_fit_idx = np.argmin(r3_fit)
+                if max_fit_idx != min_fit_idx:
+                    mid_fit_idx = 3 - max_fit_idx - min_fit_idx
+                    p_mag *= 2
+                    # if abs(p_mag) > max_ug_step and refine_mode[0] == 1:
+                    #     p_mag = np.sign(p_mag) * max_ug_step
+
+                    current_var = var0 + p * p_mag
+                    r3_var[mid_fit_idx] = current_var[j]
+
+                    #update variables
+                    [basis_atom_position, basis_atom_delta, basis_occupancy, basis_B_iso,
+                            cell_a, cell_b, cell_c,
+                            convergence_angle, accelerating_voltage_kv] = \
+                        px.update_variables(current_var, variable_type,
+                                            atom_refine_flag,
+                                            basis_atom_position, basis_atom_delta,
+                                            basis_occupancy, basis_B_iso, cell_a, cell_b,
+                                            cell_c, convergence_angle, accelerating_voltage_kv)
+                    # simulate
+                    hkl, g_output, lacbed_sim, setup, bwc = \
+                        sim.simulate(plot, debug, space_group, lattice_type, symmetry_matrix,
+                                     symmetry_vector, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
+                                     cell_gamma, basis_atom_label, basis_atom_name, basis_atom_position,
+                                     basis_B_iso, basis_occupancy, scatter_factor_method, accelerating_voltage_kv,
+                                     x_direction, incident_beam_direction, normal_direction,
+                                     min_reflection_pool, min_strong_beams, g_limit, input_hkls,
+                                     absorption_method, absorption_per, convergence_angle,
+                                     image_radius, thickness)
+                    # figure of merit
+                    fom = px.figure_of_merit(lacbed_sim, thickness, lacbed_expt,
+                                                   image_processing, blur_radius, correlation_type,
+                                                   plot)        
+                    print(f"  Figure of merit {100*fom:.2f}%")
+                    if (fom < best_fit):
+                        best_fit = fom
+                        variable=np.copy(current_var)
+                    print(f"    Best figure of merit {100*best_fit:.2f}%")
+                    print("-------------------------------")
+                    r3_fit[mid_fit_idx] = fom
+                    max_var_idx = np.argmax(r3_var)
+                    min_var_idx = np.argmin(r3_var)
+                    if max_var_idx != min_var_idx:
+                        mid_idx = 3 - max_var_idx - min_var_idx
+                        convexity_adjust = r3_fit[mid_idx] - (
+                            r3_fit[min_var_idx] + 
+                            (r3_var[mid_idx] - r3_var[min_var_idx]) * 
+                            (r3_fit[max_var_idx] - r3_fit[min_var_idx]) / 
+                            (r3_var[max_var_idx] - r3_var[min_var_idx])
+                        )
+                        convexity_test = -abs(r3_fit[max_var_idx] - r3_fit[min_var_idx])
+
+        # Predict minimum fit point
+        var_min, fit_min = px.parabo3(r3_var, r3_fit)
+        print(f"Concave set, predict minimum at {var_min} with fit index {fit_min}")
+        current_var = var0 + p * (var_min - var0[j]) / p[j]
+    else:
+        current_var = var0
+
+    # Simulate with updated parameters
+
+    #update variables
+    [basis_atom_position, basis_atom_delta, basis_occupancy, basis_B_iso,
+            cell_a, cell_b, cell_c,
+            convergence_angle, accelerating_voltage_kv] = \
+        px.update_variables(current_var, variable_type,
+                            atom_refine_flag,
+                            basis_atom_position, basis_atom_delta,
+                            basis_occupancy, basis_B_iso, cell_a, cell_b,
+                            cell_c, convergence_angle, accelerating_voltage_kv)
+    # simulate
+    hkl, g_output, lacbed_sim, setup, bwc = \
+        sim.simulate(plot, debug, space_group, lattice_type, symmetry_matrix,
+                     symmetry_vector, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
+                     cell_gamma, basis_atom_label, basis_atom_name, basis_atom_position,
+                     basis_B_iso, basis_occupancy, scatter_factor_method, accelerating_voltage_kv,
+                     x_direction, incident_beam_direction, normal_direction,
+                     min_reflection_pool, min_strong_beams, g_limit, input_hkls,
+                     absorption_method, absorption_per, convergence_angle,
+                     image_radius, thickness)
+    # figure of merit
+    fom = px.figure_of_merit(lacbed_sim, thickness, lacbed_expt,
+                                   image_processing, blur_radius, correlation_type,
+                                   plot)        
+    print(f"  Figure of merit {100*fom:.2f}%")
+    if (fom < best_fit):
+        best_fit = fom
+        variable=np.copy(current_var)
+    print(f"    Best figure of merit {100*best_fit:.2f}%")
+
+    # Update for next iteration
+    last_p = p
+    df = last_fit - best_fit
+    last_fit = best_fit
+
+    print(f"Improvement in fit {df}, will stop at {exit_criteria}")
+    refinement_scale *= (1 - 1 / (2 * n_variables))
+    
+    df = 0
+
 
 
 # %% final print
