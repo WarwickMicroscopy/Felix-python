@@ -11,6 +11,8 @@ from matplotlib.ticker import PercentFormatter
 from pylix_modules import pylix_dicts as fu
 
 
+
+
 def read_inp_file(filename):
     """
     Reads in the file felix.inp and assigns values based on text labels.
@@ -41,13 +43,11 @@ def read_inp_file(filename):
                 inp_dict[var_name] = ast.literal_eval(var_value)
 
     except FileNotFoundError:
-        print(f"File not found: {filename}")
-        error_flag = True
+        raise ValueError(f"File not found: {filename}")
     except IOError as e:
-        print(f"IO error ({e}) reading file: {filename}")
-        error_flag = True
+        raise ValueError(f"IO error ({e}) reading file: {filename}")
 
-    return inp_dict, error_flag
+    return inp_dict
 
 
 def read_hkl_file(filename):
@@ -202,8 +202,6 @@ def read_cif(filename):
                     # issue where first call comes back as a nested list
                     # can't see why that happens!
                     data = extract_cif_parameter(val)
-                    if isinstance(data, list):
-                        data = data[0]
                     value_list.append(data)
                 cif_dict[var_name] = value_list
 
@@ -221,6 +219,33 @@ def read_cif(filename):
                 for val in param:
                     value_list.append(val)
                 cif_dict[var_name] = value_list
+
+    # modify to remove invalid characters
+    original_keys = list(cif_dict.keys())
+    for key in original_keys:
+        new_key = key.replace('-', '_')
+        if new_key != key:
+            cif_dict[new_key] = cif_dict[key]
+            del cif_dict[key]
+
+    # tidy up cell parameters that have been read as lists not tuples
+    # I feel there should be a more elegant way of fixing this issue!
+    if isinstance(cif_dict['cell_length_a'], list):
+        cif_dict['cell_length_a']=cif_dict['cell_length_a'][0]
+    if isinstance(cif_dict['cell_length_b'], list):
+        cif_dict['cell_length_b']=cif_dict['cell_length_b'][0]
+    if isinstance(cif_dict['cell_length_a'], list):
+        cif_dict['cell_length_c']=cif_dict['cell_length_c'][0]
+
+    # tidy up chemical formula
+    if "chemical_formula_structural" in cif_dict:
+        cif_dict['chemical_formula_structural'] = \
+            re.sub(r'(?<!\d)1(?!\d)', '',
+                   cif_dict['chemical_formula_structural'].replace(' ', ''))
+    if "chemical_formula_sum" in cif_dict:  # preferred, replce structural if poss
+        cif_dict['chemical_formula_sum'] = \
+            re.sub(r'(?<!\d)1(?!\d)', '',
+                   cif_dict['chemical_formula_sum'].replace(' ', ''))
 
     return cif_dict
 

@@ -13,17 +13,16 @@ import matplotlib.pyplot as plt
 from matplotlib.patheffects import withStroke
 import time
 
-start = time.time()
-# %% Main felix program
-# go to the pylix folder
-# path = r"C:\Users\rbean\Documents\GitHub\Felix-python"
-path = r"C:\Users\Richard\Documents\GitHub\Felix-python"
-os.chdir(path)
+
+#  Main felix program
 
 # felix modules
 from pylix_modules import pylix as px
 from pylix_modules import simulate as sim
 from pylix_modules import pylix_dicts as fu
+from pylix_modules import pylix_class as pc
+
+start = time.time()
 latest_commit_id = px.get_git()
 # outputs
 print("-----------------------------------------------------------------")
@@ -31,68 +30,10 @@ print(f"felixrefine:  version {latest_commit_id[:8]}")
 print("felixrefine: see https://github.com/WarwickMicroscopy/Felix-python")
 print("-----------------------------------------------------------------")
 
-# variables to get from felix.inp
-accelerating_voltage_kv = None
-acceptance_angle = None
-absorption_method = None
-absorption_per = None
-atomic_sites = None
-blur_radius = None
-byte_size = None
-convergence_angle = None
-correlation_type = None
-debye_waller_constant = None
-debug = None
-delta_thickness = None
-exit_criteria = None
-final_thickness = None
-g_limit = None
-holz_flag = None
-image_processing = None
-image_radius = None
-incident_beam_direction = None
-initial_thickness = None
-min_reflection_pool = None
-min_strong_beams = None
-min_weak_beams = None
-no_of_ugs = None
-normal_direction = None
-plot = None
-precision = None
-print_flag = None
-refine_method_flag = None
-refine_mode = None
-scatter_factor_method = None
-refinement_scale = None
-weighting_flag = None
-x_direction = None
-
-# variables to get from felix.cif
-atom_site_b_iso_or_equiv = None
-atom_site_label = None
-atom_site_type_symbol = None
-atom_site_fract_x = None
-atom_site_fract_y = None
-atom_site_fract_z = None
-atom_site_occupancy = None
-atom_site_u_iso_or_equiv = None
-atom_site_wyckoff_symbol = None
-cell_angle_alpha = None
-cell_angle_beta = None
-cell_angle_gamma = None
-cell_length_a = None
-cell_length_b = None
-cell_length_c = None
-cell_volume = None
-chemical_formula_iupac = None
-chemical_formula_structural = None
-chemical_formula_sum = None
-space_group_it_number = None
-space_group_name_h_m_alt = None
-space_group_symbol = None
-space_group_symop_operation_xyz = None
-symmetry_equiv_pos_as_xyz = None
-symmetry_space_group_name_h_m = None
+# initialise class objects
+cif = pc.Cif()  # values read from felix.cif
+inp = pc.Inp()  # values read from felix.inp
+v = pc.Var(cif)  # working variables used in the simulation
 
 # %% read felix.cif
 
@@ -100,188 +41,174 @@ symmetry_space_group_name_h_m = None
 # with the second number the uncertainty in the first.  Nothing is currently
 # done with these uncertainties...
 cif_dict = px.read_cif('felix.cif')
-# modifying the dictionary to remove invalid characters
-original_keys = list(cif_dict.keys())
-for key in original_keys:
-    new_key = key.replace('-', '_')
-    if new_key != key:
-        cif_dict[new_key] = cif_dict[key]
-        del cif_dict[key]
-# make global variables
-for var_name, var_value in cif_dict.items():
-    globals()[var_name] = var_value
+cif.update_from_dict(cif_dict)
+# ====== extract cif data into working variables v
+v.space_group = cif.symmetry_space_group_name_h_m
+if cif.chemical_formula_structural is not None:
+    v.chemical_formula = cif.chemical_formula_structural
+elif cif.chemical_formula_sum is not None:
+    v.chemical_formula = cif.chemical_formula_sum
+elif cif.chemical_formula_iupac is not None:
+    v.chemical_formula = cif.chemical_formula_iupac
+print("Material: " + v.chemical_formula)
 
-# ====== extract values
-# chemical formula
-if "chemical_formula_structural" in cif_dict:
-    chemical_formula = re.sub(r'(?<!\d)1(?!\d)', '',
-                              chemical_formula_structural.replace(' ', ''))
-if "chemical_formula_sum" in cif_dict:  # preferred, replce structural if poss
-    chemical_formula = re.sub(r'(?<!\d)1(?!\d)', '',
-                              chemical_formula_sum.replace(' ', ''))
-print("Material: " + chemical_formula)
 # space group number and lattice type
 if "space_group_symbol" in cif_dict:
-    space_group = space_group_symbol.replace(' ', '')
+    v.space_group = cif.space_group_symbol.replace(' ', '')
 elif "space_group_name_h_m_alt" in cif_dict:
-    space_group = space_group_name_h_m_alt.replace(' ', '')
+    v.space_group = cif.space_group_name_h_m_alt.replace(' ', '')
 elif "symmetry_space_group_name_h_m" in cif_dict:
-    space_group = symmetry_space_group_name_h_m.replace(' ', '')
+    v.space_group = cif.symmetry_space_group_name_h_m.replace(' ', '')
 elif "space_group_it_number" in cif_dict:
-    space_group_number = int(space_group_it_number[0])
+    v.space_group_number = int(cif.space_group_it_number[0])
     reverse_space_groups = {v: k for k, v in fu.space_groups.items()}
-    space_group = reverse_space_groups.get(space_group_number, "Unknown")
+    v.space_group = reverse_space_groups.get(v.space_group_number, "Unknown")
 else:
     error_flag = True
     raise ValueError("No space group found in .cif")
-lattice_type = space_group[0]
-space_group_number = fu.space_groups[space_group]
+lattice_type = v.space_group[0]
+v.space_group_number = fu.space_groups[v.space_group]
 
 # cell
-cell_a = px.dlst(cell_length_a)
-cell_b = px.dlst(cell_length_b)
-cell_c = px.dlst(cell_length_c)
-
-cell_alpha = px.dlst(cell_angle_alpha)*np.pi/180.0  # angles in radians
-cell_beta = px.dlst(cell_angle_beta)*np.pi/180.0
-cell_gamma = px.dlst(cell_angle_gamma)*np.pi/180.0
-basis_count = len(atom_site_label)
-# # moved to simulate ***
-# if "cell_volume" in cif_dict:
-#     cell_volume = px.dlst(cell_volume)
-# else:
-#     cell_volume = cell_a*cell_b*cell_c*np.sqrt(1.0-np.cos(cell_alpha)**2
-#                   - np.cos(cell_beta)**2 - np.cos(cell_gamma)**2
-#                   +2.0*np.cos(cell_alpha)*np.cos(cell_beta)*np.cos(cell_gamma))
+v.cell_a = cif.cell_length_a[0]
+v.cell_b = cif.cell_length_b[0]
+v.cell_c = cif.cell_length_c[0]
+v.cell_alpha = cif.cell_angle_alpha[0]*np.pi/180.0  # angles in radians
+v.cell_beta = cif.cell_angle_beta[0]*np.pi/180.0
+v.cell_gamma = cif.cell_angle_gamma[0]*np.pi/180.0
+n_basis = len(cif.atom_site_label)
 
 # symmetry operations
-if space_group_symop_operation_xyz is not None:
-    symmetry_matrix, symmetry_vector = px.symop_convert(
-        space_group_symop_operation_xyz)
-elif symmetry_equiv_pos_as_xyz is not None:
-    symmetry_matrix, symmetry_vector = px.symop_convert(
-        symmetry_equiv_pos_as_xyz)
+if "space_group_symop_operation_xyz" in cif_dict:
+    v.symmetry_matrix, v.symmetry_vector = px.symop_convert(
+        cif.space_group_symop_operation_xyz)
+elif "symmetry_equiv_pos_as_xyz" in cif_dict:
+    v.symmetry_matrix, v.symmetry_vector = px.symop_convert(
+        cif.symmetry_equiv_pos_as_xyz)
 else:
     error_flag = True
     raise ValueError("Symmetry operations not found in .cif")
 
 # extract the basis from the raw cif values
 # take basis atom labels as given
-basis_atom_label = atom_site_label
+v.basis_atom_label = cif.atom_site_label
 # atom symbols, stripping any charge etc.
-basis_atom_name = [''.join(filter(str.isalpha, name))
-                   for name in atom_site_type_symbol]
+v.basis_atom_name = [''.join(filter(str.isalpha, name))
+                   for name in cif.atom_site_type_symbol]
 # take care of any odd symbols, get the case right
-for i in range(basis_count):
-    name = basis_atom_name[i]
+for i in range(n_basis):
+    name = v.basis_atom_name[i]
     if len(name) == 1:
         name = name.upper()
     elif len(name) > 1:
         name = name[0].upper() + name[1:].lower()
-    basis_atom_name[i] = name
+    v.basis_atom_name[i] = name
 # take basis Wyckoff letters as given (maybe check they are only letters?)
-basis_wyckoff = atom_site_wyckoff_symbol
+v.basis_wyckoff = cif.atom_site_wyckoff_symbol
 
 # basis_atom_position = np.zeros([basis_count, 3])
-# x_ = np.array([tup[0] for tup in atom_site_fract_x])
-# y_ = np.array([tup[0] for tup in atom_site_fract_y])
-# z_ = np.array([tup[0] for tup in atom_site_fract_z])
-basis_atom_position = np.column_stack((np.array([tup[0] for tup in atom_site_fract_x]),
-                                       np.array([tup[0] for tup in atom_site_fract_y]),
-                                       np.array([tup[0] for tup in atom_site_fract_z])))
+v.basis_atom_position = \
+    np.column_stack((np.array([tup[0] for tup in cif.atom_site_fract_x]),
+                     np.array([tup[0] for tup in cif.atom_site_fract_y]),
+                     np.array([tup[0] for tup in cif.atom_site_fract_z])))
+
 # Debye-Waller factor
 if "atom_site_b_iso_or_equiv" in cif_dict:
-    basis_B_iso = np.array([tup[0] for tup in atom_site_b_iso_or_equiv])
+    v.basis_B_iso = np.array([tup[0] for tup in cif.atom_site_b_iso_or_equiv])
 elif "atom_site_u_iso_or_equiv" in cif_dict:
-    basis_B_iso = np.array([tup[0] for tup in
-                            atom_site_u_iso_or_equiv])*8*(np.pi**2)
+    v.basis_B_iso = np.array([tup[0] for tup in
+                            cif.atom_site_u_iso_or_equiv])*8*(np.pi**2)
+    
 # occupancy, assume it's unity if not specified
-if atom_site_occupancy is not None:
-    basis_occupancy = np.array([tup[0] for tup in atom_site_occupancy])
+if cif.atom_site_occupancy is not None:
+    v.basis_occupancy = np.array([tup[0] for tup in cif.atom_site_occupancy])
 else:
-    basis_occupancy = np.ones([basis_count])
+    v.basis_occupancy = np.ones([n_basis])
 
-basis_atom_delta = np.zeros([basis_count, 3])  # ***********what's this
+v.basis_atom_delta = np.zeros([n_basis, 3])  # ***********what's this
+
 
 # %% read felix.inp
-inp_dict, error_flag = px.read_inp_file('felix.inp')
-for var_name, var_value in inp_dict.items():
-    globals()[var_name] = var_value  # Create global variables
-if error_flag is True:
-    raise ValueError("can't read felix.inp")
+inp_dict = px.read_inp_file('felix.inp')
+inp.update_from_dict(inp_dict)
 
 # thickness array
-if (final_thickness > initial_thickness + delta_thickness):
-    thickness = np.arange(initial_thickness, final_thickness, delta_thickness)
-    n_thickness = len(thickness)
+if (inp.final_thickness > inp.initial_thickness + inp.delta_thickness):
+    v.thickness = np.arange(inp.initial_thickness, inp.final_thickness,
+                            inp.delta_thickness)
+    v.n_thickness = len(v.thickness)
 else:
     # need np.array rather than float so wave_functions works for 1 or many t's
-    thickness = np.array(initial_thickness)
-    n_thickness = 1
+    v.thickness = np.array(inp.initial_thickness)
+    v.n_thickness = 1
 
 # convert arrays to numpy
-incident_beam_direction = np.array(incident_beam_direction, dtype='float')
-normal_direction = np.array(normal_direction, dtype='float')
-x_direction = np.array(x_direction, dtype='float')
-atomic_sites = np.array(atomic_sites, dtype='int')
+v.incident_beam_direction = np.array(inp.incident_beam_direction, dtype='float')
+v.normal_direction = np.array(inp.normal_direction, dtype='float')
+v.x_direction = np.array(inp.x_direction, dtype='float')
+v.atomic_sites = np.array(inp.atomic_sites, dtype='int')
 
 # crystallography exp(2*pi*i*g.r) to physics convention exp(i*g.r)
-g_limit = g_limit * 2 * np.pi
+v.g_limit = inp.g_limit * 2 * np.pi
+
+# other refinement variables
+v.refine_mode = inp.refine_mode
+v.scatter_factor_method = inp.scatter_factor_method
 
 # output
-print(f"Zone axis: {incident_beam_direction.astype(int)}")
-if n_thickness ==1:
-    print(f"Specimen thickness {initial_thickness/10} nm")
+print(f"Zone axis: {v.incident_beam_direction.astype(int)}")
+if v.n_thickness ==1:
+    print(f"Specimen thickness {v.initial_thickness/10} nm")
 else:
-    print(f"{n_thickness} thicknesses: {', '.join(map(str, thickness/10))} nm")
-if 'S' in refine_mode:
+    print(f"{v.n_thickness} thicknesses: {', '.join(map(str, v.thickness/10))} nm")
+if 'S' in v.refine_mode:
     print("Simulation only, S")
-elif 'A' in refine_mode:
+elif 'A' in v.refine_mode:
     print("Refining Structure Factors, A")
     # needs error check for any other refinement
     # raise ValueError("Structure factor refinement
     # incompatible with anything else")
 else:
-    if 'B' in refine_mode:
+    if 'B' in v.refine_mode:
         print("Refining Atomic Coordinates, B")
         # redefine the basis if necessary to allow coordinate refinement
-        basis_atom_position = px.preferred_basis(space_group_number,
-                                                 basis_atom_position,
-                                                 basis_wyckoff)
-    if 'C' in refine_mode:
+        v.basis_atom_position = px.preferred_basis(v.space_group_number,
+                                                 v.basis_atom_position,
+                                                 v.basis_wyckoff)
+    if 'C' in v.refine_mode:
         print("Refining Occupancies, C")
-    if 'D' in refine_mode:
+    if 'D' in v.refine_mode:
         print("Refining Isotropic Debye Waller Factors, D")
-    if 'E' in refine_mode:
+    if 'E' in v.refine_mode:
         print("Refining Anisotropic Debye Waller Factors, E")
         raise ValueError("Refinement mode E not implemented")
-    if (len(atomic_sites) > basis_count):
+    if (len(v.atomic_sites) > n_basis):
         raise ValueError("Number of atomic sites to refine is larger than the \
                          number of atoms")
-if 'F' in refine_mode:
+if 'F' in v.refine_mode:
     print("Refining Lattice Parameters, F")
-if 'G' in refine_mode:
+if 'G' in v.refine_mode:
     print("Refining Lattice Angles, G")
-if 'H' in refine_mode:
+if 'H' in v.refine_mode:
     print("Refining Convergence Angle, H")
-if 'I' in refine_mode:
+if 'I' in v.refine_mode:
     print("Refining Accelerating Voltage, I")
 
-if scatter_factor_method == 0:
+if v.scatter_factor_method == 0:
     print("Using Kirkland scattering factors")
-elif scatter_factor_method == 1:
+elif v.scatter_factor_method == 1:
     print("Using Lobato scattering factors")
-elif scatter_factor_method == 2:
+elif v.scatter_factor_method == 2:
     print("Using Peng scattering factors")
-elif scatter_factor_method == 3:
+elif v.scatter_factor_method == 3:
     print("Using Doyle & Turner scattering factors")
 else:
     raise ValueError("No scattering factors chosen in felix.inp")
 
 
 # %% read felix.hkl
-input_hkls, i_obs, sigma_obs = px.read_hkl_file("felix.hkl")
-n_out = len(input_hkls)+1  # we expect 000 NOT to be in the hkl list
+v.input_hkls, v.i_obs, v.sigma_obs = px.read_hkl_file("felix.hkl")
+v.n_out = len(v.input_hkls)+1  # we expect 000 NOT to be in the hkl list
 
 
 # %% set up refinement
@@ -305,10 +232,10 @@ n_out = len(input_hkls)+1  # we expect 000 NOT to be in the hkl list
 variable = ([])
 variable_type = ([])
 atom_refine_flag = ([])
-if 'S' not in refine_mode:
+if 'S' not in v.refine_mode:
     n_vars = 0
     # count refinement variables
-    if 'B' in refine_mode:  # Atom coordinate refinement
+    if 'B' in v.refine_mode:  # Atom coordinate refinement
         for i in range(len(atomic_sites)):
             # the [3, 3] matrix 'moves' returned by atom_move gives the
             # allowed movements for an atom (depending on its Wyckoff
@@ -325,24 +252,24 @@ if 'S' not in refine_mode:
                 variable_type.append(2)
                 atom_refine_flag.append(atomic_sites[i])
 
-    if 'C' in refine_mode:  # Occupancy
+    if 'C' in v.refine_mode:  # Occupancy
         for i in range(len(atomic_sites)):
             variable.append(basis_occupancy[atomic_sites[i]])
             variable_type.append(3)
             atom_refine_flag.append(atomic_sites[i])
 
-    if 'D' in refine_mode:  # Isotropic DW
+    if 'D' in v.refine_mode:  # Isotropic DW
         for i in range(len(atomic_sites)):
             variable.append(basis_B_iso[atomic_sites[i]])
             variable_type.append(4)
             atom_refine_flag.append(atomic_sites[i])
 
-    if 'E' in refine_mode:  # Anisotropic DW
+    if 'E' in v.refine_mode:  # Anisotropic DW
         # Not yet implemented!!! variable_type 5
         raise ValueError("Anisotropic Debye-Waller factor refinement \
                          not yet implemented")
 
-    if 'F' in refine_mode:  # Lattice parameters
+    if 'F' in v.refine_mode:  # Lattice parameters
         # variable_type first digit=6 indicates lattice parameter
         # second digit=1,2,3 indicates a,b,c
         # This section needs work to include rhombohedral cells and
@@ -366,16 +293,16 @@ if 'S' not in refine_mode:
             variable_type.append(63)
             atom_refine_flag.append(-1)
 
-    if 'G' in refine_mode:  # Unit cell angles
+    if 'G' in v.refine_mode:  # Unit cell angles
         # Not yet implemented!!! variable_type 7
         raise ValueError("Unit cell angle refinement not yet implemented")
 
-    if 'H' in refine_mode:  # Convergence angle
+    if 'H' in v.refine_mode:  # Convergence angle
         variable.append(convergence_angle)
         variable_type.append(8)
         atom_refine_flag.append(-1)
 
-    if 'I' in refine_mode:  # accelerating_voltage_kv
+    if 'I' in v.refine_mode:  # accelerating_voltage_kv
         variable.append(accelerating_voltage_kv)
         variable_type.append(9)
         atom_refine_flag.append(-1)
@@ -747,7 +674,7 @@ while df >= exit_criteria:
 
     if abs(p_mag) > 1e-10:
         p = p / p_mag   # Normalize direction of max/min gradient
-        print(f"Refinement vector [{p:.2f}]")
+        print(f"Refinement vector {p}")
         # Find index of the first non-zero element in the gradient vector
         j = np.where(np.abs(p) >= 1e-10)[0][0]
         # reset the refinement scale
