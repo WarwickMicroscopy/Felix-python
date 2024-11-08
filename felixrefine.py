@@ -7,14 +7,10 @@ Created August 2024
 
 """
 import os
-import re
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patheffects import withStroke
 import time
-
-
-#  Main felix program
 
 # felix modules
 from pylix_modules import pylix as px
@@ -22,18 +18,20 @@ from pylix_modules import simulate as sim
 from pylix_modules import pylix_dicts as fu
 from pylix_modules import pylix_class as pc
 
+path = os.getcwd()
 start = time.time()
 latest_commit_id = px.get_git()
 # outputs
 print("-----------------------------------------------------------------")
 print(f"felixrefine:  version {latest_commit_id[:8]}")
-print("felixrefine: see https://github.com/WarwickMicroscopy/Felix-python")
+print("felixrefine:  https://github.com/WarwickMicroscopy/Felix-python")
 print("-----------------------------------------------------------------")
 
 # initialise class objects
-cif = pc.Cif()  # values read from felix.cif
-inp = pc.Inp()  # values read from felix.inp
-v = pc.Var(cif)  # working variables used in the simulation
+v = pc.Var()  # working variables used in the simulation
+# initialise iteration count
+v.iter_count = 0
+
 
 # %% read felix.cif
 
@@ -41,60 +39,60 @@ v = pc.Var(cif)  # working variables used in the simulation
 # with the second number the uncertainty in the first.  Nothing is currently
 # done with these uncertainties...
 cif_dict = px.read_cif('felix.cif')
-cif.update_from_dict(cif_dict)
+v.update_from_dict(cif_dict)
 # ====== extract cif data into working variables v
-v.space_group = cif.symmetry_space_group_name_h_m
-if cif.chemical_formula_structural is not None:
-    v.chemical_formula = cif.chemical_formula_structural
-elif cif.chemical_formula_sum is not None:
-    v.chemical_formula = cif.chemical_formula_sum
-elif cif.chemical_formula_iupac is not None:
-    v.chemical_formula = cif.chemical_formula_iupac
+v.space_group = v.symmetry_space_group_name_h_m
+if v.chemical_formula_structural is not None:
+    v.chemical_formula = v.chemical_formula_structural
+elif v.chemical_formula_sum is not None:
+    v.chemical_formula = v.chemical_formula_sum
+elif v.chemical_formula_iupac is not None:
+    v.chemical_formula = v.chemical_formula_iupac
 print("Material: " + v.chemical_formula)
 
 # space group number and lattice type
 if "space_group_symbol" in cif_dict:
-    v.space_group = cif.space_group_symbol.replace(' ', '')
+    v.space_group = v.space_group_symbol.replace(' ', '')
 elif "space_group_name_h_m_alt" in cif_dict:
-    v.space_group = cif.space_group_name_h_m_alt.replace(' ', '')
+    v.space_group = v.space_group_name_h_m_alt.replace(' ', '')
 elif "symmetry_space_group_name_h_m" in cif_dict:
-    v.space_group = cif.symmetry_space_group_name_h_m.replace(' ', '')
+    v.space_group = v.symmetry_space_group_name_h_m.replace(' ', '')
 elif "space_group_it_number" in cif_dict:
-    v.space_group_number = int(cif.space_group_it_number[0])
+    v.space_group_number = int(v.space_group_it_number[0])
     reverse_space_groups = {v: k for k, v in fu.space_groups.items()}
     v.space_group = reverse_space_groups.get(v.space_group_number, "Unknown")
 else:
     error_flag = True
     raise ValueError("No space group found in .cif")
-lattice_type = v.space_group[0]
+v.lattice_type = v.space_group[0]
 v.space_group_number = fu.space_groups[v.space_group]
 
 # cell
-v.cell_a = cif.cell_length_a[0]
-v.cell_b = cif.cell_length_b[0]
-v.cell_c = cif.cell_length_c[0]
-v.cell_alpha = cif.cell_angle_alpha[0]*np.pi/180.0  # angles in radians
-v.cell_beta = cif.cell_angle_beta[0]*np.pi/180.0
-v.cell_gamma = cif.cell_angle_gamma[0]*np.pi/180.0
-n_basis = len(cif.atom_site_label)
+v.cell_a = v.cell_length_a[0]
+v.cell_b = v.cell_length_b[0]
+v.cell_c = v.cell_length_c[0]
+v.cell_alpha = v.cell_angle_alpha[0]*np.pi/180.0  # angles in radians
+v.cell_beta = v.cell_angle_beta[0]*np.pi/180.0
+v.cell_gamma = v.cell_angle_gamma[0]*np.pi/180.0
+n_basis = len(v.atom_site_label)
 
 # symmetry operations
 if "space_group_symop_operation_xyz" in cif_dict:
     v.symmetry_matrix, v.symmetry_vector = px.symop_convert(
-        cif.space_group_symop_operation_xyz)
+        v.space_group_symop_operation_xyz)
 elif "symmetry_equiv_pos_as_xyz" in cif_dict:
     v.symmetry_matrix, v.symmetry_vector = px.symop_convert(
-        cif.symmetry_equiv_pos_as_xyz)
+        v.symmetry_equiv_pos_as_xyz)
 else:
     error_flag = True
     raise ValueError("Symmetry operations not found in .cif")
 
 # extract the basis from the raw cif values
 # take basis atom labels as given
-v.basis_atom_label = cif.atom_site_label
+v.basis_atom_label = v.atom_site_label
 # atom symbols, stripping any charge etc.
 v.basis_atom_name = [''.join(filter(str.isalpha, name))
-                   for name in cif.atom_site_type_symbol]
+                   for name in v.atom_site_type_symbol]
 # take care of any odd symbols, get the case right
 for i in range(n_basis):
     name = v.basis_atom_name[i]
@@ -104,24 +102,24 @@ for i in range(n_basis):
         name = name[0].upper() + name[1:].lower()
     v.basis_atom_name[i] = name
 # take basis Wyckoff letters as given (maybe check they are only letters?)
-v.basis_wyckoff = cif.atom_site_wyckoff_symbol
+v.basis_wyckoff = v.atom_site_wyckoff_symbol
 
 # basis_atom_position = np.zeros([basis_count, 3])
 v.basis_atom_position = \
-    np.column_stack((np.array([tup[0] for tup in cif.atom_site_fract_x]),
-                     np.array([tup[0] for tup in cif.atom_site_fract_y]),
-                     np.array([tup[0] for tup in cif.atom_site_fract_z])))
+    np.column_stack((np.array([tup[0] for tup in v.atom_site_fract_x]),
+                     np.array([tup[0] for tup in v.atom_site_fract_y]),
+                     np.array([tup[0] for tup in v.atom_site_fract_z])))
 
 # Debye-Waller factor
 if "atom_site_b_iso_or_equiv" in cif_dict:
-    v.basis_B_iso = np.array([tup[0] for tup in cif.atom_site_b_iso_or_equiv])
+    v.basis_B_iso = np.array([tup[0] for tup in v.atom_site_b_iso_or_equiv])
 elif "atom_site_u_iso_or_equiv" in cif_dict:
     v.basis_B_iso = np.array([tup[0] for tup in
-                            cif.atom_site_u_iso_or_equiv])*8*(np.pi**2)
+                            v.atom_site_u_iso_or_equiv])*8*(np.pi**2)
     
 # occupancy, assume it's unity if not specified
-if cif.atom_site_occupancy is not None:
-    v.basis_occupancy = np.array([tup[0] for tup in cif.atom_site_occupancy])
+if v.atom_site_occupancy is not None:
+    v.basis_occupancy = np.array([tup[0] for tup in v.atom_site_occupancy])
 else:
     v.basis_occupancy = np.ones([n_basis])
 
@@ -130,30 +128,34 @@ v.basis_atom_delta = np.zeros([n_basis, 3])  # ***********what's this
 
 # %% read felix.inp
 inp_dict = px.read_inp_file('felix.inp')
-inp.update_from_dict(inp_dict)
+v.update_from_dict(inp_dict)
 
 # thickness array
-if (inp.final_thickness > inp.initial_thickness + inp.delta_thickness):
-    v.thickness = np.arange(inp.initial_thickness, inp.final_thickness,
-                            inp.delta_thickness)
+if (v.final_thickness > v.initial_thickness + v.delta_thickness):
+    v.thickness = np.arange(v.initial_thickness, v.final_thickness,
+                            v.delta_thickness)
     v.n_thickness = len(v.thickness)
 else:
     # need np.array rather than float so wave_functions works for 1 or many t's
-    v.thickness = np.array(inp.initial_thickness)
+    v.thickness = np.array(v.initial_thickness)
     v.n_thickness = 1
 
 # convert arrays to numpy
-v.incident_beam_direction = np.array(inp.incident_beam_direction, dtype='float')
-v.normal_direction = np.array(inp.normal_direction, dtype='float')
-v.x_direction = np.array(inp.x_direction, dtype='float')
-v.atomic_sites = np.array(inp.atomic_sites, dtype='int')
+v.incident_beam_direction = np.array(v.incident_beam_direction, dtype='float')
+v.normal_direction = np.array(v.normal_direction, dtype='float')
+v.x_direction = np.array(v.x_direction, dtype='float')
+v.atomic_sites = np.array(v.atomic_sites, dtype='int')
 
 # crystallography exp(2*pi*i*g.r) to physics convention exp(i*g.r)
-v.g_limit = inp.g_limit * 2 * np.pi
+v.g_limit = v.g_limit * 2 * np.pi
 
-# other refinement variables
-v.refine_mode = inp.refine_mode
-v.scatter_factor_method = inp.scatter_factor_method
+# other refinement variables (is there a neater way of reading these across? I expect so)
+# v.refine_mode = v.refine_mode
+# v.scatter_factor_method = v.scatter_factor_method
+# v.accelerating_voltage_kv = v.accelerating_voltage_kv
+# v.min_reflection_pool = v.min_reflection_pool
+# v.plot = v.plot
+# v.debug = v.debug
 
 # output
 print(f"Zone axis: {v.incident_beam_direction.astype(int)}")
@@ -161,6 +163,18 @@ if v.n_thickness ==1:
     print(f"Specimen thickness {v.initial_thickness/10} nm")
 else:
     print(f"{v.n_thickness} thicknesses: {', '.join(map(str, v.thickness/10))} nm")
+
+if v.scatter_factor_method == 0:
+    print("Using Kirkland scattering factors")
+elif v.scatter_factor_method == 1:
+    print("Using Lobato scattering factors")
+elif v.scatter_factor_method == 2:
+    print("Using Peng scattering factors")
+elif v.scatter_factor_method == 3:
+    print("Using Doyle & Turner scattering factors")
+else:
+    raise ValueError("No scattering factors chosen in felix.inp")
+
 if 'S' in v.refine_mode:
     print("Simulation only, S")
 elif 'A' in v.refine_mode:
@@ -194,17 +208,6 @@ if 'H' in v.refine_mode:
 if 'I' in v.refine_mode:
     print("Refining Accelerating Voltage, I")
 
-if v.scatter_factor_method == 0:
-    print("Using Kirkland scattering factors")
-elif v.scatter_factor_method == 1:
-    print("Using Lobato scattering factors")
-elif v.scatter_factor_method == 2:
-    print("Using Peng scattering factors")
-elif v.scatter_factor_method == 3:
-    print("Using Doyle & Turner scattering factors")
-else:
-    raise ValueError("No scattering factors chosen in felix.inp")
-
 
 # %% read felix.hkl
 v.input_hkls, v.i_obs, v.sigma_obs = px.read_hkl_file("felix.hkl")
@@ -217,8 +220,8 @@ v.n_out = len(v.input_hkls)+1  # we expect 000 NOT to be in the hkl list
 # --------------------------------------------------------------------
 # Ug refinement is a special case, cannot do any other refinement alongside
 # We count the independent variables:
-# variable = variable to be refined
-# variable_type = what kind of variable, as follows
+# v.refined_variable = variable to be refined
+# v.refined_variable_type = what kind of variable, as follows
 # 0 = Ug amplitude
 # 1 = Ug phase
 # 2 = atom coordinate *** PARTIALLY IMPLEMENTED *** not all space groups
@@ -229,40 +232,40 @@ v.n_out = len(v.input_hkls)+1  # we expect 000 NOT to be in the hkl list
 # 7 = unit cell angles *** NOT YET IMPLEMENTED ***
 # 8 = convergence angle
 # 9 = accelerating_voltage_kv *** NOT YET IMPLEMENTED ***
-variable = ([])
-variable_type = ([])
-atom_refine_flag = ([])
+v.refined_variable = ([])
+v.refined_variable_type = ([])
+v.atom_refine_flag = ([])
 if 'S' not in v.refine_mode:
-    n_vars = 0
+    v.n_variables = 0
     # count refinement variables
     if 'B' in v.refine_mode:  # Atom coordinate refinement
-        for i in range(len(atomic_sites)):
+        for i in range(len(v.atomic_sites)):
             # the [3, 3] matrix 'moves' returned by atom_move gives the
             # allowed movements for an atom (depending on its Wyckoff
             # symbol and space group) as row vectors with magnitude 1.
             # ***NB NOT ALL SPACE GROUPS IMPLEMENTED ***
-            moves = px.atom_move(space_group_number, basis_wyckoff[i])
+            moves = px.atom_move(v.space_group_number, v.basis_wyckoff[i])
             degrees_of_freedom = int(np.sum(moves**2))
             if degrees_of_freedom == 0:
                 raise ValueError("Atom coord refinement not possible")
             for j in range(degrees_of_freedom):
-                r_dot_v = np.dot(basis_atom_position[atomic_sites[i]],
+                r_dot_v = np.dot(v.basis_atom_position[v.atomic_sites[i]],
                                  moves[j, :])
-                variable.append(r_dot_v)
-                variable_type.append(2)
-                atom_refine_flag.append(atomic_sites[i])
+                v.refined_variable.append(r_dot_v)
+                v.refined_variable_type.append(2)
+                v.atom_refine_flag.append(v.atomic_sites[i])
 
     if 'C' in v.refine_mode:  # Occupancy
-        for i in range(len(atomic_sites)):
-            variable.append(basis_occupancy[atomic_sites[i]])
-            variable_type.append(3)
-            atom_refine_flag.append(atomic_sites[i])
+        for i in range(len(v.atomic_sites)):
+            v.refined_variable.append(v.basis_occupancy[v.atomic_sites[i]])
+            v.refined_variable_type.append(3)
+            v.atom_refine_flag.append(v.atomic_sites[i])
 
     if 'D' in v.refine_mode:  # Isotropic DW
-        for i in range(len(atomic_sites)):
-            variable.append(basis_B_iso[atomic_sites[i]])
-            variable_type.append(4)
-            atom_refine_flag.append(atomic_sites[i])
+        for i in range(len(v.atomic_sites)):
+            v.refined_variable.append(v.basis_B_iso[v.atomic_sites[i]])
+            v.refined_variable_type.append(4)
+            v.atom_refine_flag.append(v.atomic_sites[i])
 
     if 'E' in v.refine_mode:  # Anisotropic DW
         # Not yet implemented!!! variable_type 5
@@ -274,56 +277,56 @@ if 'S' not in v.refine_mode:
         # second digit=1,2,3 indicates a,b,c
         # This section needs work to include rhombohedral cells and
         # non-standard settings!!!
-        variable.append(cell_a)  # is in all lattice types
-        variable_type.append(61)
-        atom_refine_flag.append(-1)  # -1 indicates not an atom
-        if space_group_number < 75:  # Triclinic, monoclinic, orthorhombic
-            variable.append(cell_b)
-            variable_type.append(62)
-            atom_refine_flag.append(-1)
-            variable.append(cell_c)
-            variable_type.append(63)
-            atom_refine_flag.append(-1)
-        elif 142 < space_group_number < 168:  # Rhombohedral
+        v.refined_variable.append(v.cell_a)  # is in all lattice types
+        v.refined_variable_type.append(61)
+        v.atom_refine_flag.append(-1)  # -1 indicates not an atom
+        if v.space_group_number < 75:  # Triclinic, monoclinic, orthorhombic
+            v.refined_variable.append(v.cell_b)
+            v.refined_variable_type.append(62)
+            v.atom_refine_flag.append(-1)
+            v.refined_variable.append(v.cell_c)
+            v.refined_variable_type.append(63)
+            v.atom_refine_flag.append(-1)
+        elif 142 < v.space_group_number < 168:  # Rhombohedral
             # Need to work out R- vs H- settings!!!
             raise ValueError("Rhombohedral R- vs H- not yet implemented")
-        elif (167 < space_group_number < 195) or \
-             (74 < space_group_number < 143):  # Hexagonal or Tetragonal
-            variable.append(cell_c)
-            variable_type.append(63)
-            atom_refine_flag.append(-1)
+        elif (167 < v.space_group_number < 195) or \
+             (74 < v.space_group_number < 143):  # Hexagonal or Tetragonal
+            v.refined_variable.append(v.cell_c)
+            v.refined_variable_type.append(63)
+            v.atom_refine_flag.append(-1)
 
     if 'G' in v.refine_mode:  # Unit cell angles
         # Not yet implemented!!! variable_type 7
         raise ValueError("Unit cell angle refinement not yet implemented")
 
     if 'H' in v.refine_mode:  # Convergence angle
-        variable.append(convergence_angle)
-        variable_type.append(8)
-        atom_refine_flag.append(-1)
+        v.refined_variable.append(v.convergence_angle)
+        v.refined_variable_type.append(8)
+        v.atom_refine_flag.append(-1)
 
     if 'I' in v.refine_mode:  # accelerating_voltage_kv
-        variable.append(accelerating_voltage_kv)
-        variable_type.append(9)
-        atom_refine_flag.append(-1)
+        v.refined_variable.append(v.accelerating_voltage_kv)
+        v.refined_variable_type.append(9)
+        v.atom_refine_flag.append(-1)
         # Not yet implemented!!!
         raise ValueError("accelerating_voltage_kv refinement not yet implemented")
 
 # Total number of independent variables
-n_variables = len(variable)
-if n_variables == 0:
+v.n_variables = len(v.refined_variable)
+if v.n_variables == 0:
     raise ValueError("No refinement variables! \
-    Check refine_mode flag in felix.inp. \
+    Check refine_mode flag in felix.v. \
         Valid refine modes are A,B,C,D,F,H,S")
-if n_variables == 1:
+if v.n_variables == 1:
     print("Only one independent variable")
 else:
-    print(f"Number of independent variables = {n_variables}")
+    print(f"Number of independent variables = {v.n_variables}")
 
-variable = np.array(variable)
-independent_delta = np.zeros(n_variables)
-variable_type = np.array(variable_type)
-variable_atom = np.array(atom_refine_flag[:n_variables])
+v.refined_variable = np.array(v.refined_variable)
+independent_delta = np.zeros(v.n_variables)
+v.refined_variable_type = np.array(v.refined_variable_type)
+v.refined_variable_atom = np.array(v.atom_refine_flag[:v.n_variables])
 
 
 # # %% set up Ug refinement
@@ -387,22 +390,14 @@ variable_atom = np.array(atom_refine_flag[:n_variables])
 # %% baseline simulation
 print("-------------------------------")
 print("Baseline simulation:")
-# variable passing needs to be changed to something more efficient!
-hkl, g_output, lacbed_sim, setup, bwc = \
-    sim.simulate(plot, debug, space_group, lattice_type, symmetry_matrix,
-                 symmetry_vector, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
-                 cell_gamma, basis_atom_label, basis_atom_name, basis_atom_position,
-                 basis_B_iso, basis_occupancy, scatter_factor_method, accelerating_voltage_kv,
-                 x_direction, incident_beam_direction, normal_direction,
-                 min_reflection_pool, min_strong_beams, g_limit, input_hkls,
-                 absorption_method, absorption_per, convergence_angle,
-                 image_radius, thickness)
+# uses the whole v=Var class
+setup, bwc = sim.simulate(v)
 
 # %% read in experimental images
-if 'S' not in refine_mode:
-    lacbed_expt = np.zeros([2*image_radius, 2*image_radius, n_out])
+if 'S' not in v.refine_mode:
+    v.lacbed_expt = np.zeros([2*v.image_radius, 2*v.image_radius, v.n_out])
     # get the list of available images
-    x_str = str(2*image_radius)
+    x_str = str(2*v.image_radius)
     dm3_folder = None
     for dirpath, dirnames, filenames in os.walk(path):
         for dirname in dirnames:
@@ -415,54 +410,55 @@ if 'S' not in refine_mode:
                      if file.lower().endswith('.dm3')]
         # just match the indices in the filename to felix.hkl, expect the user
         # to ensure the data is of the right material!
-        n_expt = n_out
-        for i in range(n_out):
-            g_string = px.hkl_string(hkl[g_output[i]])
+        n_expt = v.n_out
+        for i in range(v.n_out):
+            g_string = px.hkl_string(v.hkl[v.g_output[i]])
             found = False
             for file_name in dm3_files:
                 if g_string in file_name:
                     file_path = os.path.join(dm3_folder, file_name)
-                    lacbed_expt[:, :, i] = px.read_dm3(file_path, 2*image_radius,
-                                                       debug)
+                    v.lacbed_expt[:, :, i] = px.read_dm3(file_path,
+                                                       2*v.image_radius,
+                                                       v.debug)
                     found = True
             if not found:
                 n_expt -= 1
                 print(f"{g_string} not found")
 
         # print experimental LACBED patterns
-        w = int(np.ceil(np.sqrt(n_out)))
-        h = int(np.ceil(n_out/w))
+        w = int(np.ceil(np.sqrt(v.n_out)))
+        h = int(np.ceil(v.n_out/w))
         fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))
         text_effect = withStroke(linewidth=3, foreground='black')
         axes = axes.flatten()
-        for i in range(n_out):
-            axes[i].imshow(lacbed_expt[:, :, i], cmap='gist_earth')
+        for i in range(v.n_out):
+            axes[i].imshow(v.lacbed_expt[:, :, i], cmap='gist_earth')
             axes[i].axis('off')
-            annotation = f"{hkl[g_output[i], 0]}{hkl[g_output[i], 1]}{hkl[g_output[i], 2]}"
+            annotation = f"{v.hkl[v.g_output[i], 0]}{v.hkl[v.g_output[i], 1]}{v.hkl[v.g_output[i], 2]}"
             axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
                              size=30, color='w', path_effects=[text_effect])
-        for i in range(n_out, len(axes)):
+        for i in range(v.n_out, len(axes)):
             axes[i].axis('off')
         plt.tight_layout()
         plt.show()
         # initialise correlation
-        best_corr = np.ones(n_out)
+        best_corr = np.ones(v.n_out)
 
 
 # %% output simulated LACBED patterns
-w = int(np.ceil(np.sqrt(n_out)))
-h = int(np.ceil(n_out/w))
-for j in range(n_thickness):
+w = int(np.ceil(np.sqrt(v.n_out)))
+h = int(np.ceil(v.n_out/w))
+for j in range(v.n_thickness):
     fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))
     text_effect = withStroke(linewidth=3, foreground='black')
     axes = axes.flatten()
-    for i in range(n_out):
-        axes[i].imshow(lacbed_sim[j, :, :, i], cmap='pink')
+    for i in range(v.n_out):
+        axes[i].imshow(v.lacbed_sim[j, :, :, i], cmap='pink')
         axes[i].axis('off')
-        annotation = f"{hkl[g_output[i], 0]}{hkl[g_output[i], 1]}{hkl[g_output[i], 2]}"
+        annotation = f"{v.hkl[v.g_output[i], 0]}{v.hkl[v.g_output[i], 1]}{v.hkl[v.g_output[i], 2]}"
         axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
                          size=30, color='w', path_effects=[text_effect])
-    for i in range(n_out, len(axes)):
+    for i in range(v.n_out, len(axes)):
         axes[i].axis('off')
     plt.tight_layout()
     plt.show()
@@ -471,412 +467,295 @@ for j in range(n_thickness):
 # %% start refinement loop
 
 # figure of merit
-fom = px.figure_of_merit(lacbed_sim, thickness, lacbed_expt,
-                               image_processing, blur_radius, correlation_type,
-                               plot)
+fom = sim.figure_of_merit(v)
 print(f"  Figure of merit {100*fom:.2f}%")
 print("-------------------------------")
 
 # Initialise variables for refinement
-iter_count = 0
-best_fit = fom
-last_fit = best_fit
-last_p = np.ones(n_variables)
-p = np.ones(n_variables)
-current_var = np.ones(n_variables)
+fit0 = fom*1.0
+best_fit = fom*1.0
+last_fit = fom*1.0
+# p is a vector along the gradient in n-dimensional space
+p = np.ones(v.n_variables)
+last_p = np.ones(v.n_variables)
 df = 1.0
 r3_var = np.zeros(3)  # for parabolic minimum
 r3_fit = np.zeros(3)
 independent_delta = 0.0
 
 # Refinement loop
-while df >= exit_criteria:
+while df >= v.exit_criteria:
     # reset the variables (n-dimensional parameter space)
-    current_var = np.copy(variable) # used for simulations, start at current best point
-    var0 = np.copy(variable)  #running best fit during this refinement cycle
-    fit0 = fom  # incoming fit
+    var0 = np.copy(v.refined_variable)  #running best fit during this refinement cycle
+    print(f"var0 {var0}")
 
     # if all parameters have been refined and we're still in the loop, reset
     if np.sum(np.abs(last_p)) < 1e-10:
-        last_p = np.ones(n_variables)
+        last_p = np.ones(v.n_variables)
 
     #===========individual variable minimisation
     # we go through the variables - if there's an easy minimisation
     # we take it and remove it from the list of variables to refine in
     # vector descent.  If it's been refined, last_p[i] = 0
-    for i in range(n_variables):
+    for i in range(v.n_variables):
+        current_var = np.copy(v.refined_variable) # start at current best point
+        v.current_variable_type = v.refined_variable_type[i]
         # Skip variables already optimized in previous refinements
         if abs(last_p[i]) < 1e-10:
             p[i] = 0.0
             continue
         # Check if Debye-Waller factor is zero, skip if so
-        if current_var[i] <= 1e-10 and variable_type == 4:
-            p[i] = 1e-10
+        if v.current_variable_type == 4 and current_var[i] <= 1e-10:
+            p[i] = 0.0
             continue
 
         # Update iteration
-        iter_count += 1
+        v.iter_count += 1
+
+        print(f"Finding gradient, variable {i+1} of {v.n_variables}")
 
         # Display messages based on variable type (last digit)
-        if variable_type[i] % 10 == 1:
+        if v.current_variable_type % 10 == 1:
             print("Changing Ug")
-        elif variable_type[i] % 10 == 2:
+        elif v.current_variable_type % 10 == 2:
             print("Changing atomic coordinate")
-        elif variable_type[i] % 10 == 3:
+        elif v.current_variable_type % 10 == 3:
             print("Changing occupancy")
-        elif variable_type[i] % 10 == 4:
+        elif v.current_variable_type % 10 == 4:
             print("Changing isotropic Debye-Waller factor")
-        elif variable_type[i] % 10 == 5:
+        elif v.current_variable_type % 10 == 5:
             print("Changing anisotropic Debye-Waller factor")
-        elif variable_type[i] % 10 == 6:
+        elif v.current_variable_type % 10 == 6:
             print("Changing lattice parameter")
-        elif variable_type[i] % 10 == 8:
+        elif v.current_variable_type % 10 == 8:
             print("Changing convergence angle")
-
-        print(f"Finding gradient, {i+1} of {n_variables}")
 
         # dx is a small change in the current variable determined by RScale
         # which is either refinement_scale for atomic coordinates and
         # refinement_scale*variable for everything else
-        dx = abs(refinement_scale * current_var[i])
-        if variable_type == 2:
-            dx = abs(refinement_scale)
+        dx = abs(v.refinement_scale * current_var[i])
+        if v.refined_variable_type == 2:
+            dx = abs(v.refinement_scale)
 
         # Three-point gradient measurement, starting with plus
         current_var[i] = var0[i] + dx
         #update variables
-        [basis_atom_position, basis_atom_delta, basis_occupancy, basis_B_iso,
-                cell_a, cell_b, cell_c,
-                convergence_angle, accelerating_voltage_kv] = \
-            px.update_variables(current_var, variable_type,
-                                atom_refine_flag,
-                                basis_atom_position, basis_atom_delta,
-                                basis_occupancy, basis_B_iso, cell_a, cell_b,
-                                cell_c, convergence_angle, accelerating_voltage_kv)
+        sim.update_variables(v, current_var)
+        sim.print_current_var(v, current_var[i])
         # simulate
-        hkl, g_output, lacbed_sim, setup, bwc = \
-            sim.simulate(plot, debug, space_group, lattice_type, symmetry_matrix,
-                         symmetry_vector, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
-                         cell_gamma, basis_atom_label, basis_atom_name, basis_atom_position,
-                         basis_B_iso, basis_occupancy, scatter_factor_method, accelerating_voltage_kv,
-                         x_direction, incident_beam_direction, normal_direction,
-                         min_reflection_pool, min_strong_beams, g_limit, input_hkls,
-                         absorption_method, absorption_per, convergence_angle,
-                         image_radius, thickness)
+        setup, bwc = sim.simulate(v)
         # figure of merit
-        fom = px.figure_of_merit(lacbed_sim, thickness, lacbed_expt,
-                                       image_processing, blur_radius, correlation_type,
-                                       plot)        
-        print(f"  Figure of merit {100*fom:.2f}%")
+        fom = sim.figure_of_merit(v)
         if (fom < best_fit):
-            best_fit = fom
-        print(f"    Best figure of merit {100*best_fit:.2f}%")
-        print("-------------------------------")
-        r_plus = fom
+            best_fit = fom*1.0
+            # var0[i] = current_var[i]*1.0
+        print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
+        print(f"-----------------------------G1 {var0}")
+        r_plus = fom*1.0
     
         # Now minus dx
-        current_var[i] = var0[i] - dx
+        current_var[i] -= 2*dx
 
         #update variables
-        [basis_atom_position, basis_atom_delta, basis_occupancy, basis_B_iso,
-                cell_a, cell_b, cell_c,
-                convergence_angle, accelerating_voltage_kv] = \
-            px.update_variables(current_var, variable_type,
-                                atom_refine_flag,
-                                basis_atom_position, basis_atom_delta,
-                                basis_occupancy, basis_B_iso, cell_a, cell_b,
-                                cell_c, convergence_angle, accelerating_voltage_kv)
+        sim.update_variables(v, current_var)
+        sim.print_current_var(v, current_var[i])
         # simulate
-        hkl, g_output, lacbed_sim, setup, bwc = \
-            sim.simulate(plot, debug, space_group, lattice_type, symmetry_matrix,
-                         symmetry_vector, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
-                         cell_gamma, basis_atom_label, basis_atom_name, basis_atom_position,
-                         basis_B_iso, basis_occupancy, scatter_factor_method, accelerating_voltage_kv,
-                         x_direction, incident_beam_direction, normal_direction,
-                         min_reflection_pool, min_strong_beams, g_limit, input_hkls,
-                         absorption_method, absorption_per, convergence_angle,
-                         image_radius, thickness)
+        setup, bwc = sim.simulate(v)
         # figure of merit
-        fom = px.figure_of_merit(lacbed_sim, thickness, lacbed_expt,
-                                       image_processing, blur_radius, correlation_type,
-                                       plot)        
-        print(f"  Figure of merit {100*fom:.2f}%")
+        fom = sim.figure_of_merit(v)
         if (fom < best_fit):
-            best_fit = fom
-        print(f"    Best figure of merit {100*best_fit:.2f}%")
-        print("-------------------------------")
-        r_minus = fom
+            best_fit = fom*1.0
+            # var0[i] = current_var[i]*1.0
+        print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
+        print(f"-----------------------------G2 {var0}")
+        r_minus = fom*1.0
 
-        # Reset current point so it's correct for the next variable
-        current_var[i] = var0[i]
         # If the three points contain a minimum, predict its position using Kramer's rule
+        # this happens if the initial fom, fit0, is smallest
         if min(fit0, r_plus, r_minus) == fit0:
+            # put the three values in arrays and apply parabo3
             r3_var = np.array([var0[i] - dx, var0[i], var0[i] + dx])
             r3_fit = np.array([r_minus, fit0, r_plus])
-
             var_min, fit_min = px.parabo3(r3_var, r3_fit)
-            
+            # var0 becomes the predicted best point  
+            var0[i] = var_min*1.0
+            p[i] = 0.0
+            print(f"Expect minimum at {var_min:.2f} with fit index {100*fit_min:.2f}%")
             # error estimate goes here
             # independent_delta[i] = delta_x(r3_var, r3_fit, precision, err)
             # uncert_brak(var_min, independent_delta[i])
 
-            # We update RVar0 with the best points as we go along
-            # But keep RCurrentVar the same so that the measurements of gradient
-            # are accurate.  
-            var0[i] = var_min
-            p[i] = 0.0
-            print(f"Expect minimum at {var_min} with fit index {100*fit_min:.2f}%")
         else:  # this variable will be part of vector gradient descent
             p[i] = -(r_plus - r_minus) / (2 * dx)  # -df/dx
+            # var0 becomes the next point along
             if min(fit0, r_plus, r_minus) == r_plus:
-                var0[i] = var0[i] + dx
-            elif min(fit0, r_plus, r_minus) == r_minus:
-                var0[i] = var0[i] - dx
+                var0[i] += dx
+            else:
+                var0[i] -= dx
 
     #===========vector descent
     # point 1 of 3 using the prediction var0
     print("Refining, point 1 of 3")
     current_var = np.copy(var0)
     #update variables
-    [basis_atom_position, basis_atom_delta, basis_occupancy, basis_B_iso,
-            cell_a, cell_b, cell_c,
-            convergence_angle, accelerating_voltage_kv] = \
-        px.update_variables(current_var, variable_type,
-                            atom_refine_flag,
-                            basis_atom_position, basis_atom_delta,
-                            basis_occupancy, basis_B_iso, cell_a, cell_b,
-                            cell_c, convergence_angle, accelerating_voltage_kv)
+    sim.update_variables(v, current_var)
+    sim.print_current_var(v, current_var[i])
     # simulate
-    hkl, g_output, lacbed_sim, setup, bwc = \
-        sim.simulate(plot, debug, space_group, lattice_type, symmetry_matrix,
-                     symmetry_vector, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
-                     cell_gamma, basis_atom_label, basis_atom_name, basis_atom_position,
-                     basis_B_iso, basis_occupancy, scatter_factor_method, accelerating_voltage_kv,
-                     x_direction, incident_beam_direction, normal_direction,
-                     min_reflection_pool, min_strong_beams, g_limit, input_hkls,
-                     absorption_method, absorption_per, convergence_angle,
-                     image_radius, thickness)
+    setup, bwc = sim.simulate(v)
     # figure of merit
-    fom = px.figure_of_merit(lacbed_sim, thickness, lacbed_expt,
-                                   image_processing, blur_radius, correlation_type,
-                                   plot)        
-    print(f"  Figure of merit {100*fom:.2f}%")
+    fom = sim.figure_of_merit(v)
     if (fom < best_fit):
-        best_fit = fom
-    print(f"    Best figure of merit {100*best_fit:.2f}%")
-    print("-------------------------------")
+        best_fit = fom*1.0
+    print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
+    print(f"-----------------------------R1 {var0}")
     
     # Reset the gradient vector magnitude and initialize vector descent
     p_mag = np.linalg.norm(p)
     if np.isinf(p_mag) or np.isnan(p_mag):
-        error = 1
         raise ValueError(f"Infinite or NaN gradient! Refinement vector = {p}")
 
-    if abs(p_mag) > 1e-10:
-        p = p / p_mag   # Normalize direction of max/min gradient
+    if abs(p_mag) > 1e-10:  # There are non-zero gradients, do the vector descent
+        p = p / p_mag   # Normalized direction of max/min gradient
         print(f"Refinement vector {p}")
         # Find index of the first non-zero element in the gradient vector
         j = np.where(np.abs(p) >= 1e-10)[0][0]
         # reset the refinement scale
-        p_mag = var0[j] * refinement_scale
+        p_mag = var0[j] * v.refinement_scale
 
-        # Three points for concavity test
-        r3_var[0] = var0[j]
-        r3_fit[0] = fom
+        # First of three points for concavity test is the previous simulation
+        r3_var[0] = var0[j]*1.0
+        r3_fit[0] = fom*1.0
 
-        # point 2
+        # Second point
         print("Refining, point 2 of 3")
-        current_var = var0 + p * p_mag
+        current_var = current_var + p * p_mag  # NB vectors here, not individual variables
         #update variables
-        [basis_atom_position, basis_atom_delta, basis_occupancy, basis_B_iso,
-                cell_a, cell_b, cell_c,
-                convergence_angle, accelerating_voltage_kv] = \
-            px.update_variables(current_var, variable_type,
-                                atom_refine_flag,
-                                basis_atom_position, basis_atom_delta,
-                                basis_occupancy, basis_B_iso, cell_a, cell_b,
-                                cell_c, convergence_angle, accelerating_voltage_kv)
+        sim.update_variables(v, current_var)
+        sim.print_current_var(v, current_var[i])
         # simulate
-        hkl, g_output, lacbed_sim, setup, bwc = \
-            sim.simulate(plot, debug, space_group, lattice_type, symmetry_matrix,
-                         symmetry_vector, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
-                         cell_gamma, basis_atom_label, basis_atom_name, basis_atom_position,
-                         basis_B_iso, basis_occupancy, scatter_factor_method, accelerating_voltage_kv,
-                         x_direction, incident_beam_direction, normal_direction,
-                         min_reflection_pool, min_strong_beams, g_limit, input_hkls,
-                         absorption_method, absorption_per, convergence_angle,
-                         image_radius, thickness)
+        setup, bwc = sim.simulate(v)
         # figure of merit
-        fom = px.figure_of_merit(lacbed_sim, thickness, lacbed_expt,
-                                       image_processing, blur_radius, correlation_type,
-                                       plot)        
-        print(f"  Figure of merit {100*fom:.2f}%")
+        fom = sim.figure_of_merit(v)
         if (fom < best_fit):
-            best_fit = fom
-        print(f"    Best figure of merit {100*best_fit:.2f}%")
-        print("-------------------------------")
-        r3_var[1] = current_var[j]
-        r3_fit[1] = fom
+            best_fit = fom*1.0
+            var0 = np.copy(current_var)  #NB vector update of var0
+        print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
+        print(f"-----------------------------R2 {var0}")
+        r3_var[1] = current_var[j]*1.0
+        r3_fit[1] = fom*1.0
         
-        # Point 3 of 3
+        # Third point
         print("Refining, point 3 of 3")
         if r3_fit[1] > r3_fit[0]:  #if second point is worse
-            p_mag = -p_mag  # Go in the opposite direction
+            p_mag = -p_mag
+            current_var += 2*p*p_mag  # Go in the opposite direction
         else:  # keep going
-            var0 = np.copy(current_var)
-        current_var = var0 + p * p_mag
+            current_var += p*p_mag
 
         #update variables
-        [basis_atom_position, basis_atom_delta, basis_occupancy, basis_B_iso,
-                cell_a, cell_b, cell_c,
-                convergence_angle, accelerating_voltage_kv] = \
-            px.update_variables(current_var, variable_type,
-                                atom_refine_flag,
-                                basis_atom_position, basis_atom_delta,
-                                basis_occupancy, basis_B_iso, cell_a, cell_b,
-                                cell_c, convergence_angle, accelerating_voltage_kv)
+        sim.update_variables(v, current_var)
+        sim.print_current_var(v, current_var[i])
         # simulate
-        hkl, g_output, lacbed_sim, setup, bwc = \
-            sim.simulate(plot, debug, space_group, lattice_type, symmetry_matrix,
-                         symmetry_vector, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
-                         cell_gamma, basis_atom_label, basis_atom_name, basis_atom_position,
-                         basis_B_iso, basis_occupancy, scatter_factor_method, accelerating_voltage_kv,
-                         x_direction, incident_beam_direction, normal_direction,
-                         min_reflection_pool, min_strong_beams, g_limit, input_hkls,
-                         absorption_method, absorption_per, convergence_angle,
-                         image_radius, thickness)
+        setup, bwc = sim.simulate(v)
         # figure of merit
-        fom = px.figure_of_merit(lacbed_sim, thickness, lacbed_expt,
-                                       image_processing, blur_radius, correlation_type,
-                                       plot)        
-        print(f"  Figure of merit {100*fom:.2f}%")
+        fom = sim.figure_of_merit(v)
         if (fom < best_fit):
-            best_fit = fom
-        print(f"    Best figure of merit {100*best_fit:.2f}%")
-        print("-------------------------------")
-        r3_var[2] = current_var[j]
-        r3_fit[2] = fom
+            best_fit = fom*1.0
+            var0 = np.copy(current_var)
+        print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
+        print(f"-----------------------------R3 {var0}")
+        r3_var[2] = current_var[j]*1.0
+        r3_fit[2] = fom*1.0
 
         # Concavity check and further refinement
-        max_var_idx = np.argmax(r3_var)
-        min_var_idx = np.argmin(r3_var)
-        if max_var_idx != min_var_idx:
-            mid_idx = 3 - max_var_idx - min_var_idx
-            convexity_test = -abs(r3_fit[max_var_idx] - r3_fit[min_var_idx])
-            convexity_adjust = r3_fit[mid_idx] - (
-                r3_fit[min_var_idx] + (r3_var[mid_idx] - r3_var[min_var_idx]) * 
-                (r3_fit[max_var_idx] - r3_fit[min_var_idx]) / 
-                (r3_var[max_var_idx] - r3_var[min_var_idx])
-            )
+        i_max = np.argmax(r3_var)  # index of lowest x
+        i_min = np.argmin(r3_var)  # index of highest x
+        if i_max != i_min:
+            i_mid = 3 - i_max - i_min  # index of mid x
+            convexity_test = -abs(r3_fit[i_max] - r3_fit[i_min])
+            # convexity is the calculated fit index at the mid x
+            # if there was a straight line between lowest and highest x
+            convexity = r3_fit[i_mid] - (
+                r3_fit[i_min] + (r3_var[i_mid] - r3_var[i_min]) * 
+                (r3_fit[i_max] - r3_fit[i_min]) / 
+                (r3_var[i_max] - r3_var[i_min]) )
 
-            while convexity_adjust > 0.1 * convexity_test:
+            # if it isn't more than 10% concave, keep going until it is
+            while convexity > 0.1 * convexity_test:
                 print("Convex, continuing")
-                max_fit_idx = np.argmax(r3_fit)
-                min_fit_idx = np.argmin(r3_fit)
-                if max_fit_idx != min_fit_idx:
-                    mid_fit_idx = 3 - max_fit_idx - min_fit_idx
-                    p_mag *= 2
-                    # if abs(p_mag) > max_ug_step and refine_mode[0] == 1:
-                    #     p_mag = np.sign(p_mag) * max_ug_step
-
+                f_max = np.argmax(r3_fit)  # index of worst fit
+                f_min = np.argmin(r3_fit)  # index of best fit
+                if f_max != f_min:
+                    f_mid = 3 - f_max - f_min # index of mid fit
+                    # replace mid point x with a step on from best point
+                    p_mag *= 2  # double the step size
                     current_var = var0 + p * p_mag
-                    r3_var[mid_fit_idx] = current_var[j]
-
+                    r3_var[f_mid] = current_var[i]*1.0
                     #update variables
-                    [basis_atom_position, basis_atom_delta, basis_occupancy, basis_B_iso,
-                            cell_a, cell_b, cell_c,
-                            convergence_angle, accelerating_voltage_kv] = \
-                        px.update_variables(current_var, variable_type,
-                                            atom_refine_flag,
-                                            basis_atom_position, basis_atom_delta,
-                                            basis_occupancy, basis_B_iso, cell_a, cell_b,
-                                            cell_c, convergence_angle, accelerating_voltage_kv)
+                    sim.update_variables(v, current_var)
+                    sim.print_current_var(v, current_var[i])
                     # simulate
-                    hkl, g_output, lacbed_sim, setup, bwc = \
-                        sim.simulate(plot, debug, space_group, lattice_type, symmetry_matrix,
-                                     symmetry_vector, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
-                                     cell_gamma, basis_atom_label, basis_atom_name, basis_atom_position,
-                                     basis_B_iso, basis_occupancy, scatter_factor_method, accelerating_voltage_kv,
-                                     x_direction, incident_beam_direction, normal_direction,
-                                     min_reflection_pool, min_strong_beams, g_limit, input_hkls,
-                                     absorption_method, absorption_per, convergence_angle,
-                                     image_radius, thickness)
+                    setup, bwc = sim.simulate(v)
                     # figure of merit
-                    fom = px.figure_of_merit(lacbed_sim, thickness, lacbed_expt,
-                                                   image_processing, blur_radius, correlation_type,
-                                                   plot)        
-                    print(f"  Figure of merit {100*fom:.2f}%")
+                    fom = sim.figure_of_merit(v)
                     if (fom < best_fit):
-                        best_fit = fom
-                        variable=np.copy(current_var)
-                    print(f"    Best figure of merit {100*best_fit:.2f}%")
-                    print("-------------------------------")
-                    r3_fit[mid_fit_idx] = fom
-                    max_var_idx = np.argmax(r3_var)
-                    min_var_idx = np.argmin(r3_var)
-                    if max_var_idx != min_var_idx:
-                        mid_idx = 3 - max_var_idx - min_var_idx
-                        convexity_adjust = r3_fit[mid_idx] - (
-                            r3_fit[min_var_idx] + 
-                            (r3_var[mid_idx] - r3_var[min_var_idx]) * 
-                            (r3_fit[max_var_idx] - r3_fit[min_var_idx]) / 
-                            (r3_var[max_var_idx] - r3_var[min_var_idx])
-                        )
-                        convexity_test = -abs(r3_fit[max_var_idx] - r3_fit[min_var_idx])
+                        best_fit = fom*1.0
+                        var0[i] = current_var[i]*1.0
+                    print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
+                    print(f"-----------------------------R+ {var0}")
+                    r3_fit[f_mid] = fom*1.0
+                    i_max = np.argmax(r3_var)
+                    i_min = np.argmin(r3_var)
+                    if i_max != i_min:
+                        i_mid = 3 - i_max - i_min
+                        convexity = r3_fit[i_mid] - (
+                            r3_fit[i_min] + (r3_var[i_mid] - r3_var[i_min]) * 
+                            (r3_fit[i_max] - r3_fit[i_min]) / 
+                            (r3_var[i_max] - r3_var[i_min]))
+                        convexity_test = -abs(r3_fit[i_max] - r3_fit[i_min])
 
         # Predict minimum fit point
         var_min, fit_min = px.parabo3(r3_var, r3_fit)
-        print(f"Concave set, predict minimum at {var_min} with fit index {fit_min}")
+        print(f"Concave set, predict minimum at {var_min:.2f} with fit index {100*fit_min:.2f}%")
         current_var = var0 + p * (var_min - var0[j]) / p[j]
     else:
-        current_var = var0
+        current_var = np.copy(var0)
 
     # Simulate with updated parameters
 
     #update variables
-    [basis_atom_position, basis_atom_delta, basis_occupancy, basis_B_iso,
-            cell_a, cell_b, cell_c,
-            convergence_angle, accelerating_voltage_kv] = \
-        px.update_variables(current_var, variable_type,
-                            atom_refine_flag,
-                            basis_atom_position, basis_atom_delta,
-                            basis_occupancy, basis_B_iso, cell_a, cell_b,
-                            cell_c, convergence_angle, accelerating_voltage_kv)
+    sim.update_variables(v, current_var)
+    sim.print_current_var(v, current_var[i])
     # simulate
-    hkl, g_output, lacbed_sim, setup, bwc = \
-        sim.simulate(plot, debug, space_group, lattice_type, symmetry_matrix,
-                     symmetry_vector, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
-                     cell_gamma, basis_atom_label, basis_atom_name, basis_atom_position,
-                     basis_B_iso, basis_occupancy, scatter_factor_method, accelerating_voltage_kv,
-                     x_direction, incident_beam_direction, normal_direction,
-                     min_reflection_pool, min_strong_beams, g_limit, input_hkls,
-                     absorption_method, absorption_per, convergence_angle,
-                     image_radius, thickness)
+    setup, bwc = sim.simulate(v)
     # figure of merit
-    fom = px.figure_of_merit(lacbed_sim, thickness, lacbed_expt,
-                                   image_processing, blur_radius, correlation_type,
-                                   plot)        
-    print(f"  Figure of merit {100*fom:.2f}%")
+    fom = sim.figure_of_merit(v)
     if (fom < best_fit):
         best_fit = fom
-        variable=np.copy(current_var)
-    print(f"    Best figure of merit {100*best_fit:.2f}%")
+        var0 = np.copy(current_var)
+    print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
+    print(f"------------------------------X {var0}")
 
     # Update for next iteration
     last_p = p
     df = last_fit - best_fit
-    last_fit = best_fit
-
-    print(f"Improvement in fit {df}, will stop at {exit_criteria}")
-    refinement_scale *= (1 - 1 / (2 * n_variables))
+    last_fit = best_fit*1.0
+    fit0 = fom*1.0
+    v.refined_variable = np.copy(var0)
+    v.refinement_scale *= (1 - 1 / (2 * v.n_variables))
+    print(f"refined_variable {v.refined_variable}")
+    print(f"Improvement in fit {df:.2e}, will stop at {v.exit_criteria}")
+    print(f"------------------------------Z {var0}")
     
-    df = 0
+    # df = 0
 
 
 
 # %% final print
+total_time = time.time() - start
 print("-----------------------------------------------------------------")
 print(f"Beam pool calculation took {setup:.3f} seconds")
-print(f"Bloch wave calculation in {bwc:.1f} s ({1000*(bwc)/(4*image_radius**2):.2f} ms/pixel)")
+print(f"Bloch wave calculation in {bwc:.1f} s ({1000*(bwc)/(4*v.image_radius**2):.2f} ms/pixel)")
+print(f"Total time {total_time:.1f} s")
 print("-----------------------------------------------------------------")
 print("|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||")

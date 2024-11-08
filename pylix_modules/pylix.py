@@ -6,11 +6,7 @@ from scipy.constants import c
 from scipy.linalg import eig, inv
 from CifFile import CifFile
 import struct
-import matplotlib.pyplot as plt
-from matplotlib.ticker import PercentFormatter
 from pylix_modules import pylix_dicts as fu
-
-
 
 
 def read_inp_file(filename):
@@ -1622,144 +1618,7 @@ def read_dm3(file_path, x, debug):
         print(f"{file_path} not found")
 
 
-def zncc(img1, img2):
-    # accepts sets of n images, size [m, m, n]
-    # zncc is -1 = perfect anticorrelation, +1 = perfect correlation
-    n_pix = img1.shape[0]**2
-    img1_normalised = (img1 - np.mean(img1, axis=(0, 1), keepdims=True)) / (
-        np.std(img1, axis=(0, 1), keepdims=True))
-    img2_normalised = (img2 - np.mean(img2, axis=(0, 1), keepdims=True)) / (
-        np.std(img2, axis=(0, 1), keepdims=True))
-
-    # zero-mean normalised 2D cross-correlation
-    cc = np.sum(img1_normalised * img2_normalised, axis=(0, 1))/n_pix
-    return cc
-
-
-def figure_of_merit(lacbed_sim, thickness, lacbed_expt, image_processing,
-                    blur_radius, correlation_type, plot):
-
-    # needs fleshing out with image processing & correlation options
-
-    # figure of merit - might need a NaN check? size [n_thick, n_out]
-    fom_array = np.ones([lacbed_sim.shape[0], lacbed_expt.shape[2]])
-    for i in range(lacbed_sim.shape[0]):
-        # image processing, if asked for
-
-        # figure of merit for this image
-        fom_array[i, :] = 1.0 - zncc(lacbed_expt, lacbed_sim[i, :, :, :])
-
-    best_t = np.argmin(np.mean(fom_array, axis=1))
-    print(f"  Best thickness {0.1*thickness[best_t]:.1f} nm")
-    # mean figure of merit
-    fom = np.mean(fom_array[best_t])
-
-    # plot
-    if plot:
-        fig, ax = plt.subplots(1, 1)
-        w_f = 10
-        fig.set_size_inches(w_f, w_f)
-        plt.plot(thickness/10, np.mean(fom_array, axis=1))
-        ax.set_xlabel('Thickness (nm)', size=24)
-        ax.set_ylabel('Figure of merit', size=24)
-        plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1.0))
-        plt.xticks(fontsize=22)
-        plt.yticks(fontsize=22)
-        plt.show()
-
-    return fom
-
-
-def update_variables(independent_variable, independent_variable_type,
-                     atom_refine_flag,
-                     basis_atom_position, basis_atom_delta, basis_occupancy,
-                     basis_B_iso, cell_a, cell_b, cell_c, convergence_angle,
-                     accelerating_voltage_kv):
-    """
-    Updates the different refinement variables
-    independent_variable is an array of variable values
-    independent_variable_type is a matching array saying what type they are
-    atom_refine_flag is a matching array giving the index of the atom
-    in the basis that is being refined. (-1 = not an atomic refinement)
-    basis_atom_position is the position of an atom (in A, microscope frame???)
-    basis_atom_delta is the uncertainty in position of an atom, forgotten how this works
-    
-    
-    """
-    n_variables = len(independent_variable)
-    
-    # will tackle this when doing atomic position refinement
-    # basis_atom_delta.fill(0)  # Reset atom coordinate uncertainties to zero
-
-    for i in range(n_variables):
-        # Check the type of variable by the last digit of independent_variable_type
-        variable_type = independent_variable_type[i] % 10
-
-        if variable_type == 0:
-            # Structure factor refinement (handled elsewhere)
-            variable_check = 1
-
-        # elif variable_type == 2:  # NEEDS WORK
-            # Atomic coordinates
-            # atom_id = atom_refine_flag[j]
-
-            # # Update position: r' = r - v*(r.v) + v*independent_variable
-            # dot_product = np.dot(basis_atom_position[atom_id, :], vector[j - 1, :])
-            # basis_atom_position[atom_id, :] = np.mod(
-            #     basis_atom_position[atom_id, :] - vector[j - 1, :] * dot_product + 
-            #     vector[jnd - 1, :] * independent_variable[i], 1
-            # )
-
-            # # Update uncertainty if iependent_delta is non-zero
-            # if abs(independent_delta[i]) > 1e-10:  # Tiny threshold
-            #     basis_atom_delta[atom_id, :] += vector[j - 1, :] * independent_delta[i]
-            # j += 1
-
-        elif variable_type == 3:
-            # Occupancy
-            basis_occupancy[atom_refine_flag[i]] = independent_variable[i]
-
-        elif variable_type == 4:
-            # Iso Debye-Waller factor
-            basis_B_iso[atom_refine_flag[i]] = independent_variable[i]
-
-        elif variable_type == 5:
-            # Aniso Debye-Waller factor (not implemented)
-            raise NotImplementedError("Anisotropic DWF not implemented")
-
-        elif variable_type == 6:
-            # Lattice parameters a, b, c
-            if independent_variable_type[i] == 6:
-                cell_a = cell_b = cell_c = independent_variable[i]
-            elif independent_variable_type[i] == 16:
-                cell_b = independent_variable[i]
-            elif independent_variable_type[i] == 26:
-                cell_c = independent_variable[i]
-
-        # elif variable_type == 7:
-        #     # Lattice angles alpha, beta, gamma
-        #     variable_check[6] = 1
-        #     if j == 1:
-        #         cell_alpha = independent_variable[i]
-        #     elif j == 2:
-        #         cell_beta = independent_variable[i]
-        #     elif j == 3:
-        #         cell_gamma = independent_variable[i]
-
-        elif variable_type == 8:
-            # Convergence angle
-            convergence_angle = independent_variable[i]
-
-        elif variable_type == 9:
-            # Accelerating voltage
-            accelerating_voltage_kv = independent_variable[i]
-
-    return(basis_atom_position, basis_atom_delta, basis_occupancy, basis_B_iso,
-           cell_a, cell_b, cell_c,
-           convergence_angle, accelerating_voltage_kv)
-
-
-def Parabo3(x,y):
+def parabo3(x,y):
     # y=a*x^2+b*x+c a=a, b=b, c=c    
     d = x[0]*x[0]*(x[1]-x[2]) + x[1]*x[1]*(x[2]-x[0]) + x[2]*x[2]*(x[0]-x[1])
     if (d > 1e-10):  # we get zero d if all three inputs are the same

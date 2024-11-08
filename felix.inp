@@ -15,7 +15,7 @@ image_radius              = 42
 
 # Beam selection criteria
 min_reflection_pool       = 100
-min_strong_beams          = 30
+min_strong_beams          = 20
 min_weak_beams            = 0
 g_limit                   = 0.0
 
@@ -32,8 +32,8 @@ accelerating_voltage_kv   = 200.0
 acceptance_angle          = 0.0
 
 # Image output options
-initial_thickness         = 800.0
-final_thickness           = 1100.0
+initial_thickness         = 900.0
+final_thickness           = 910.0
 delta_thickness           = 50.0
 precision                 = 0.00002
 
