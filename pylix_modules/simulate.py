@@ -21,11 +21,12 @@ from pylix_modules import pylix_dicts as fu
 
 
 def simulate(v):
-    
+
     # some setup calculations
     # Electron velocity in metres per second
     electron_velocity = (c * np.sqrt(1.0 - ((m_e * c**2) /
-                         (e * v.accelerating_voltage_kv*1000.0 + m_e * c**2))**2))
+                         (e * v.accelerating_voltage_kv*1000.0 +
+                          m_e * c**2))**2))
     # Electron wavelength in Angstroms
     electron_wavelength = h / (
         np.sqrt(2.0 * m_e * e * v.accelerating_voltage_kv*1000.0) *
@@ -82,8 +83,8 @@ def simulate(v):
         print("atomic coordinates")
         for i in range(n_atoms):
             print(f"{atom_label[i]} {atom_name[i]}: {atom_position[i]}")
-    # mean inner potential as the sum of scattering factors at g=0 multiplied by
-    # h^2/(2pi*m0*e*CellVolume)
+    # mean inner potential as the sum of scattering factors at g=0
+    # multiplied by h^2/(2pi*m0*e*CellVolume)
     mip = 0.0
     for i in range(n_atoms):  # get the scattering factor
         if v.scatter_factor_method == 0:
@@ -187,8 +188,9 @@ def simulate(v):
 
     # now make the Ug matrix, i.e. calculate the structure factor Fg for all
     # g-vectors in g_matrix and convert using the above factor
-    ug_matrix = Fg_to_Ug * px.Fg_matrix(n_hkl, v.scatter_factor_method, n_atoms,
-                                        atom_coordinate, atomic_number, occupancy,
+    ug_matrix = Fg_to_Ug * px.Fg_matrix(n_hkl, v.scatter_factor_method,
+                                        n_atoms, atom_coordinate,
+                                        atomic_number, occupancy,
                                         B_iso, g_matrix, g_magnitude,
                                         v.absorption_method, v.absorption_per,
                                         electron_velocity)
@@ -210,12 +212,12 @@ def simulate(v):
 
     # Bloch wave calculation
     mid = time.time()
-    # Dot product of k with surface normal, size [image diameter, image diameter]
+    # Dot product of k with surface normal, [image diameter, image diameter]
     k_dot_n = np.tensordot(tilted_k, norm_dir_m, axes=([2], [0]))
-    
+
     v.lacbed_sim = np.zeros([v.n_thickness, 2*v.image_radius, 2*v.image_radius,
                              len(v.g_output)], dtype=float)
-    
+
     print("Bloch wave calculation...", end=' ')
     if v.debug:
         print("")
@@ -225,22 +227,22 @@ def simulate(v):
     for pix_x in range(2*v.image_radius):
         # progess
         print(f"\rBloch wave calculation... {50*pix_x/v.image_radius:.0f}%", end="")
-    
+
         for pix_y in range(2*v.image_radius):
             s_g_pix = np.squeeze(s_g[pix_x, pix_y, :])
             k_dot_n_pix = k_dot_n[pix_x, pix_y]
-    
+
             # works for multiple thicknesses
             wave_functions = px.wave_functions(
-                v.g_output, s_g_pix, ug_matrix, v.min_strong_beams, n_hkl, big_k_mag,
-                g_dot_norm, k_dot_n_pix, v.thickness, v.debug)
-    
+                v.g_output, s_g_pix, ug_matrix, v.min_strong_beams, n_hkl,
+                big_k_mag, g_dot_norm, k_dot_n_pix, v.thickness, v.debug)
+
             intensity = np.abs(wave_functions)**2
-    
+
             # Map diffracted intensity to required output g vectors
             # note x and y swapped!
             v.lacbed_sim[:, -pix_y, pix_x, :] = intensity[:, :len(v.g_output)]
-    
+
     print("\rBloch wave calculation... done    ")
 
     # timings
@@ -396,3 +398,5 @@ def print_current_var(v, var):
         print(f"Current lattice parameter {var:.4f}")
     elif v.current_variable_type % 10 == 8:
         print(f"Current convergence angle {var:.2f}")
+    elif v.current_variable_type % 10 == 9:
+        print(f"Current accelerating voltage {var:.2f} kV")

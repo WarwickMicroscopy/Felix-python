@@ -187,8 +187,8 @@ else:
         print("Refining Atomic Coordinates, B")
         # redefine the basis if necessary to allow coordinate refinement
         v.basis_atom_position = px.preferred_basis(v.space_group_number,
-                                                 v.basis_atom_position,
-                                                 v.basis_wyckoff)
+                                                   v.basis_atom_position,
+                                                   v.basis_wyckoff)
     if 'C' in v.refine_mode:
         print("Refining Occupancies, C")
     if 'D' in v.refine_mode:
@@ -309,8 +309,6 @@ if 'S' not in v.refine_mode:
         v.refined_variable.append(v.accelerating_voltage_kv)
         v.refined_variable_type.append(9)
         v.atom_refine_flag.append(-1)
-        # Not yet implemented!!!
-        raise ValueError("accelerating_voltage_kv refinement not yet implemented")
 
 # Total number of independent variables
 v.n_variables = len(v.refined_variable)
@@ -745,7 +743,7 @@ while df >= v.exit_criteria:
     last_fit = best_fit*1.0
     v.refined_variable = np.copy(var0)
     v.refinement_scale *= (1 - 1 / (2 * v.n_variables))
-    print(f"Improvement in fit {100*df:.3f}%, will stop at {100*v.exit_criteria:.3f}%")
+    print(f"Improvement in fit {100*df:.2f}%, will stop at {100*v.exit_criteria:.2f}%")
     print("------------------------------Z")
 
 
