@@ -888,7 +888,7 @@ def preferred_basis(space_group, basis_atom_position, basis_wyckoff):
 
 
 def hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k, lattice_type,
-             min_reflection_pool, min_strong_beams, g_limit, input_hkls, 
+             min_reflection_pool, min_strong_beams, g_limit, input_hkls,
              electron_wave_vector_magnitude):
     """
     Generates Miller indices that satisfy the selection rules for a given
@@ -901,7 +901,7 @@ def hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k, lattice_type,
     lattice_type (str): Lattice type (from space group name)
     min_strong_beams (int): Minimum number of strong beams required
     g_limit (float): Upper limit for g-vector magnitude
-    electron_wave_vector_magnitude (float): 
+    electron_wave_vector_magnitude (float):
 
     Returns:
     hkl (ndarray): Miller indices close to the Bragg condition
@@ -1065,21 +1065,20 @@ def deviation_parameter(convergence_angle, image_radius, big_k_mag, g_pool,
 
     # resolution in k-space
     delta_K = 2.0*np.pi * convergence_angle/image_radius
-    
+
     # pixel grids
     x_pix = np.arange(-image_radius+.5, image_radius+.5)
     y_pix = np.arange(-image_radius+.5, image_radius+.5)
     # k_x and k_y
     k_x, k_y = np.meshgrid(x_pix * delta_K, y_pix * delta_K)
-    
+
     # k-vector for all pixels k'
     k_z = np.sqrt(big_k_mag**2 - k_x**2 - k_y**2)
     tilted_k = np.stack([k_x, k_y, k_z], axis=-1)
-    
+
     # g excuding g_pool[0], which is always [000]
     g_pool1 = g_pool[1:]  # shape: (n_hkl-1, 3)
-    g_pool_mag1 = g_pool_mag[1:] # shape: (n_hkl-1)
-
+    g_pool_mag1 = g_pool_mag[1:]  # shape: (n_hkl-1)
     # Components of k_0
     k_0_0 = -g_pool_mag1 / 2
     k_0_2 = np.sqrt(big_k_mag**2 - k_0_0**2)
@@ -1090,12 +1089,13 @@ def deviation_parameter(convergence_angle, image_radius, big_k_mag, g_pool,
     k_0_dot_k_prime = (k_0_0[None, None, :] * k_prime_0 +
                        k_0_2[None, None, :] * k_prime_2)
     pm = -np.sign(2*k_prime_0 + g_pool_mag1)
-    s_g = pm * np.sqrt(2*(big_k_mag**2 -k_0_dot_k_prime)) * (g_pool_mag1/big_k_mag)
+    s_g = pm * np.sqrt(2*(big_k_mag**2 - k_0_dot_k_prime)) * \
+        (g_pool_mag1/big_k_mag)
 
     # add in 000
-    s_0 = np.expand_dims(np.zeros_like(k_x), axis=-1)  
-    s_g = np.concatenate([s_0, s_g], axis = -1)  # add 000 
-   
+    s_0 = np.expand_dims(np.zeros_like(k_x), axis=-1)
+    s_g = np.concatenate([s_0, s_g], axis=-1)  # add 000
+
     return s_g, tilted_k
 
 
@@ -1104,24 +1104,24 @@ def strong_beams(s_g_pix, ug_matrix, min_strong_beams):
     returns a list of strong beams according to their perturbation strength
     NB s_g_pix here is a 1D array of values for a given pixel, and is different
     to the s_g in the main code which is for all pixels & g-vectors
-    
+
     Perturbation Strength Eq. 8 Zuo Ultramicroscopy 57 (1995) 375, |Ug/2KSg|
     Here use |Ug/Sg| since 2K is a constant
     NB pert is an array of perturbation strengths for all reflections
     """
-    
+
     # Perturbation strength |Ug/Sg|, put 100 where we have s_g=0
     u_g = np.abs(ug_matrix[:, 0])
     pert = np.divide(u_g, np.abs(s_g_pix),
-              out=np.full_like(s_g_pix, 100.0), where=s_g_pix != 0)
+                     out=np.full_like(s_g_pix, 100.0), where=s_g_pix != 0)
     # deviation parameter and perturbation thresholds for strong beams
     max_sg = 0.001
-    
+
     # Determine strong beams: Increase max_sg until enough beams are found
     strong = np.zeros_like(s_g_pix, dtype=int)
     while np.sum(strong) < min_strong_beams:
         min_pert_strong = 0.025 / max_sg
-        strong = np.where((np.abs(s_g_pix) < max_sg) 
+        strong = np.where((np.abs(s_g_pix) < max_sg)
                           | (pert >= min_pert_strong), 1, 0)
         max_sg += 0.001
 
@@ -1130,8 +1130,8 @@ def strong_beams(s_g_pix, ug_matrix, min_strong_beams):
 
 
 def bloch(g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl,
-                  big_k_mag, g_dot_norm, k_dot_n_pix, debug):
-    
+          big_k_mag, g_dot_norm, k_dot_n_pix, debug):
+
     # strong_beam_indices gives the index of a strong beam in the beam pool
     # Use Sg and perturbation strength to define strong beams
     strong_beam = strong_beams(s_g_pix, ug_matrix, min_strong_beams)
@@ -1228,7 +1228,7 @@ def wave_functions(g_output, s_g_pix, ug_matrix, min_strong_beams,
     #     inverted_m,
     #     psi0
     # )
-    
+
     return np.array(wave_function)
 
 
@@ -1618,21 +1618,21 @@ def read_dm3(file_path, x, debug):
         print(f"{file_path} not found")
 
 
-def parabo3(x,y):
-    # y=a*x^2+b*x+c a=a, b=b, c=c    
+def parabo3(x, y):
+    # y=a*x^2+b*x+c
     d = x[0]*x[0]*(x[1]-x[2]) + x[1]*x[1]*(x[2]-x[0]) + x[2]*x[2]*(x[0]-x[1])
-    if (d > 1e-10):  # we get zero d if all three inputs are the same
-        a =(x[0]*(y[2]-y[1]) + x[1]*(y[0]-y[2]) + x[2]*(y[1]-y[0]))/d
-        b =( x[0]*x[0]*(y[1]-y[2]) + x[1]*x[1]*(y[2]-y[0]) +
-            x[2]*x[2]*(y[0]-y[1]) )/d
+    if (abs(d) > 1e-10):  # we get zero d if all three inputs are the same
+        a =(x[0]*(y[2]-y[1]) + x[1]*(y[0]-y[2]) + x[2]*(y[1]-y[0])) / d
+        b =(x[0]*x[0]*(y[1]-y[2]) + x[1]*x[1]*(y[2]-y[0]) +
+            x[2]*x[2]*(y[0]-y[1])) / d
         c =(x[0]*x[0]*(x[1]*y[2]-x[2]*y[1]) + x[1]*x[1]*(x[2]*y[0]-x[0]*y[2]) +
-            x[2]*x[2]*(x[0]*y[1]-x[1]*y[0]))/d
-        x_v = -b/(2*a);  # x-coord
+            x[2]*x[2]*(x[0]*y[1]-x[1]*y[0])) / d
+        x_v = -b/(2*a)  # x-coord
         y_v = c-b*b/(4*a)  # y-coord
     else:
-        x_v = x[0]
-        y_v = y[0]
-        
+        x_v = x[1]
+        y_v = y[1]
+
     return x_v, y_v
 
 

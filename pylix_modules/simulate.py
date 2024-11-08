@@ -19,6 +19,7 @@ import time
 from pylix_modules import pylix as px
 from pylix_modules import pylix_dicts as fu
 
+
 def simulate(v):
     
     # some setup calculations
@@ -41,18 +42,19 @@ def simulate(v):
     scatt_fac_to_volts = ((h**2) /
                           (2.0*np.pi * m_e * e * cell_volume * (angstrom**2)))
 
-    #===============================================
+    # ===============================================
     # fill the unit cell and get mean inner potential
-    # when iterating we only do it if necessary
+    # when iterating we only do it if necessary?
     # if v.iter_count == 0 or v.current_variable_type < 6:
     atom_position, atom_label, atom_name, B_iso, occupancy = \
         px.unique_atom_positions(
-            v.symmetry_matrix, v.symmetry_vector, v.basis_atom_label, v.basis_atom_name,
+            v.symmetry_matrix, v.symmetry_vector, v.basis_atom_label,
+            v.basis_atom_name,
             v.basis_atom_position, v.basis_B_iso, v.basis_occupancy)
-    
+
     # Generate atomic numbers based on the elemental symbols
-    atomic_number = np.array([fu.atomic_number_map[name] for name in atom_name])
-    
+    atomic_number = np.array([fu.atomic_number_map[na] for na in atom_name])
+
     n_atoms = len(atom_label)
     if v.iter_count == 0:
         print("  There are "+str(n_atoms)+" atoms in the unit cell")
@@ -94,52 +96,52 @@ def simulate(v):
             mip += px.f_doyle_turner(atomic_number[i], 0.0)
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
-    mip = mip.item()*scatt_fac_to_volts  # comes back as an array, convert to float
+    mip = mip.item()*scatt_fac_to_volts  # NB convert array to float
     if v.iter_count == 0:
         print(f"  Mean inner potential = {mip:.1f} Volts")
     # Wave vector magnitude in crystal
     # high-energy approximation (not HOLZ compatible)
     # K^2=k^2+U0
-    big_k_mag = np.sqrt(electron_wave_vector_magnitude**2+mip)
+    big_k_mag = electron_wave_vector_magnitude
+    # big_k_mag = np.sqrt(electron_wave_vector_magnitude**2+mip)
     # k-vector for the incident beam (k is along z in the microscope frame)
     big_k = np.array([0.0, 0.0, big_k_mag])
-    
-    
-    #===============================================
+
+    # ===============================================
     # set up reference frames
     a_vec_m, b_vec_m, c_vec_m, ar_vec_m, br_vec_m, cr_vec_m, norm_dir_m = \
-        px.reference_frames(v.cell_a, v.cell_b, v.cell_c, v.cell_alpha, v.cell_beta,
+        px.reference_frames(v.cell_a, v.cell_b, v.cell_c, v.cell_alpha,
+                            v.cell_beta,
                             v.cell_gamma, v.space_group, v.x_direction,
                             v.incident_beam_direction, v.normal_direction)
-    
+
     # put the crystal in the micrcoscope reference frame, in Å
     atom_coordinate = (atom_position[:, 0, np.newaxis] * a_vec_m +
                        atom_position[:, 1, np.newaxis] * b_vec_m +
                        atom_position[:, 2, np.newaxis] * c_vec_m)
-    
-    #===============================================
+
+    # ===============================================
     # set up beam pool
     # currently we do this every iteration, but could be restricted to cases
     # where we need to do it in iterations
     strt = time.time()
     # NB g_pool are in reciprocal Angstroms in the microscope reference frame
-    v.hkl, g_pool, g_pool_mag, v.g_output = px.hkl_make(ar_vec_m, br_vec_m, cr_vec_m,
-                                                    big_k, v.lattice_type,
-                                                    v.min_reflection_pool,
-                                                    v.min_strong_beams, v.g_limit,
-                                                    v.input_hkls,
-                                                    big_k_mag)
+    v.hkl, g_pool, g_pool_mag, v.g_output = \
+        px.hkl_make(ar_vec_m, br_vec_m, cr_vec_m,
+                    big_k, v.lattice_type, v.min_reflection_pool,
+                    v.min_strong_beams, v.g_limit, v.input_hkls, big_k_mag)
     n_hkl = len(g_pool)
-    n_out = len(v.g_output)  # redefined to match things we can actually output
+    n_out = len(v.g_output)  # redefined to match what we can actually output
     # NEEDS SOME MORE WORK TO MATCH SIM/EXPT PATTERNS if this happens
-    
+
     # outputs
     if v.iter_count == 0:
         print(f"  Beam pool: {n_hkl} reflexions ({v.min_strong_beams} strong beams)")
-        # we will have larger g-vectors in g_matrix since this has differences g - h
+        # we will have larger g-vectors in g_matrix since this has
+        # differences g - h
         # but the maximum of the g pool is probably a more useful thing to know
         print(f"  Maximum |g| = {np.max(g_pool_mag)/(2*np.pi):.3f} 1/Å")
-    
+
     # plot
     if v.plot:
         xm = np.ceil(np.max(g_pool_mag/(2*np.pi)))
@@ -173,16 +175,16 @@ def simulate(v):
                         left=False, right=False,
                         labelbottom=False, labelleft=False)
         plt.show()
-    
+
     # g-vector matrix
     g_matrix = np.zeros((n_hkl, n_hkl, 3))
     g_matrix = g_pool[:, np.newaxis, :] - g_pool[np.newaxis, :, :]
     # g-vector magnitudes
     g_magnitude = np.sqrt(np.sum(g_matrix**2, axis=2))
-    
+
     # Conversion factor from F_g to U_g
     Fg_to_Ug = relativistic_correction / (np.pi * cell_volume)
-    
+
     # now make the Ug matrix, i.e. calculate the structure factor Fg for all
     # g-vectors in g_matrix and convert using the above factor
     ug_matrix = Fg_to_Ug * px.Fg_matrix(n_hkl, v.scatter_factor_method, n_atoms,
@@ -198,15 +200,14 @@ def simulate(v):
     if v.debug:
         np.set_printoptions(precision=3, suppress=True)
         print(100*ug_matrix[:5, :5])
-    
-    
-    #===============================================
+
+    # ===============================================
     # deviation parameter for each pixel and g-vector
     # s_g [n_hkl, image diameter, image diameter]
     # and k vector for each pixel, tilted_k [image diameter, image diameter, 3]
     s_g, tilted_k = px.deviation_parameter(v.convergence_angle, v.image_radius,
                                            big_k_mag, g_pool, g_pool_mag)
-    
+
     # Bloch wave calculation
     mid = time.time()
     # Dot product of k with surface normal, size [image diameter, image diameter]
@@ -306,16 +307,15 @@ def update_variables(v, current_var):
     atom_refine_flag is a matching array giving the index of the atom
     in the basis that is being refined. (-1 = not an atomic refinement)
     basis_atom_position is the position of an atom (in A, microscope frame???)
-    basis_atom_delta is the uncertainty in position of an atom, forgotten how this works
-    
-    
+    basis_atom_delta is the uncertainty in position of an atom, forgotten
+    how this works
     """
-    
+
     # will tackle this when doing atomic position refinement
     # basis_atom_delta.fill(0)  # Reset atom coordinate uncertainties to zero
 
     for i in range(v.n_variables):
-        # Check the type of variable by the last digit of v.refined_variable_type
+        # Check the type of variable, last digit of v.refined_variable_type
         variable_type = v.refined_variable_type[i] % 10
 
         if variable_type == 0:
@@ -378,6 +378,7 @@ def update_variables(v, current_var):
             v.accelerating_voltage_kv = current_var[i]*1.0
 
     return
+
 
 def print_current_var(v, var):
     # prints the variable being refined
