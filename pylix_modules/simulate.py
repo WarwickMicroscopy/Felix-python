@@ -60,7 +60,7 @@ def simulate(v):
     if v.iter_count == 0:
         print("  There are "+str(n_atoms)+" atoms in the unit cell")
     # plot
-    if v.plot:
+    if v.iter_count == 0 and v.plot:
         atom_cvals = mcolors.Normalize(vmin=1, vmax=103)
         atom_cmap = plt.cm.viridis
         atom_colours = atom_cmap(atom_cvals(atomic_number))
@@ -144,7 +144,7 @@ def simulate(v):
         print(f"  Maximum |g| = {np.max(g_pool_mag)/(2*np.pi):.3f} 1/Å")
 
     # plot
-    if v.plot:
+    if v.iter_count == 0 and v.plot:
         xm = np.ceil(np.max(g_pool_mag/(2*np.pi)))
         fig, ax = plt.subplots(1, 1)
         w_f = 10
@@ -397,6 +397,6 @@ def print_current_var(v, var):
     elif v.current_variable_type % 10 == 6:
         print(f"Current lattice parameter {var:.4f}")
     elif v.current_variable_type % 10 == 8:
-        print(f"Current convergence angle {var:.2f}")
+        print(f"Current convergence angle {var:.3f}")
     elif v.current_variable_type % 10 == 9:
-        print(f"Current accelerating voltage {var:.2f} kV")
+        print(f"Current accelerating voltage {var:.1f} kV")

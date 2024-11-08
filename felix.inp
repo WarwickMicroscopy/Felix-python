@@ -7,15 +7,15 @@
 write_flag                = 1
 scatter_factor_method     = 0
 holz_flag                 = 0
-absorption_method         = 0
+absorption_method         = 2
 byte_size                 = 2
 
 # Radius of the beam in pixels
 image_radius              = 42
 
 # Beam selection criteria
-min_reflection_pool       = 200
-min_strong_beams          = 50
+min_reflection_pool       = 300
+min_strong_beams          = 75
 min_weak_beams            = 0
 g_limit                   = 0.0
 
@@ -24,7 +24,7 @@ debye_waller_constant     = 0.0
 absorption_per            = 10.0
 
 # Microscope settings
-convergence_angle         = 0.979
+convergence_angle         = 0.85
 incident_beam_direction   = [-1, 1, 0]
 x_direction               = [1, 1, 0]
 normal_direction          = [-1, 1, 0]

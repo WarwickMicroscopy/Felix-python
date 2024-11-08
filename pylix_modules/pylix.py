@@ -296,7 +296,6 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
 
     Returns:
     atom_position, atom_label, atom_name, B_iso, occupancy
-    
     """
 
     # tolerance in fractional coordinates to consider atoms to be the same
@@ -313,8 +312,9 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
     all_B_iso = np.tile(basis_B_iso, n_symmetry_operations)
 
     # # Generate all equivalent positions by applying symmetry
-    symmetry_applied = np.einsum('ijk,lk->ilj', symmetry_matrix,
-                                 basis_atom_position) + symmetry_vector[:, np.newaxis, :]
+    symmetry_applied = \
+        np.einsum('ijk,lk->ilj', symmetry_matrix, basis_atom_position) +\
+        symmetry_vector[:, np.newaxis, :]
     all_atom_position = symmetry_applied.reshape(total_atoms, 3)
 
     # Normalize positions to be within [0, 1]
@@ -322,7 +322,7 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
     # make small values precisely zero
     all_atom_position[np.abs(all_atom_position) < tol] = 0.0
     # Reduce to the set of unique fractional atomic positions using tol
-    dist_matrix = np.linalg.norm(all_atom_position[:, np.newaxis, :] - 
+    dist_matrix = np.linalg.norm(all_atom_position[:, np.newaxis, :] -
                                  all_atom_position[np.newaxis, :, :], axis=-1)
     unique_mask = np.ones(len(all_atom_position), dtype=bool)
     i = []  # indices of unique atom positiona

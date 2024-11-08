@@ -479,7 +479,12 @@ last_p = np.ones(v.n_variables)
 df = 1.0
 r3_var = np.zeros(3)  # for parabolic minimum
 r3_fit = np.zeros(3)
+# dunno what this is
 independent_delta = 0.0
+
+# for a plot
+var_pl = ([])
+fit_pl = ([])
 
 # Refinement loop
 while df >= v.exit_criteria:
@@ -503,6 +508,7 @@ while df >= v.exit_criteria:
         # start at previous best point
         current_var = np.copy(v.refined_variable)
         v.current_variable_type = v.refined_variable_type[i]
+        sim.print_current_var(v, current_var[i])
         # Check if Debye-Waller factor is zero, skip if so
         if v.current_variable_type == 4 and current_var[i] <= 1e-10:
             p[i] = 0.0
@@ -511,6 +517,8 @@ while df >= v.exit_criteria:
         # middle point is the previous best simulation
         r3_var[1] = current_var[i]*1.0
         r3_fit[1] = last_fit*1.0
+        var_pl.append(current_var[i])
+        fit_pl.append(last_fit)
 
         # Update iteration
         v.iter_count += 1
@@ -554,7 +562,9 @@ while df >= v.exit_criteria:
         r3_var[2] = current_var[i]*1.0
         r3_fit[2] = fom*1.0
         print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-        print("-----------------------------G1")
+        print("-1-----------------------------")
+        var_pl.append(current_var[i])
+        fit_pl.append(fom)
 
         # Now minus dx
         current_var[i] -= 2*dx
@@ -571,7 +581,9 @@ while df >= v.exit_criteria:
         r3_var[0] = current_var[i]*1.0
         r3_fit[0] = fom*1.0
         print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-        print("-----------------------------G2")
+        print("-2-----------------------------")
+        var_pl.append(current_var[i])
+        fit_pl.append(fom)
 
         # If the three points contain a minimum, predict its position
         # using Kramer's rule (parabo3)
@@ -624,7 +636,7 @@ while df >= v.exit_criteria:
         # First of three points for concavity test is the previous simulation
         r3_var[0] = var0[j]*1.0
         r3_fit[0] = fom*1.0
-        print("-----------------------------R1")
+        print("-a-----------------------------")
 
         # Second point
         print("Refining, point 2 of 3")
@@ -643,7 +655,9 @@ while df >= v.exit_criteria:
         r3_var[1] = current_var[j]*1.0
         r3_fit[1] = fom*1.0
         print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-        print("-----------------------------R2")
+        print("-b-----------------------------")
+        var_pl.append(current_var[i])
+        fit_pl.append(fom)
 
         # Third point
         print("Refining, point 3 of 3")
@@ -666,7 +680,9 @@ while df >= v.exit_criteria:
         r3_var[2] = current_var[j]*1.0
         r3_fit[2] = fom*1.0
         print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-        print("-----------------------------R3")
+        print("-c-----------------------------")
+        var_pl.append(current_var[i])
+        fit_pl.append(fom)
 
         # Concavity check and further refinement
         i_max = np.argmax(r3_var)  # index of lowest x
@@ -703,7 +719,9 @@ while df >= v.exit_criteria:
                         best_fit = fom*1.0
                         var0 = np.copy(current_var)
                     print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-                    print("-----------------------------R+")
+                    print("-.-----------------------------")
+                    var_pl.append(current_var[i])
+                    fit_pl.append(fom)
                     r3_fit[f_mid] = fom*1.0
                     i_max = np.argmax(r3_var)
                     i_min = np.argmin(r3_var)
@@ -735,7 +753,9 @@ while df >= v.exit_criteria:
         best_fit = fom
         var0 = np.copy(current_var)
     print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-    print("------------------------------X")
+    print("-------------------------------")
+    var_pl.append(current_var[i])
+    fit_pl.append(fom)
 
     # Update for next iteration
     last_p = p
@@ -744,8 +764,9 @@ while df >= v.exit_criteria:
     v.refined_variable = np.copy(var0)
     v.refinement_scale *= (1 - 1 / (2 * v.n_variables))
     print(f"Improvement in fit {100*df:.2f}%, will stop at {100*v.exit_criteria:.2f}%")
-    print("------------------------------Z")
+    print("-------------------------------")
 
+    plt.scatter(var_pl, fit_pl)
 
 # %% final print
 total_time = time.time() - start
