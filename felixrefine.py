@@ -304,6 +304,7 @@ if 'S' not in v.refine_mode:
         v.refined_variable.append(v.convergence_angle)
         v.refined_variable_type.append(8)
         v.atom_refine_flag.append(-1)
+        print(f"Starting convergence angle {v.convergence_angle} Å^-1")
 
     if 'I' in v.refine_mode:  # accelerating_voltage_kv
         v.refined_variable.append(v.accelerating_voltage_kv)
@@ -508,7 +509,6 @@ while df >= v.exit_criteria:
         # start at previous best point
         current_var = np.copy(v.refined_variable)
         v.current_variable_type = v.refined_variable_type[i]
-        sim.print_current_var(v, current_var[i])
         # Check if Debye-Waller factor is zero, skip if so
         if v.current_variable_type == 4 and current_var[i] <= 1e-10:
             p[i] = 0.0
@@ -562,7 +562,7 @@ while df >= v.exit_criteria:
         r3_var[2] = current_var[i]*1.0
         r3_fit[2] = fom*1.0
         print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-        print("-1-----------------------------")
+        print(f"-1-----------------------------")  # {r3_var},{r3_fit}")
         var_pl.append(current_var[i])
         fit_pl.append(fom)
 
@@ -581,7 +581,7 @@ while df >= v.exit_criteria:
         r3_var[0] = current_var[i]*1.0
         r3_fit[0] = fom*1.0
         print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-        print("-2-----------------------------")
+        print(f"-2-----------------------------")  # {r3_var},{r3_fit}")
         var_pl.append(current_var[i])
         fit_pl.append(fom)
 
@@ -630,13 +630,13 @@ while df >= v.exit_criteria:
         print(f"Refinement vector {p}")
         # Find index of the first non-zero element in the gradient vector
         j = np.where(np.abs(p) >= 1e-10)[0][0]
-        # reset the refinement scale
-        p_mag = var0[j] * v.refinement_scale
+        # reset the refinement scale (last term reverses sign if we overshot)
+        p_mag = var0[j] * v.refinement_scale * (2*(fom < best_fit)-1)
 
         # First of three points for concavity test is the previous simulation
         r3_var[0] = var0[j]*1.0
         r3_fit[0] = fom*1.0
-        print("-a-----------------------------")
+        print(f"-a-----------------------------")  # {r3_var},{r3_fit}")
 
         # Second point
         print("Refining, point 2 of 3")
@@ -655,7 +655,7 @@ while df >= v.exit_criteria:
         r3_var[1] = current_var[j]*1.0
         r3_fit[1] = fom*1.0
         print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-        print("-b-----------------------------")
+        print(f"-b-----------------------------")  # {r3_var},{r3_fit}")
         var_pl.append(current_var[i])
         fit_pl.append(fom)
 
@@ -680,7 +680,7 @@ while df >= v.exit_criteria:
         r3_var[2] = current_var[j]*1.0
         r3_fit[2] = fom*1.0
         print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-        print("-c-----------------------------")
+        print(f"-c-----------------------------")  # {r3_var},{r3_fit}")
         var_pl.append(current_var[i])
         fit_pl.append(fom)
 
@@ -719,7 +719,7 @@ while df >= v.exit_criteria:
                         best_fit = fom*1.0
                         var0 = np.copy(current_var)
                     print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-                    print("-.-----------------------------")
+                    print(f"-.-----------------------------")  # {r3_var},{r3_fit}")
                     var_pl.append(current_var[i])
                     fit_pl.append(fom)
                     r3_fit[f_mid] = fom*1.0
@@ -753,7 +753,7 @@ while df >= v.exit_criteria:
         best_fit = fom
         var0 = np.copy(current_var)
     print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-    print("-------------------------------")
+    print(f"-------------------------------")  # {r3_var},{r3_fit}")
     var_pl.append(current_var[i])
     fit_pl.append(fom)
 

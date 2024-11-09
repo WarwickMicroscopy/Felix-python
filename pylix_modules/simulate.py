@@ -397,6 +397,6 @@ def print_current_var(v, var):
     elif v.current_variable_type % 10 == 6:
         print(f"Current lattice parameter {var:.4f}")
     elif v.current_variable_type % 10 == 8:
-        print(f"Current convergence angle {var:.3f}")
+        print(f"Current convergence angle {var:.3f} Å^-1")
     elif v.current_variable_type % 10 == 9:
         print(f"Current accelerating voltage {var:.1f} kV")
