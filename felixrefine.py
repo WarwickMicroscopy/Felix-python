@@ -479,7 +479,7 @@ p = np.ones(v.n_variables)
 last_p = np.ones(v.n_variables)
 df = 1.0
 r3_var = np.zeros(3)  # for parabolic minimum
-r3_fit = np.zeros(3)
+r3_fom = np.zeros(3)
 # dunno what this is
 independent_delta = 0.0
 
@@ -489,8 +489,11 @@ fit_pl = ([])
 
 # Refinement loop
 while df >= v.exit_criteria:
-    # running best fit during this refinement cycle
-    var0 = np.copy(v.refined_variable)
+    # v.refined_variable is the working set of variables going into a sim
+    # best_var is the running best fit during this refinement cycle
+    best_var = np.copy(v.refined_variable)
+    # next_var is the predicted next (best) point
+    next_var = np.copy(v.refined_variable)
     # if all parameters have been refined and we're still in the loop, reset
     if np.sum(np.abs(last_p)) < 1e-10:
         last_p = np.ones(v.n_variables)
@@ -500,28 +503,26 @@ while df >= v.exit_criteria:
     # we take it and remove it from the list of variables to refine in
     # vector descent.  If it's been fixed, last_p[i] = 0
     # at the end of this for loop we have a predicted best starting point
-    # for gradient descent var0
+    # for gradient descent best_var
     for i in range(v.n_variables):
         # Skip variables already optimized in previous refinements
         if abs(last_p[i]) < 1e-10:
             p[i] = 0.0
             continue
-        # start at previous best point
-        current_var = np.copy(v.refined_variable)
         v.current_variable_type = v.refined_variable_type[i]
         # Check if Debye-Waller factor is zero, skip if so
-        if v.current_variable_type == 4 and current_var[i] <= 1e-10:
+        if v.current_variable_type == 4 and v.refined_variable[i] <= 1e-10:
             p[i] = 0.0
             continue
 
         # middle point is the previous best simulation
-        r3_var[1] = current_var[i]*1.0
-        r3_fit[1] = last_fit*1.0
-        var_pl.append(current_var[i])
+        r3_var[1] = v.refined_variable[i]*1.0
+        r3_fom[1] = last_fit*1.0
+        var_pl.append(v.refined_variable[i])
         fit_pl.append(last_fit)
 
         # Update iteration
-        v.iter_count += 1
+        
 
         print(f"Finding gradient, variable {i+1} of {v.n_variables}")
 
@@ -544,229 +545,190 @@ while df >= v.exit_criteria:
         # dx is a small change in the current variable determined by RScale
         # which is either refinement_scale for atomic coordinates and
         # refinement_scale*variable for everything else
-        dx = abs(v.refinement_scale * current_var[i])
+        dx = abs(v.refinement_scale * v.refined_variable[i])
         if v.refined_variable_type == 2:
             dx = abs(v.refinement_scale)
 
         # Three-point gradient measurement, starting with plus
-        current_var[i] += dx
+        v.refined_variable[i] += dx
         # update variables
-        sim.update_variables(v, current_var)
-        sim.print_current_var(v, current_var[i])
+        sim.update_variables(v)
+        sim.print_current_var(v, v.refined_variable[i])
         # simulate
         setup, bwc = sim.simulate(v)
         # figure of merit
         fom = sim.figure_of_merit(v)
         if (fom < best_fit):
             best_fit = fom*1.0
-        r3_var[2] = current_var[i]*1.0
-        r3_fit[2] = fom*1.0
+            best_var = np.copy(v.refined_variable)
+        r3_var[2] = v.refined_variable[i]*1.0
+        r3_fom[2] = fom*1.0
         print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-        print(f"-1-----------------------------")  # {r3_var},{r3_fit}")
-        var_pl.append(current_var[i])
+        print(f"-1-----------------------------")  # {r3_var},{r3_fom}")
+        var_pl.append(v.refined_variable[i])
         fit_pl.append(fom)
 
-        # Now minus dx
-        current_var[i] -= 2*dx
+        # keep going or turn round?
+        if r3_fom[2] < r3_fom[1]:  # keep going
+            v.refined_variable[i] += np.exp(0.5) * dx
+        else:  # turn round
+            dx = - dx
+            v.refined_variable[i] += np.exp(0.75) * dx
 
         # update variables
-        sim.update_variables(v, current_var)
-        sim.print_current_var(v, current_var[i])
+        sim.update_variables(v)
+        sim.print_current_var(v, v.refined_variable[i])
         # simulate
         setup, bwc = sim.simulate(v)
         # figure of merit
         fom = sim.figure_of_merit(v)
         if (fom < best_fit):
             best_fit = fom*1.0
-        r3_var[0] = current_var[i]*1.0
-        r3_fit[0] = fom*1.0
+            best_var = np.copy(v.refined_variable)
+        r3_var[0] = v.refined_variable[i]*1.0
+        r3_fom[0] = fom*1.0
         print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-        print(f"-2-----------------------------")  # {r3_var},{r3_fit}")
-        var_pl.append(current_var[i])
+        print(f"-2-----------------------------")  # {r3_var},{r3_fom}")
+        var_pl.append(v.refined_variable[i])
         fit_pl.append(fom)
 
-        # If the three points contain a minimum, predict its position
-        # using Kramer's rule (parabo3)
-        # this happens if the initial fom, r3_fit[1], is smallest
-        if np.min(r3_fit) == r3_fit[1]:
-            # parabo3 gives the predicted best value
-            var0[i], v0_fit = px.parabo3(r3_var, r3_fit)
-            # this variable doesn't get included in vector downhill
-            p[i] = 0.0
-            print(f"Expect minimum at {var0[i]:.2f} with fit index {100*v0_fit:.2f}%")
+        # predict the next point as a minimum or a step on
+        next_var[i], exclude = px.convex(r3_var, r3_fom)
+        if exclude:
+            p[i] = 0.0  # this variable doesn't get included in vector downhill
+        else:
+            # we weight the variable by -df/dx
+            p[i] = -(r3_fom[2] - r3_fom[0]) / (2 * dx)
             # error estimate goes here
-            # independent_delta[i] = delta_x(r3_var, r3_fit, precision, err)
+            # independent_delta[i] = delta_x(r3_var, r3_fom, precision, err)
             # uncert_brak(var_min, independent_delta[i])
-        else:  # this variable will be part of vector gradient descent
-            p[i] = -(r3_fit[2] - r3_fit[0]) / (2 * dx)  # -df/dx
-            # var0 becomes the next point along
-            if np.min(r3_fit) == r3_fit[2]:  # + was better
-                var0[i] = v.refined_variable[i] + 2*dx
-            else:  # - was better
-                var0[i] = v.refined_variable[i] - 2*dx
 
     # ===========vector descent
-    # point 1 of 3 using the prediction var0
-    print("Refining, point 1 of 3")
-    current_var = np.copy(var0)
-    # update variables
-    sim.update_variables(v, current_var)
-    sim.print_current_var(v, current_var[i])
-    # simulate
+    # either: point 1 of 3, or final simulation using the prediction next_var
+    v.refined_variable = np.copy(next_var)
+    # simulation
+    sim.update_variables(v)
+    sim.print_current_var(v, v.refined_variable[i])
     setup, bwc = sim.simulate(v)
-    # figure of merit
     fom = sim.figure_of_merit(v)
     if (fom < best_fit):
         best_fit = fom*1.0
+        best_var = np.copy(v.refined_variable)
     print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
 
     # Reset the gradient vector magnitude and initialize vector descent
     p_mag = np.linalg.norm(p)
     if np.isinf(p_mag) or np.isnan(p_mag):
         raise ValueError(f"Infinite or NaN gradient! Refinement vector = {p}")
-
     if abs(p_mag) > 1e-10:  # There are gradients, do the vector descent
         p = p / p_mag   # Normalized direction of max/min gradient
-        print(f"Refinement vector {p}")
+        print(f"Refining, refinement vector {p}")
         # Find index of the first non-zero element in the gradient vector
         j = np.where(np.abs(p) >= 1e-10)[0][0]
+        v.current_variable_type = v.refined_variable_type[j]
         # reset the refinement scale (last term reverses sign if we overshot)
-        p_mag = var0[j] * v.refinement_scale * (2*(fom < best_fit)-1)
-
-        # First of three points for concavity test is the previous simulation
-        r3_var[0] = var0[j]*1.0
-        r3_fit[0] = fom*1.0
-        print(f"-a-----------------------------")  # {r3_var},{r3_fit}")
+        p_mag = -best_var[j] * v.refinement_scale  #* (2*(fom < best_fit)-1)
+        # First of three points for concavity test is the best simulation
+        r3_var[0] = best_var[j]*1.0
+        r3_fom[0] = fom*1.0
+        print(f"-a-----------------------------")  # {r3_var},{r3_fom}")
 
         # Second point
         print("Refining, point 2 of 3")
         # NB vectors here, not individual variables
-        current_var = current_var + p * p_mag
-        # update variables
-        sim.update_variables(v, current_var)
-        sim.print_current_var(v, current_var[i])
-        # simulate
+        v.refined_variable = v.refined_variable + p * p_mag
+        # simulation
+        sim.print_current_var(v, v.refined_variable[j])
+        sim.update_variables(v)
         setup, bwc = sim.simulate(v)
-        # figure of merit
         fom = sim.figure_of_merit(v)
         if (fom < best_fit):
             best_fit = fom*1.0
-            var0 = np.copy(current_var)  # NB vector update of var0
-        r3_var[1] = current_var[j]*1.0
-        r3_fit[1] = fom*1.0
+            best_var = np.copy(v.refined_variable[j])
+        r3_var[1] = v.refined_variable[j]*1.0
+        r3_fom[1] = fom*1.0
         print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-        print(f"-b-----------------------------")  # {r3_var},{r3_fit}")
-        var_pl.append(current_var[i])
+        print(f"-b-----------------------------")  # {r3_var},{r3_fom}")
+        var_pl.append(v.refined_variable[j])
         fit_pl.append(fom)
 
         # Third point
         print("Refining, point 3 of 3")
-        if r3_fit[1] > r3_fit[0]:  # if second point is worse
+        if r3_fom[1] > r3_fom[0]:  # if second point is worse
             p_mag = -p_mag
-            current_var += 2*p*p_mag  # Go in the opposite direction
+            v.refined_variable += np.exp(0.6)*p*p_mag  # Go in the opposite direction
         else:  # keep going
-            current_var += p*p_mag
+            v.refined_variable += p*p_mag
 
-        # update variables
-        sim.update_variables(v, current_var)
-        sim.print_current_var(v, current_var[i])
-        # simulate
+        # simulation
+        sim.print_current_var(v, v.refined_variable[j])
+        sim.update_variables(v)
         setup, bwc = sim.simulate(v)
-        # figure of merit
         fom = sim.figure_of_merit(v)
         if (fom < best_fit):
             best_fit = fom*1.0
-            var0 = np.copy(current_var)
-        r3_var[2] = current_var[j]*1.0
-        r3_fit[2] = fom*1.0
+            best_var = np.copy(v.refined_variable)
+        r3_var[2] = v.refined_variable[j]*1.0
+        r3_fom[2] = fom*1.0
         print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-        print(f"-c-----------------------------")  # {r3_var},{r3_fit}")
-        var_pl.append(current_var[i])
+        print(f"-c-----------------------------")  # {r3_var},{r3_fom}")
+        var_pl.append(v.refined_variable[j])
         fit_pl.append(fom)
 
-        # Concavity check and further refinement
-        i_max = np.argmax(r3_var)  # index of lowest x
-        i_min = np.argmin(r3_var)  # index of highest x
-        if i_max != i_min:
-            i_mid = 3 - i_max - i_min  # index of mid x
-            convexity_test = -abs(r3_fit[i_max] - r3_fit[i_min])
-            # convexity is the calculated fit index at the mid x
-            # if there was a straight line between lowest and highest x
-            convexity = r3_fit[i_mid] - (
-                r3_fit[i_min] + (r3_var[i_mid] - r3_var[i_min]) *
-                (r3_fit[i_max] - r3_fit[i_min]) /
-                (r3_var[i_max] - r3_var[i_min]))
+        # we continue until we get a predicted minnymum
+        minny = False
+        while minny is False:
+            last_x = v.refined_variable[j]*1.0
+            # predict the next point as a minimum or a step on
+            next_x, minny = px.convex(r3_var, r3_fom)
+            v.refined_variable += p * (next_x-last_x) / p[j]
+            # simulation
+            sim.print_current_var(v, v.refined_variable[j])
+            sim.update_variables(v)
+            setup, bwc = sim.simulate(v)
+            fom = sim.figure_of_merit(v)
+            if (fom < best_fit):
+                best_fit = fom*1.0
+                best_var = np.copy(v.refined_variable)
+                # replace worst point with this one
+                i = np.argmax(r3_fom)
+                r3_var[i] = v.refined_variable[j]
+                r3_fom[i] = fom*1.0
+            else:
+                minny = True
+            print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
+            print(f"-.-----------------------------")  # {r3_var},{r3_fom}")
+            var_pl.append(v.refined_variable[j])
+            fit_pl.append(fom)
 
-            # if it isn't more than 10% concave, keep going until it is
-            while convexity > 0.1 * convexity_test:
-                print("Convex, continuing")
-                f_max = np.argmax(r3_fit)  # index of worst fit
-                f_min = np.argmin(r3_fit)  # index of best fit
-                if f_max != f_min:
-                    f_mid = 3 - f_max - f_min  # index of mid fit
-                    # replace mid point x with a step on from best point
-                    p_mag *= 2  # double the step size
-                    current_var = var0 + p * p_mag
-                    r3_var[f_mid] = current_var[i]*1.0
-                    # update variables
-                    sim.update_variables(v, current_var)
-                    sim.print_current_var(v, current_var[i])
-                    # simulate
-                    setup, bwc = sim.simulate(v)
-                    # figure of merit
-                    fom = sim.figure_of_merit(v)
-                    if (fom < best_fit):
-                        best_fit = fom*1.0
-                        var0 = np.copy(current_var)
-                    print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-                    print(f"-.-----------------------------")  # {r3_var},{r3_fit}")
-                    var_pl.append(current_var[i])
-                    fit_pl.append(fom)
-                    r3_fit[f_mid] = fom*1.0
-                    i_max = np.argmax(r3_var)
-                    i_min = np.argmin(r3_var)
-                    if i_max != i_min:
-                        i_mid = 3 - i_max - i_min
-                        convexity = r3_fit[i_mid] - (
-                            r3_fit[i_min] + (r3_var[i_mid] - r3_var[i_min]) *
-                            (r3_fit[i_max] - r3_fit[i_min]) /
-                            (r3_var[i_max] - r3_var[i_min]))
-                        convexity_test = -abs(r3_fit[i_max] - r3_fit[i_min])
-
-        # Predict minimum fit point
-        var_min, fit_min = px.parabo3(r3_var, r3_fit)
-        print(f"Concave set, predict minimum at {var_min:.2f} with fit index {100*fit_min:.2f}%")
-        current_var = var0 + p * (var_min - var0[j]) / p[j]
-    else:
-        current_var = np.copy(var0)
-
-    # Simulate with updated parameters
-
-    # update variables
-    sim.update_variables(v, current_var)
-    sim.print_current_var(v, current_var[i])
-    # simulate
-    setup, bwc = sim.simulate(v)
-    # figure of merit
-    fom = sim.figure_of_merit(v)
-    if (fom < best_fit):
-        best_fit = fom
-        var0 = np.copy(current_var)
-    print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-    print(f"-------------------------------")  # {r3_var},{r3_fit}")
-    var_pl.append(current_var[i])
-    fit_pl.append(fom)
+        # End of this cycle
+        print("Refinement cycle complete")
+        # simulation
+        # v.refined_variable += p * (next_x-last_x) / p[j]
+        # sim.print_current_var(v, v.refined_variable[j])
+        # sim.update_variables(v)
+        # setup, bwc = sim.simulate(v)
+        # fom = sim.figure_of_merit(v)
+        # if (fom < best_fit):
+        #     best_fit = fom
+        #     best_var = np.copy(v.refined_variable)
+        # print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
+        # print(f"-------------------------------")  # {r3_var},{r3_fom}")
+        # var_pl.append(v.refined_variable[j])
+        # fit_pl.append(fom)
 
     # Update for next iteration
     last_p = p
     df = last_fit - best_fit
     last_fit = best_fit*1.0
-    v.refined_variable = np.copy(var0)
+    v.refined_variable = np.copy(best_var)
     v.refinement_scale *= (1 - 1 / (2 * v.n_variables))
     print(f"Improvement in fit {100*df:.2f}%, will stop at {100*v.exit_criteria:.2f}%")
     print("-------------------------------")
-
     plt.scatter(var_pl, fit_pl)
+    plt.show()
+
+print(f"Refinement complete after {v.iter_count} simulations.  Refined values: {best_var}")
 
 # %% final print
 total_time = time.time() - start

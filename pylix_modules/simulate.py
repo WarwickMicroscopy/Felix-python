@@ -21,7 +21,7 @@ from pylix_modules import pylix_dicts as fu
 
 
 def simulate(v):
-
+    v.iter_count += 1
     # some setup calculations
     # Electron velocity in metres per second
     electron_velocity = (c * np.sqrt(1.0 - ((m_e * c**2) /
@@ -301,7 +301,7 @@ def figure_of_merit(v):
     return fom
 
 
-def update_variables(v, current_var):
+def update_variables(v):
     """
     Updates the different refinement variables
     current_var is an array of variable values
@@ -342,11 +342,11 @@ def update_variables(v, current_var):
 
         elif variable_type == 3:
             # Occupancy
-            v.basis_occupancy[v.atom_refine_flag[i]] = current_var[i]*1.0
+            v.basis_occupancy[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
 
         elif variable_type == 4:
             # Iso Debye-Waller factor
-            v.basis_B_iso[v.atom_refine_flag[i]] = current_var[i]*1.0
+            v.basis_B_iso[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
 
         elif variable_type == 5:
             # Aniso Debye-Waller factor (not implemented)
@@ -355,11 +355,11 @@ def update_variables(v, current_var):
         elif variable_type == 6:
             # Lattice parameters a, b, c
             if v.refined_variable_type[i] == 6:
-                v.cell_a = v.cell_b = v.cell_c = current_var[i]*1.0
+                v.cell_a = v.cell_b = v.cell_c = v.refined_variable[i]*1.0
             elif v.refined_variable_type[i] == 16:
-                v.cell_b = current_var[i]*1.0
+                v.cell_b = v.refined_variable[i]*1.0
             elif v.refined_variable_type[i] == 26:
-                v.cell_c = current_var[i]*1.0
+                v.cell_c = v.refined_variable[i]*1.0
 
         # elif variable_type == 7:
         #     # Lattice angles alpha, beta, gamma
@@ -373,11 +373,11 @@ def update_variables(v, current_var):
 
         elif variable_type == 8:
             # Convergence angle
-            v.convergence_angle = current_var[i]*1.0
+            v.convergence_angle = v.refined_variable[i]*1.0
 
         elif variable_type == 9:
             # Accelerating voltage
-            v.accelerating_voltage_kv = current_var[i]*1.0
+            v.accelerating_voltage_kv = v.refined_variable[i]*1.0
 
     return
 

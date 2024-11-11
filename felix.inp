@@ -15,7 +15,7 @@ image_radius              = 42
 
 # Beam selection criteria
 min_reflection_pool       = 300
-min_strong_beams          = 25
+min_strong_beams          = 20
 min_weak_beams            = 0
 g_limit                   = 0.0
 
@@ -24,7 +24,7 @@ debye_waller_constant     = 0.0
 absorption_per            = 10.0
 
 # Microscope settings
-convergence_angle         = 0.875
+convergence_angle         = 0.6
 incident_beam_direction   = [-1, 1, 0]
 x_direction               = [1, 1, 0]
 normal_direction          = [-1, 1, 0]
@@ -33,8 +33,8 @@ acceptance_angle          = 0.0
 
 # Image output options
 initial_thickness         = 900.0
-final_thickness           = 1060.0
-delta_thickness           = 20.0
+final_thickness           = 910.0
+delta_thickness           = 50.0
 precision                 = 0.00002
 
 # Refinement specific flags
@@ -47,7 +47,7 @@ blur_radius               = 0.0
 no_of_ugs                 = 40
 atomic_sites              = [1,2]
 print_flag                = 0
-refinement_scale          = 0.01
+refinement_scale          = 0.02
 exit_criteria             = 0.0001
 debug                     = 0
 plot                      = 1
