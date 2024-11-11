@@ -1674,6 +1674,7 @@ def convex(r3_x, r3_y):
         minny = True
  
     return next_x, minny
+
     
 def get_git():
     try:

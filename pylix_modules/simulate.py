@@ -14,6 +14,7 @@ import numpy as np
 from scipy.constants import c, h, e, m_e, angstrom
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+from matplotlib.patheffects import withStroke
 from matplotlib.ticker import PercentFormatter
 import time
 from pylix_modules import pylix as px
@@ -380,7 +381,25 @@ def update_variables(v):
             v.accelerating_voltage_kv = v.refined_variable[i]*1.0
 
     return
+    
 
+def print_LACBED(v):
+    w = int(np.ceil(np.sqrt(v.n_out)))
+    h = int(np.ceil(v.n_out/w))
+    for j in range(v.n_thickness):
+        fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))
+        text_effect = withStroke(linewidth=3, foreground='black')
+        axes = axes.flatten()
+        for i in range(v.n_out):
+            axes[i].imshow(v.lacbed_sim[j, :, :, i], cmap='pink')
+            axes[i].axis('off')
+            annotation = f"{v.hkl[v.g_output[i], 0]}{v.hkl[v.g_output[i], 1]}{v.hkl[v.g_output[i], 2]}"
+            axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
+                             size=30, color='w', path_effects=[text_effect])
+        for i in range(v.n_out, len(axes)):
+            axes[i].axis('off')
+        plt.tight_layout()
+        plt.show()
 
 def print_current_var(v, var):
     # prints the variable being refined

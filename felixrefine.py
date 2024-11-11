@@ -445,22 +445,7 @@ if 'S' not in v.refine_mode:
 
 
 # %% output simulated LACBED patterns
-w = int(np.ceil(np.sqrt(v.n_out)))
-h = int(np.ceil(v.n_out/w))
-for j in range(v.n_thickness):
-    fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))
-    text_effect = withStroke(linewidth=3, foreground='black')
-    axes = axes.flatten()
-    for i in range(v.n_out):
-        axes[i].imshow(v.lacbed_sim[j, :, :, i], cmap='pink')
-        axes[i].axis('off')
-        annotation = f"{v.hkl[v.g_output[i], 0]}{v.hkl[v.g_output[i], 1]}{v.hkl[v.g_output[i], 2]}"
-        axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
-                         size=30, color='w', path_effects=[text_effect])
-    for i in range(v.n_out, len(axes)):
-        axes[i].axis('off')
-    plt.tight_layout()
-    plt.show()
+sim.print_LACBED(v)
 
 
 # %% start refinement loop
@@ -546,7 +531,7 @@ while df >= v.exit_criteria:
         # which is either refinement_scale for atomic coordinates and
         # refinement_scale*variable for everything else
         dx = abs(v.refinement_scale * v.refined_variable[i])
-        if v.refined_variable_type == 2:
+        if v.refined_variable_type[i] == 2:
             dx = abs(v.refinement_scale)
 
         # Three-point gradient measurement, starting with plus
@@ -608,7 +593,6 @@ while df >= v.exit_criteria:
     v.refined_variable = np.copy(next_var)
     # simulation
     sim.update_variables(v)
-    sim.print_current_var(v, v.refined_variable[i])
     setup, bwc = sim.simulate(v)
     fom = sim.figure_of_merit(v)
     if (fom < best_fit):
@@ -622,10 +606,11 @@ while df >= v.exit_criteria:
         raise ValueError(f"Infinite or NaN gradient! Refinement vector = {p}")
     if abs(p_mag) > 1e-10:  # There are gradients, do the vector descent
         p = p / p_mag   # Normalized direction of max/min gradient
-        print(f"Refining, refinement vector {p}")
-        # Find index of the first non-zero element in the gradient vector
         j = np.where(np.abs(p) >= 1e-10)[0][0]
         v.current_variable_type = v.refined_variable_type[j]
+        sim.print_current_var(v, v.refined_variable[i])
+        print(f"Refining, refinement vector {p}")
+        # Find index of the first non-zero element in the gradient vector
         # reset the refinement scale (last term reverses sign if we overshot)
         p_mag = -best_var[j] * v.refinement_scale  #* (2*(fom < best_fit)-1)
         # First of three points for concavity test is the best simulation
@@ -725,12 +710,14 @@ while df >= v.exit_criteria:
     v.refinement_scale *= (1 - 1 / (2 * v.n_variables))
     print(f"Improvement in fit {100*df:.2f}%, will stop at {100*v.exit_criteria:.2f}%")
     print("-------------------------------")
-    plt.scatter(var_pl, fit_pl)
+    plt.plot(fit_pl)
+    # plt.scatter(var_pl, fit_pl)
     plt.show()
 
 print(f"Refinement complete after {v.iter_count} simulations.  Refined values: {best_var}")
 
 # %% final print
+sim.print_LACBED(v)
 total_time = time.time() - start
 print("-----------------------------------------------------------------")
 print(f"Beam pool calculation took {setup:.3f} seconds")
