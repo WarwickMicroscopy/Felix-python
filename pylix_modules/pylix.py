@@ -1089,7 +1089,7 @@ def deviation_parameter(convergence_angle, image_radius, big_k_mag, g_pool,
     k_0_dot_k_prime = (k_0_0[None, None, :] * k_prime_0 +
                        k_0_2[None, None, :] * k_prime_2)
     pm = -np.sign(2*k_prime_0 + g_pool_mag1)
-    s_g = pm * np.sqrt(2*(big_k_mag**2 - k_0_dot_k_prime)) * \
+    s_g = pm * np.sqrt(2*abs(big_k_mag**2 - k_0_dot_k_prime)) * \
         (g_pool_mag1/big_k_mag)
 
     # add in 000

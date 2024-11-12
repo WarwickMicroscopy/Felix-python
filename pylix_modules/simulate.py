@@ -12,6 +12,7 @@ Returns the simulated LACBED patterns
 
 import numpy as np
 from scipy.constants import c, h, e, m_e, angstrom
+from scipy.ndimage import gaussian_filter
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from matplotlib.patheffects import withStroke
@@ -211,6 +212,7 @@ def simulate(v):
     s_g, tilted_k = px.deviation_parameter(v.convergence_angle, v.image_radius,
                                            big_k_mag, g_pool, g_pool_mag)
 
+    # ===============================================
     # Bloch wave calculation
     mid = time.time()
     # Dot product of k with surface normal, [image diameter, image diameter]
@@ -275,9 +277,28 @@ def figure_of_merit(v):
     fom_array = np.ones([v.lacbed_sim.shape[0], v.lacbed_expt.shape[2]])
     for i in range(v.lacbed_sim.shape[0]):
         # image processing, if asked for
-
-        # figure of merit for this image
-        fom_array[i, :] = 1.0 - zncc(v.lacbed_expt, v.lacbed_sim[i, :, :, :])
+        lacbed = np.copy(v.lacbed_sim[i, :, :, :])
+        # image processing = 0 -> no processing
+        fom_array[i, :] = 1.0 - zncc(v.lacbed_expt, lacbed)
+        # others are done with a thickness loop
+        # image processing = 1 -> Gaussian blur defined in felix.inp
+        for j in range(v.n_thickness):
+            if v.image_processing == 1:
+                blacbed = gaussian_filter(lacbed[j, :, :], sigma=v.blur_radius)
+                fom_array[i, j] = 1.0 - zncc(v.lacbed_expt[j, :, :], blacbed)
+                lacbed[j, :, :] = blacbed
+            # image processing = 2 -> find the best blur
+            elif v.image_processing == 2:
+                radii = np.arange(0.0, 2.1, 0.1)
+                t_fom = np.ones(len(radii))
+                for r in range(len(radii)):
+                    radius = radii[r]
+                    blacbed = gaussian_filter(lacbed[j, :, :], sigma=radius)
+                    t_fom[r] = 1.0 - zncc(v.lacbed_expt[j, :, :], blacbed)
+                fom_array[i, j] = np.min(t_fom)
+                lacbed[j, :, :] = gaussian_filter(lacbed[j, :, :],
+                                                  sigma=radii[np.argmin(t_fom)])
+                print(f"  Thickness={0.1*v.thickness[j]:.1f} nm, best blur={radii[np.argmin(t_fom)]}")
     if v.n_thickness > 1:
         best_t = np.argmin(np.mean(fom_array, axis=1))
         print(f"  Best thickness {0.1*v.thickness[best_t]:.1f} nm")
@@ -298,7 +319,6 @@ def figure_of_merit(v):
         plt.xticks(fontsize=22)
         plt.yticks(fontsize=22)
         plt.show()
-
     return fom
 
 

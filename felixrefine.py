@@ -149,14 +149,6 @@ v.atomic_sites = np.array(v.atomic_sites, dtype='int')
 # crystallography exp(2*pi*i*g.r) to physics convention exp(i*g.r)
 v.g_limit = v.g_limit * 2 * np.pi
 
-# other refinement variables (is there a neater way of reading these across? I expect so)
-# v.refine_mode = v.refine_mode
-# v.scatter_factor_method = v.scatter_factor_method
-# v.accelerating_voltage_kv = v.accelerating_voltage_kv
-# v.min_reflection_pool = v.min_reflection_pool
-# v.plot = v.plot
-# v.debug = v.debug
-
 # output
 print(f"Zone axis: {v.incident_beam_direction.astype(int)}")
 if v.n_thickness ==1:
@@ -444,16 +436,21 @@ if 'S' not in v.refine_mode:
         best_corr = np.ones(v.n_out)
 
 
-# %% output simulated LACBED patterns
-sim.print_LACBED(v)
+# %% output - *** needs work, apply blur/find best blur 
+if v.image_processing == 1:
+    print(f"  Blur radius {v.blur_radius} pixels")
+if 'S' in v.refine_mode:
+    #*** apply blur !!!
+    # output simulated LACBED patterns
+    sim.print_LACBED(v)
+else:
+    # figure of merit
+    fom = sim.figure_of_merit(v)
+    print(f"  Figure of merit {100*fom:.2f}%")
+    print("-------------------------------")
+    sim.print_LACBED(v)
 
-
-# %% start refinement loop
-
-# figure of merit
-fom = sim.figure_of_merit(v)
-print(f"  Figure of merit {100*fom:.2f}%")
-print("-------------------------------")
+# %% start refinement loop *** needs work
 
 # Initialise variables for refinement
 fit0 = fom*1.0
@@ -599,6 +596,7 @@ while df >= v.exit_criteria:
         best_fit = fom*1.0
         best_var = np.copy(v.refined_variable)
     print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
+    fit_pl.append(fom)
 
     # Reset the gradient vector magnitude and initialize vector descent
     p_mag = np.linalg.norm(p)
@@ -688,20 +686,7 @@ while df >= v.exit_criteria:
 
         # End of this cycle
         print("Refinement cycle complete")
-        # simulation
-        # v.refined_variable += p * (next_x-last_x) / p[j]
-        # sim.print_current_var(v, v.refined_variable[j])
-        # sim.update_variables(v)
-        # setup, bwc = sim.simulate(v)
-        # fom = sim.figure_of_merit(v)
-        # if (fom < best_fit):
-        #     best_fit = fom
-        #     best_var = np.copy(v.refined_variable)
-        # print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-        # print(f"-------------------------------")  # {r3_var},{r3_fom}")
-        # var_pl.append(v.refined_variable[j])
-        # fit_pl.append(fom)
-
+        p[j] = 0.0
     # Update for next iteration
     last_p = p
     df = last_fit - best_fit
