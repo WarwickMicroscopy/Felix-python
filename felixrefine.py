@@ -597,6 +597,7 @@ while df >= v.exit_criteria:
         best_var = np.copy(v.refined_variable)
     print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
     fit_pl.append(fom)
+    sim.print_LACBED(v)
 
     # Reset the gradient vector magnitude and initialize vector descent
     p_mag = np.linalg.norm(p)
@@ -687,6 +688,7 @@ while df >= v.exit_criteria:
         # End of this cycle
         print("Refinement cycle complete")
         p[j] = 0.0
+        sim.print_LACBED(v)
     # Update for next iteration
     last_p = p
     df = last_fit - best_fit
@@ -702,7 +704,7 @@ while df >= v.exit_criteria:
 print(f"Refinement complete after {v.iter_count} simulations.  Refined values: {best_var}")
 
 # %% final print
-sim.print_LACBED(v)
+# sim.print_LACBED(v)
 total_time = time.time() - start
 print("-----------------------------------------------------------------")
 print(f"Beam pool calculation took {setup:.3f} seconds")

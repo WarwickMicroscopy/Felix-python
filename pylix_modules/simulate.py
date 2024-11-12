@@ -284,19 +284,21 @@ def figure_of_merit(v):
         # image processing = 1 -> Gaussian blur defined in felix.inp
         for j in range(v.n_thickness):
             if v.image_processing == 1:
-                blacbed = gaussian_filter(lacbed[j, :, :], sigma=v.blur_radius)
-                fom_array[i, j] = 1.0 - zncc(v.lacbed_expt[j, :, :], blacbed)
-                lacbed[j, :, :] = blacbed
+                blacbed = gaussian_filter(lacbed[:, :, i], sigma=v.blur_radius)
+                fom_array[i, j] = 1.0 - zncc(v.lacbed_expt[:, :, j], blacbed)
+                lacbed[:, :, j] = blacbed
+                plt.imshow(blacbed)
+                plt.show()
             # image processing = 2 -> find the best blur
             elif v.image_processing == 2:
                 radii = np.arange(0.0, 2.1, 0.1)
                 t_fom = np.ones(len(radii))
                 for r in range(len(radii)):
                     radius = radii[r]
-                    blacbed = gaussian_filter(lacbed[j, :, :], sigma=radius)
-                    t_fom[r] = 1.0 - zncc(v.lacbed_expt[j, :, :], blacbed)
+                    blacbed = gaussian_filter(lacbed[:, :, j], sigma=radius)
+                    t_fom[r] = 1.0 - zncc(v.lacbed_expt[:, :, j], blacbed)
                 fom_array[i, j] = np.min(t_fom)
-                lacbed[j, :, :] = gaussian_filter(lacbed[j, :, :],
+                lacbed[:, :, j] = gaussian_filter(lacbed[:, :, j],
                                                   sigma=radii[np.argmin(t_fom)])
                 print(f"  Thickness={0.1*v.thickness[j]:.1f} nm, best blur={radii[np.argmin(t_fom)]}")
     if v.n_thickness > 1:
@@ -420,6 +422,7 @@ def print_LACBED(v):
             axes[i].axis('off')
         plt.tight_layout()
         plt.show()
+
 
 def print_current_var(v, var):
     # prints the variable being refined
