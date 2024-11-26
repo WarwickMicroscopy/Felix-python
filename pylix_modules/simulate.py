@@ -23,7 +23,6 @@ from pylix_modules import pylix_dicts as fu
 
 
 def simulate(v):
-    v.iter_count += 1
     # some setup calculations
     # Electron velocity in metres per second
     electron_velocity = (c * np.sqrt(1.0 - ((m_e * c**2) /
@@ -252,12 +251,17 @@ def simulate(v):
     setup = mid-strt
     bwc = time.time()-mid
 
+    # increment iteration counter
+    v.iter_count += 1
+
     return setup, bwc
 
 
 def zncc(img1, img2):
-    # accepts sets of n images, size [m, m, n]
-    # zncc is -1 = perfect anticorrelation, +1 = perfect correlation
+    """ input: img1, img2 sets of n images, both of size [pix_x, pix_y, n]
+    output is a numpy array of length n, giving zncc for each pair of images
+    zncc is -1 = perfect anticorrelation, +1 = perfect correlation
+    """
     n_pix = img1.shape[0]**2
     img1_normalised = (img1 - np.mean(img1, axis=(0, 1), keepdims=True)) / (
         np.std(img1, axis=(0, 1), keepdims=True))
@@ -270,43 +274,61 @@ def zncc(img1, img2):
 
 
 def figure_of_merit(v):
-
-    # needs fleshing out with image processing & correlation options
-
+    """ needs fleshing out with image processing & correlation options
+    takes as an input v.lacbed_sim, shape [v.n_thickness, pix_x, pix_y, n_out]
+    applies image processing if required
+    image processing = 0 -> no Gaussian blur (applied with radius 0)
+    image processing = 1 -> Gaussian blur radius defined in felix.inp
+    image processing = 2 -> find the best blur radius
+    uses zncc, which works on sets of images both of size [pix_x, pix_y, n]
+    currently returns a single figure of merit fom that is mean of zncc's for
+    the best thickness.  Could give a more sophisticated analysis..
+    """
     # figure of merit - might need a NaN check? size [n_thick, n_out]
-    fom_array = np.ones([v.lacbed_sim.shape[0], v.lacbed_expt.shape[2]])
-    for i in range(v.lacbed_sim.shape[0]):
-        # image processing, if asked for
-        lacbed = np.copy(v.lacbed_sim[i, :, :, :])
-        # image processing = 0 -> no processing
-        fom_array[i, :] = 1.0 - zncc(v.lacbed_expt, lacbed)
-        # others are done with a thickness loop
-        # image processing = 1 -> Gaussian blur defined in felix.inp
-        for j in range(v.n_thickness):
-            if v.image_processing == 1:
-                blacbed = gaussian_filter(lacbed[:, :, i], sigma=v.blur_radius)
-                fom_array[i, j] = 1.0 - zncc(v.lacbed_expt[:, :, j], blacbed)
-                lacbed[:, :, j] = blacbed
-                plt.imshow(blacbed)
-                plt.show()
-            # image processing = 2 -> find the best blur
-            elif v.image_processing == 2:
-                radii = np.arange(0.0, 2.1, 0.1)
-                t_fom = np.ones(len(radii))
-                for r in range(len(radii)):
-                    radius = radii[r]
-                    blacbed = gaussian_filter(lacbed[:, :, j], sigma=radius)
-                    t_fom[r] = 1.0 - zncc(v.lacbed_expt[:, :, j], blacbed)
-                fom_array[i, j] = np.min(t_fom)
-                lacbed[:, :, j] = gaussian_filter(lacbed[:, :, j],
-                                                  sigma=radii[np.argmin(t_fom)])
-                print(f"  Thickness={0.1*v.thickness[j]:.1f} nm, best blur={radii[np.argmin(t_fom)]}")
+    n_out = v.lacbed_expt.shape[2]  # ***is this in v? get rid if so
+    fom_array = np.ones([v.n_thickness, n_out])
+    # set up plot for blur optimisation
+    if v.plot and v.image_processing == 2:
+        fig, ax = plt.subplots(1, 1)
+        w_f = 10
+        fig.set_size_inches(w_f, w_f)
+        ax.set_xlabel('Blur radius', size=24)
+        ax.set_ylabel('Figure of merit', size=24)
+        plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1.0))
+        plt.xticks(fontsize=22)
+        plt.yticks(fontsize=22)
+    # loop over thicknesses
+    for i in range(v.n_thickness):
+        # image processing = 2 -> find the best blur
+        if v.image_processing == 2:
+            radii = np.arange(0.2, 2.1, 0.1)  # range of blurs to try
+            b_fom = ([])  # mean fom for each blur
+            for r in radii:
+                blacbed = np.copy(v.lacbed_sim[i, :, :, :])
+                for j in range(n_out):
+                    blacbed[:, :, j] = gaussian_filter(blacbed[:, :, j],
+                                                       sigma=r)
+                b_fom.append(np.mean(1.0 - zncc(v.lacbed_expt, blacbed)))
+            if v.plot:
+                plt.plot(radii, b_fom)
+            v.blur_radius = radii[np.argmin(b_fom)]
+        if v.image_processing != 0:
+            for j in range(n_out):
+                v.lacbed_sim[i, :, :, j] = gaussian_filter(v.lacbed_sim[i, :, :, j],
+                                                           sigma=v.blur_radius)
+        fom_array[i, :] = 1.0 - zncc(v.lacbed_expt, v.lacbed_sim[i, :, :, :])
+    if v.plot and v.image_processing == 2:
+        plt.show()
+    # print best values
+    if v.image_processing != 0:
+        print(f"  Best blur={v.blur_radius:.1f}")
     if v.n_thickness > 1:
-        best_t = np.argmin(np.mean(fom_array, axis=1))
-        print(f"  Best thickness {0.1*v.thickness[best_t]:.1f} nm")
+        v.best_t = np.argmin(np.mean(fom_array, axis=1))
+        print(f"  Best thickness {0.1*v.thickness[v.best_t]:.1f} nm")
         # mean figure of merit
-        fom = np.mean(fom_array[best_t])
+        fom = np.mean(fom_array[v.best_t])
     else:
+        v.best_t = 0
         fom = np.mean(fom_array[0])
 
     # plot
@@ -403,12 +425,29 @@ def update_variables(v):
             v.accelerating_voltage_kv = v.refined_variable[i]*1.0
 
     return
-    
+
 
 def print_LACBED(v):
     w = int(np.ceil(np.sqrt(v.n_out)))
     h = int(np.ceil(v.n_out/w))
-    for j in range(v.n_thickness):
+    # only print all thicknesses for the first simulation
+    if v.iter_count == 0:
+        for j in range(v.n_thickness):
+            fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))
+            text_effect = withStroke(linewidth=3, foreground='black')
+            axes = axes.flatten()
+            for i in range(v.n_out):
+                axes[i].imshow(v.lacbed_sim[j, :, :, i], cmap='pink')
+                axes[i].axis('off')
+                annotation = f"{v.hkl[v.g_output[i], 0]}{v.hkl[v.g_output[i], 1]}{v.hkl[v.g_output[i], 2]}"
+                axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
+                                 size=30, color='w', path_effects=[text_effect])
+            for i in range(v.n_out, len(axes)):
+                axes[i].axis('off')
+            plt.tight_layout()
+            plt.show()
+    else:
+        j = v.best_t
         fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))
         text_effect = withStroke(linewidth=3, foreground='black')
         axes = axes.flatten()

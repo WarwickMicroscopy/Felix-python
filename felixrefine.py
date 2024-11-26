@@ -10,6 +10,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patheffects import withStroke
+from matplotlib.ticker import PercentFormatter
 import time
 
 # felix modules
@@ -92,7 +93,7 @@ else:
 v.basis_atom_label = v.atom_site_label
 # atom symbols, stripping any charge etc.
 v.basis_atom_name = [''.join(filter(str.isalpha, name))
-                   for name in v.atom_site_type_symbol]
+                     for name in v.atom_site_type_symbol]
 # take care of any odd symbols, get the case right
 for i in range(n_basis):
     name = v.basis_atom_name[i]
@@ -116,7 +117,7 @@ if "atom_site_b_iso_or_equiv" in cif_dict:
 elif "atom_site_u_iso_or_equiv" in cif_dict:
     v.basis_B_iso = np.array([tup[0] for tup in
                             v.atom_site_u_iso_or_equiv])*8*(np.pi**2)
-    
+
 # occupancy, assume it's unity if not specified
 if v.atom_site_occupancy is not None:
     v.basis_occupancy = np.array([tup[0] for tup in v.atom_site_occupancy])
@@ -144,14 +145,14 @@ else:
 v.incident_beam_direction = np.array(v.incident_beam_direction, dtype='float')
 v.normal_direction = np.array(v.normal_direction, dtype='float')
 v.x_direction = np.array(v.x_direction, dtype='float')
-v.atomic_sites = np.array(v.atomic_sites, dtype='int')
+v.atomic_sites = np.array(v.atomic_sites, dtype='int') - 1  # NB index change
 
 # crystallography exp(2*pi*i*g.r) to physics convention exp(i*g.r)
 v.g_limit = v.g_limit * 2 * np.pi
 
 # output
 print(f"Zone axis: {v.incident_beam_direction.astype(int)}")
-if v.n_thickness ==1:
+if v.n_thickness == 1:
     print(f"Specimen thickness {v.initial_thickness/10} nm")
 else:
     print(f"{v.n_thickness} thicknesses: {', '.join(map(str, v.thickness/10))} nm")
@@ -409,8 +410,8 @@ if 'S' not in v.refine_mode:
                 if g_string in file_name:
                     file_path = os.path.join(dm3_folder, file_name)
                     v.lacbed_expt[:, :, i] = px.read_dm3(file_path,
-                                                       2*v.image_radius,
-                                                       v.debug)
+                                                         2*v.image_radius,
+                                                         v.debug)
                     found = True
             if not found:
                 n_expt -= 1
@@ -436,11 +437,11 @@ if 'S' not in v.refine_mode:
         best_corr = np.ones(v.n_out)
 
 
-# %% output - *** needs work, apply blur/find best blur 
+# %% output - *** needs work, apply blur/find best blur
 if v.image_processing == 1:
     print(f"  Blur radius {v.blur_radius} pixels")
 if 'S' in v.refine_mode:
-    #*** apply blur !!!
+    # *** apply blur !!!
     # output simulated LACBED patterns
     sim.print_LACBED(v)
 else:
@@ -462,10 +463,10 @@ last_p = np.ones(v.n_variables)
 df = 1.0
 r3_var = np.zeros(3)  # for parabolic minimum
 r3_fom = np.zeros(3)
-# dunno what this is
+# dunno what this is, something to do with uncertainties, needs implementing
 independent_delta = 0.0
 
-# for a plot
+# for a plot of progress
 var_pl = ([])
 fit_pl = ([])
 
@@ -504,7 +505,6 @@ while df >= v.exit_criteria:
         fit_pl.append(last_fit)
 
         # Update iteration
-        
 
         print(f"Finding gradient, variable {i+1} of {v.n_variables}")
 
@@ -546,7 +546,7 @@ while df >= v.exit_criteria:
         r3_var[2] = v.refined_variable[i]*1.0
         r3_fom[2] = fom*1.0
         print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-        print(f"-1-----------------------------")  # {r3_var},{r3_fom}")
+        print("-1-----------------------------")  # {r3_var},{r3_fom}")
         var_pl.append(v.refined_variable[i])
         fit_pl.append(fom)
 
@@ -597,7 +597,8 @@ while df >= v.exit_criteria:
         best_var = np.copy(v.refined_variable)
     print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
     fit_pl.append(fom)
-    sim.print_LACBED(v)
+    if v.plot:
+        sim.print_LACBED(v)
 
     # Reset the gradient vector magnitude and initialize vector descent
     p_mag = np.linalg.norm(p)
@@ -688,7 +689,8 @@ while df >= v.exit_criteria:
         # End of this cycle
         print("Refinement cycle complete")
         p[j] = 0.0
-        sim.print_LACBED(v)
+        if v.plot:
+            sim.print_LACBED(v)
     # Update for next iteration
     last_p = p
     df = last_fit - best_fit
@@ -697,14 +699,22 @@ while df >= v.exit_criteria:
     v.refinement_scale *= (1 - 1 / (2 * v.n_variables))
     print(f"Improvement in fit {100*df:.2f}%, will stop at {100*v.exit_criteria:.2f}%")
     print("-------------------------------")
-    plt.plot(fit_pl)
-    # plt.scatter(var_pl, fit_pl)
-    plt.show()
-
+    if v.plot:
+        fig, ax = plt.subplots(1, 1)
+        w_f = 10
+        fig.set_size_inches(w_f, w_f)
+        plt.plot(fit_pl)
+        ax.set_xlabel('Iteration', size=24)
+        ax.set_ylabel('Figure of merit', size=24)
+        plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1.0))
+        plt.xticks(fontsize=22)
+        plt.yticks(fontsize=22)
+        plt.show()
+        sim.print_LACBED(v)
 print(f"Refinement complete after {v.iter_count} simulations.  Refined values: {best_var}")
 
 # %% final print
-# sim.print_LACBED(v)
+sim.print_LACBED(v)
 total_time = time.time() - start
 print("-----------------------------------------------------------------")
 print(f"Beam pool calculation took {setup:.3f} seconds")
