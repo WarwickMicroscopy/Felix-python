@@ -336,9 +336,13 @@ def figure_of_merit(v):
         fig, ax = plt.subplots(1, 1)
         w_f = 10
         fig.set_size_inches(w_f, w_f)
-        plt.plot(v.thickness/10, np.mean(fom_array, axis=1))
+        plt.plot(v.thickness/10, np.mean(fom_array, axis=1), 'ro', linewidth=2)
+        for i in range(n_out):
+            annotation = f"{v.hkl[v.g_output[i], 0]}{v.hkl[v.g_output[i], 1]}{v.hkl[v.g_output[i], 2]}"
+            plt.plot(v.thickness/10, fom_array[:, i], label=annotation)
         ax.set_xlabel('Thickness (nm)', size=24)
         ax.set_ylabel('Figure of merit', size=24)
+        ax.legend()
         plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1.0))
         plt.xticks(fontsize=22)
         plt.yticks(fontsize=22)
