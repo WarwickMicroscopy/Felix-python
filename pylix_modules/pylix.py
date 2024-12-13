@@ -23,7 +23,6 @@ def read_inp_file(filename):
 
     # Dictionary to store the variable values
     inp_dict = {}
-    error_flag = False
 
     try:
         with open(filename, 'r') as file:
@@ -73,11 +72,11 @@ def read_hkl_file(filename):
             line = line.strip().replace('[', '').replace(']', '').replace(',', '')
             if line:  # skip blank lines
                 parts = line.split()
-    
+
                 # Extract Miller indices
                 g_ = list(parts[0:3])
                 input_hkls.append(g_)
-                
+
                 if cRED:  # Extract g, i_obs and sigma_obs
                     intensity = float(parts[1].replace(',', ''))
                     sigma = float(parts[2])
@@ -227,18 +226,18 @@ def read_cif(filename):
     # tidy up cell parameters that have been read as lists not tuples
     # I feel there should be a more elegant way of fixing this issue!
     if isinstance(cif_dict['cell_length_a'], list):
-        cif_dict['cell_length_a']=cif_dict['cell_length_a'][0]
+        cif_dict['cell_length_a'] = cif_dict['cell_length_a'][0]
     if isinstance(cif_dict['cell_length_b'], list):
-        cif_dict['cell_length_b']=cif_dict['cell_length_b'][0]
+        cif_dict['cell_length_b'] = cif_dict['cell_length_b'][0]
     if isinstance(cif_dict['cell_length_a'], list):
-        cif_dict['cell_length_c']=cif_dict['cell_length_c'][0]
+        cif_dict['cell_length_c'] = cif_dict['cell_length_c'][0]
 
     # tidy up chemical formula
     if "chemical_formula_structural" in cif_dict:
         cif_dict['chemical_formula_structural'] = \
             re.sub(r'(?<!\d)1(?!\d)', '',
                    cif_dict['chemical_formula_structural'].replace(' ', ''))
-    if "chemical_formula_sum" in cif_dict:  # preferred, replce structural if poss
+    if "chemical_formula_sum" in cif_dict:  # preferred
         cif_dict['chemical_formula_sum'] = \
             re.sub(r'(?<!\d)1(?!\d)', '',
                    cif_dict['chemical_formula_sum'].replace(' ', ''))
@@ -268,7 +267,7 @@ def symop_convert(symop_xyz):
                 var_part = match.group(1)
                 if var_part:
                     pm1 = -1 if var_part.startswith('-') else 1
-                    axis = coord_map[var_part[-1]]  # Get the axis from 'x', 'y', or 'z'
+                    axis = coord_map[var_part[-1]]
                     mat[i, j, axis] = pm1
                 # Extract the fractional part
                 frac_part = match.group(2)
@@ -1255,52 +1254,53 @@ def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list,
     while np.sum(weak) > min_weak_beams:
         weak *= np.where((pert >= max_pert_weak), 1, 0)
         max_pert_weak += 0.0001
-    
+
     # Create weak beam list
     weak_beam_list = np.flatnonzero(weak)
     # n_weak_beams = len(weak_beam_list)
     n_beams = len(weak_beam_list)
-    
+
     # now update the scattering ug_sg_matrix (not sure if it works)
     # Add weak beams perturbatively for the 1st column (sumC)
     # and diagonal elements (sumD)
-    # new version using broadcasting 
+    # new version using broadcasting
     # (NOT WORKING, SIZE mismatch ug_wj * ug_wj_weak)
     weak_beam_sg = s_g_pix[weak_beam_list]
     ug_w0 = ug_matrix[weak_beam_list, 0]
     ug_wj = ug_matrix[strong_beam_list[:, None], weak_beam_list]
     ug_wj_weak = ug_matrix[weak_beam_list[:, None], strong_beam_list]
-    
+
     # Eq. 4 from Zuo & Weickenmeier (Ultramicroscopy 57, 1995)
     sum_c = np.sum(ug_wj * ug_w0 / (2.0 * big_k_mag * weak_beam_sg), axis=1)
-    
+
     # Eq. 5 (sumD): Broadcasting for diagonal terms
-    sum_d = np.einsum('ij,ij->i', ug_wj, ug_wj_weak) / (2.0 * big_k_mag * weak_beam_sg)
-    
+    sum_d = np.einsum('ij,ij->i', ug_wj, ug_wj_weak) / \
+        (2.0 * big_k_mag * weak_beam_sg)
+
     # Update ug_sg_matrix: first column and diagonal terms
     ug_sg_matrix[1:n_beams, 0] -= sum_c  # Update first column (sumC)
-    ug_sg_matrix[1:n_beams, 1:n_beams] -= (2.0 * big_k_mag * 
+    ug_sg_matrix[1:n_beams, 1:n_beams] -= (2.0 * big_k_mag *
                                            sum_d[:, None]) / (4.0 * np.pi**2)
     # old version using loops
     # for j in range(1, n_beams):
     #     sum_c = 0 + 0j  # Complex zero
     #     sum_d = 0 + 0j  # Complex zero
-        
+
     #     for i in range(n_weak_beams):
     #         # Eq. 4 from Zuo & Weickenmeier (Ultramicroscopy 57, 1995)
     #         sum_c += (ug_matrix[strong_beam_list[j], weak[i]] *
-    #                   ug_matrix[weak[i], 0] / 
+    #                   ug_matrix[weak[i], 0] /
     #                   (2.0 * big_k_mag * s_g_pix[weak_beam_list[i]]))
-            
+
     #         # Eq. 5 from Zuo & Weickenmeier (Ultramicroscopy 57, 1995)
-    #         sum_d += (ug_matrix[strong_beam_list[j], weak_beam_list[i]] * 
-    #                   ug_matrix[weak_beam_list[i], strong_beam_list[j]] / 
+    #         sum_d += (ug_matrix[strong_beam_list[j], weak_beam_list[i]] *
+    #                   ug_matrix[weak_beam_list[i], strong_beam_list[j]] /
     #                   (2.0 * big_k_mag * s_g_pix[weak[i]]))
-    
+
     #     # Update the first column of the ug_sg_matrix
     #     mask = ug_sg_matrix == ug_sg_matrix[j, 0]
     #     ug_sg_matrix[mask] = ug_sg_matrix[j, 0] - sum_c
-    
+
     #     # Update the diagonal elements (Sg's)
     #     ug_sg_matrix[j, j] = ug_sg_matrix[j, j] - \
     #         2.0*big_k_mag*sum_d/(4.0*np.pi**2)
@@ -1321,7 +1321,7 @@ def f_kirkland(z, g_magnitude):
     Returns:
     ndarray: The calculated Kirkland scattering factor.
     """
-    
+
     q = g_magnitude / (2*np.pi)
     # coefficients in shape (3, 1, 1) for broadcasting
     a = fu.kirkland[z-1, 0:6:2].reshape(-1, 1, 1)
@@ -1656,9 +1656,9 @@ def convex(r3_x, r3_y):
                 (r3_y[x_max] - r3_y[x_min]) /
                 (r3_x[x_max] - r3_x[x_min]))
         else:
-            raise ValueError("Parabolic refinement failed")    
+            raise ValueError("Parabolic refinement failed")
     else:
-        raise ValueError("Parabolic refinement failed")    
+        raise ValueError("Parabolic refinement failed")
     if convexity > 0.1 * convexity_test:
         # find the size of the step between the two lowest y
         y_max = np.argmax(r3_y)  # index of highest y
@@ -1669,15 +1669,15 @@ def convex(r3_x, r3_y):
         # point twice, exp(0.75)~=2.12
         next_x = r3_x[y_min] + np.exp(0.75) * last_dx
         minny = False
-        print(f"Convex, continuing")  #going to {next_x:.2f}")
+        print("Convex, continuing")  # going to {next_x:.2f}")
     else:
         next_x, next_y = parabo3(r3_x, r3_y)
         print(f"Concave, predict minimum at {next_x:.3f} with fit index {100*next_y:.2f}%")
         minny = True
- 
+
     return next_x, minny
 
-    
+
 def get_git():
     try:
         # Run the git command to get the latest commit ID
