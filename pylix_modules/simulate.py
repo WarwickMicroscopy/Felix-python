@@ -435,7 +435,7 @@ def print_LACBED(v):
     w = int(np.ceil(np.sqrt(v.n_out)))
     h = int(np.ceil(v.n_out/w))
     # only print all thicknesses for the first simulation
-    if v.iter_count == 0:
+    if v.iter_count == 1:
         for j in range(v.n_thickness):
             fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))
             text_effect = withStroke(linewidth=3, foreground='black')
