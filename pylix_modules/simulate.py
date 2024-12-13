@@ -59,7 +59,7 @@ def simulate(v):
     atomic_number = np.array([fu.atomic_number_map[na] for na in atom_name])
 
     n_atoms = len(atom_label)
-    if v.iter_count == 0:
+    if v.iter_count == 1:
         print("  There are "+str(n_atoms)+" atoms in the unit cell")
     # plot
     if v.iter_count == 0 and v.plot:
@@ -100,7 +100,7 @@ def simulate(v):
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
     mip = mip.item()*scatt_fac_to_volts  # NB convert array to float
-    if v.iter_count == 0:
+    if v.iter_count == 1:
         print(f"  Mean inner potential = {mip:.1f} Volts")
     # Wave vector magnitude in crystal
     # high-energy approximation (not HOLZ compatible)
@@ -138,7 +138,7 @@ def simulate(v):
     # NEEDS SOME MORE WORK TO MATCH SIM/EXPT PATTERNS if this happens
 
     # outputs
-    if v.iter_count == 0:
+    if v.iter_count == 1:
         print(f"  Beam pool: {n_hkl} reflexions ({v.min_strong_beams} strong beams)")
         # we will have larger g-vectors in g_matrix since this has
         # differences g - h
@@ -146,7 +146,7 @@ def simulate(v):
         print(f"  Maximum |g| = {np.max(g_pool_mag)/(2*np.pi):.3f} 1/Å")
 
     # plot
-    if v.iter_count == 0 and v.plot:
+    if v.iter_count == 1 and v.plot:
         xm = np.ceil(np.max(g_pool_mag/(2*np.pi)))
         fig, ax = plt.subplots(1, 1)
         w_f = 10
@@ -199,7 +199,7 @@ def simulate(v):
     # ug_matrix = 10 ug_matrix
     # matrix of dot products with the surface normal
     g_dot_norm = np.dot(g_pool, norm_dir_m)
-    if v.iter_count == 0:
+    if v.iter_count == 1:
         print("    Ug matrix constructed")
     if v.debug:
         np.set_printoptions(precision=3, suppress=True)

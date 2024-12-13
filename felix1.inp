@@ -11,11 +11,11 @@ absorption_method         = 2
 byte_size                 = 2
 
 # Radius of the beam in pixels
-image_radius              = 32
+image_radius              = 42
 
 # Beam selection criteria
-min_reflection_pool       = 800
-min_strong_beams          = 200
+min_reflection_pool       = 660
+min_strong_beams          = 165
 min_weak_beams            = 0
 g_limit                   = 0.0
 
@@ -24,17 +24,17 @@ debye_waller_constant     = 0.0
 absorption_per            = 10.0
 
 # Microscope settings
-convergence_angle         = 0.75
-incident_beam_direction   = [0, 1, 0]
-x_direction               = [0, 0, 1]
-normal_direction          = [0, 1, 0]
+convergence_angle         = 0.983
+incident_beam_direction   = [-1, 1, 0]
+x_direction               = [1, 1, 0]
+normal_direction          = [-1, 1, 0]
 accelerating_voltage_kv   = 200.0
 acceptance_angle          = 0.0
 
 # Image output options
-initial_thickness         = 500.0
-final_thickness           = 501.0
-delta_thickness           = 500.0
+initial_thickness         = 900.0
+final_thickness           = 910.0
+delta_thickness           = 50.0
 precision                 = 0.00002
 
 # Refinement specific flags

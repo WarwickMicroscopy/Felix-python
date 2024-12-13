@@ -1430,10 +1430,12 @@ def f_thomas(g, B, Z, v):
         raise Exception("invalid value of s")
     if B < 0:
         raise Exception("invalid value of B")
+    if B < 0.1:
+        B = 0.1
+    if B > 4:  # or 0 < B < 0.1:
+        raise Exception(f"B = {B}! Outside range of parameterisation")
     if Z < 1 or Z > 103:
         raise Exception("invalid value of Z")
-    if B > 4 or 0 < B < 0.1:
-        raise Exception("B outside range of parameterisation")
     if isinstance(s, np.ndarray) and B == 0:
         return np.zeros(np.shape(s))
     elif isinstance(s, (int, float)) and B == 0:
