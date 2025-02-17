@@ -341,7 +341,7 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
     return atom_position, atom_label, atom_name, B_iso, occupancy
 
 
-def reference_frames(cell_a, cell_b, cell_c, cell_alpha, cell_beta,
+def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
                      cell_gamma, space_group, x_dir_c, z_dir_c, norm_dir_c):
     """
     Produces reciprocal lattice vectors and related parameters
@@ -353,9 +353,11 @@ def reference_frames(cell_a, cell_b, cell_c, cell_alpha, cell_beta,
         Lattice angles in radians.
     cell_a, cell_b, cell_c : float
         Lattice lengths in Angstroms.
-    x_dir_c, z_dir_c : ndarray
-        Reciprocal lattice vectors that define the x-axis of the diffraction
-        pattern and the beam direction.
+    z_dir_c : ndarray
+        Direct lattice vector that defines the beam direction.
+    x_dir_c : ndarray
+        Reciprocal lattice vector that defines the x-axis of the diffraction
+        pattern.
     norm_dir_c : ndarray
         Normal direction in the crystal reference frame.
     """
@@ -363,7 +365,7 @@ def reference_frames(cell_a, cell_b, cell_c, cell_alpha, cell_beta,
     tiny = 1e-10
 
     # Direct lattice vectors in an orthogonal reference frame, Angstrom units
-    a_vec_o = np.array([cell_a, 0.0, 0.0])
+    a_vec_o = np.array([cell_a, 0.0, 0.0])  # x_o is // to a
     b_vec_o = np.array([cell_b * np.cos(cell_gamma),
                         cell_b * np.sin(cell_gamma), 0.0])
     c_vec_o = np.array([
@@ -412,12 +414,12 @@ def reference_frames(cell_a, cell_b, cell_c, cell_alpha, cell_beta,
     # Unit reciprocal lattice vectors in orthogonal frame
     x_dir_o = np.dot(x_dir_c, np.column_stack((ar_vec_o, br_vec_o, cr_vec_o)))
     x_dir_o /= np.linalg.norm(x_dir_o)
-    z_dir_o = np.dot(z_dir_c, t_mat_c2o)
+    z_dir_o = t_mat_c2o @ z_dir_c
     z_dir_o /= np.linalg.norm(z_dir_o)
     y_dir_o = np.cross(z_dir_o, x_dir_o)
 
     # Transformation matrix from orthogonal to microscope reference frame
-    t_mat_o2m = np.column_stack((x_dir_o, y_dir_o, z_dir_o)).T
+    t_mat_o2m = np.column_stack((x_dir_o, y_dir_o, z_dir_o))
 
     # Unit normal to the specimen in microscope frame
     norm_dir_m = t_mat_o2m @ t_mat_c2o @ norm_dir_c
@@ -436,6 +438,24 @@ def reference_frames(cell_a, cell_b, cell_c, cell_alpha, cell_beta,
     cr_vec_m = (2.0*np.pi * np.cross(a_vec_m, b_vec_m) /
                 np.dot(a_vec_m, np.cross(b_vec_m, c_vec_m)))
 
+    # Output to check
+    if debug:
+        print(" ")
+        np.set_printoptions(precision=3, suppress=True)
+        print(f"a = {cell_a}, b = {cell_b}, c = {cell_c}")
+        print(f"alpha = {cell_alpha*180.0/np.pi}, beta = {cell_beta*180.0/np.pi}, gamma = {cell_gamma*180.0/np.pi}")
+        print(f"x = {x_dir_c} (reciprocal space)")
+        print(f"z = {z_dir_c} (direct space)")
+        print("Transformation crystal to orthogonal (O) frame:")
+        print(t_mat_c2o)
+        print(f"O frame: a = {a_vec_o}, b = {b_vec_o}, c = {c_vec_o}")
+        print(f"a* = {ar_vec_o}, b* = {br_vec_o}, c* = {cr_vec_o}")
+        print(f"x = {x_dir_o}, y = {y_dir_o}, z = {z_dir_o}")
+        print("Transformation orthogonal to microscope frame:")
+        print(t_mat_o2m)
+        print(f"Microscope frame: a = {a_vec_m}, b = {b_vec_m}, c = {c_vec_m}")
+        print(f"Specimen surface normal = {norm_dir_m}")
+        print(f"a* = {ar_vec_m}, b* = {br_vec_m}, c* = {c_vec_m}")
     return a_vec_m, b_vec_m, c_vec_m, ar_vec_m, br_vec_m, cr_vec_m, norm_dir_m
 
 
@@ -1018,10 +1038,10 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
     phase = np.exp(-1j * g_dot_r)
     # scattering factor for all g-vectors, to be used atom by atom
     # NB scattering factor methods accept and return 2D[n_hkl, n_hkl] array of
-    # g magnitudes but only one atom type.  Potential speed up by broadcasting
+    # g magnitudes but only one atom type. (Potential speed up by broadcasting
     # all atom types and modifying scattering factor methods to accept 2D + 1D
     # arrays [n_hkl, n_hkl] & [n_atoms],
-    # returning an array [n_hkl, n_hkl, n_atoms]
+    # returning an array [n_hkl, n_hkl, n_atoms])
     for i in range(n_atoms):
         # get the scattering factor
         if scatter_factor_method == 0:
@@ -1054,6 +1074,14 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
                                np.exp(-B_iso[i] *
                                       (g_magnitude**2)/(16*np.pi**2)))
 
+    # *** Budhika Mendis's 'cluster' method ***
+    # make a mask to exclude g-vectors above a given magnitude
+    # mask = (g_magnitude < 1*np.pi)
+    # Fg_matrix *= mask
+    #
+    # on testing I find that setting some values in the scattering matrix
+    # to zero like this has essentially NO effect on the time required,
+    # but it does degrade the answer when < 2*pi.  So don't do it!!!
     return Fg_matrix
 
 
@@ -1170,10 +1198,10 @@ def bloch(g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl,
     # Invert using LU decomposition (similar to ZGETRI in Fortran)
     inv_eigenvecs = inv(eigenvecs)
 
-    if debug:
-        np.set_printoptions(precision=3, suppress=True)
-        print("eigenvectors")
-        print(eigenvecs[:5, :5])
+    # if debug:
+    #     np.set_printoptions(precision=3, suppress=True)
+    #     print("eigenvectors")
+    #     print(eigenvecs[:5, :5])
 
     return n_beams, strong_beam_indices, gamma, eigenvecs, inv_eigenvecs
 

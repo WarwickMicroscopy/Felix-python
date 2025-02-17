@@ -25,6 +25,7 @@ class Inp:
         self.holz_flag = None
         self.debug = None
         self.plot = None
+        self.n_output_reflexions = None
 
 # class sample:
 #     def __init__(self):

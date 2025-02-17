@@ -112,11 +112,10 @@ def simulate(v):
     # ===============================================
     # set up reference frames
     a_vec_m, b_vec_m, c_vec_m, ar_vec_m, br_vec_m, cr_vec_m, norm_dir_m = \
-        px.reference_frames(v.cell_a, v.cell_b, v.cell_c, v.cell_alpha,
-                            v.cell_beta,
-                            v.cell_gamma, v.space_group, v.x_direction,
+        px.reference_frames(v.debug, v.cell_a, v.cell_b, v.cell_c,
+                            v.cell_alpha, v.cell_beta, v.cell_gamma,
+                            v.space_group, v.x_direction,
                             v.incident_beam_direction, v.normal_direction)
-
     # put the crystal in the micrcoscope reference frame, in Å
     atom_coordinate = (atom_position[:, 0, np.newaxis] * a_vec_m +
                        atom_position[:, 1, np.newaxis] * b_vec_m +
@@ -137,15 +136,17 @@ def simulate(v):
     # NEEDS SOME MORE WORK TO MATCH SIM/EXPT PATTERNS if this happens
 
     # outputs
-    if v.iter_count == 1:
+    if v.iter_count == 0:
         print(f"  Beam pool: {n_hkl} reflexions ({v.min_strong_beams} strong beams)")
         # we will have larger g-vectors in g_matrix since this has
         # differences g - h
         # but the maximum of the g pool is probably a more useful thing to know
         print(f"  Maximum |g| = {np.max(g_pool_mag)/(2*np.pi):.3f} 1/Å")
+        # for i in range(n_hkl):
+        #     print(f"{i},  {v.hkl[i]}")
 
     # plot
-    if v.iter_count == 1 and v.plot:
+    if v.iter_count == 0 and v.plot:
         xm = np.ceil(np.max(g_pool_mag/(2*np.pi)))
         fig, ax = plt.subplots(1, 1)
         w_f = 10
@@ -178,10 +179,10 @@ def simulate(v):
                         labelbottom=False, labelleft=False)
         plt.show()
 
-    # g-vector matrix
+    # g-vector matrix, array [n_hkl, n_hkl, 3]
     g_matrix = np.zeros((n_hkl, n_hkl, 3))
     g_matrix = g_pool[:, np.newaxis, :] - g_pool[np.newaxis, :, :]
-    # g-vector magnitudes
+    # g-vector magnitudes, array [n_hkl, n_hkl]
     g_magnitude = np.sqrt(np.sum(g_matrix**2, axis=2))
 
     # Conversion factor from F_g to U_g
@@ -198,7 +199,7 @@ def simulate(v):
     # ug_matrix = 10 ug_matrix
     # matrix of dot products with the surface normal
     g_dot_norm = np.dot(g_pool, norm_dir_m)
-    if v.iter_count == 1:
+    if v.iter_count == 0:
         print("    Ug matrix constructed")
     if v.debug:
         np.set_printoptions(precision=3, suppress=True)
@@ -432,21 +433,22 @@ def update_variables(v):
 
 
 def print_LACBED(v):
-    w = int(np.ceil(np.sqrt(v.n_out)))
-    h = int(np.ceil(v.n_out/w))
+    n = v.lacbed_sim.shape[3]# actual size, if felix.hkl's missing
+    w = int(np.ceil(np.sqrt(n)))
+    h = int(np.ceil(n/w))
     # only print all thicknesses for the first simulation
     if v.iter_count == 1:
         for j in range(v.n_thickness):
             fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))
             text_effect = withStroke(linewidth=3, foreground='black')
             axes = axes.flatten()
-            for i in range(v.n_out):
+            for i in range(n):
                 axes[i].imshow(v.lacbed_sim[j, :, :, i], cmap='pink')
                 axes[i].axis('off')
                 annotation = f"{v.hkl[v.g_output[i], 0]}{v.hkl[v.g_output[i], 1]}{v.hkl[v.g_output[i], 2]}"
                 axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
                                  size=30, color='w', path_effects=[text_effect])
-            for i in range(v.n_out, len(axes)):
+            for i in range(n, len(axes)):
                 axes[i].axis('off')
             plt.tight_layout()
             plt.show()

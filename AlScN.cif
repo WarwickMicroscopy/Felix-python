@@ -4,8 +4,8 @@ data_54697-ICSD
 _database_code_ICSD 54697
 _audit_creation_date 2005-10-01
 _chemical_name_common 'Aluminium nitride'
-_chemical_formula_structural 'Al0.85 Sc0.15 N'
-_chemical_formula_sum 'Al0.85 Sc0.15 N1'
+_chemical_formula_structural 'Al N'
+_chemical_formula_sum 'Al1 N1'
 _chemical_name_structure_type ZnS-[2H]
 _exptl_crystal_density_diffrn 3.26
 _diffrn_ambient_temperature 301.

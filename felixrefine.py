@@ -151,7 +151,7 @@ v.g_limit = v.g_limit * 2 * np.pi
 
 # output
 print(f"Zone axis: {v.incident_beam_direction.astype(int)}")
-if v.n_thickness ==1:
+if v.n_thickness == 1:
     print(f"Specimen thickness {v.initial_thickness/10} nm")
 else:
     print(f"{v.n_thickness} thicknesses: {', '.join(map(str, v.thickness/10))} nm")
