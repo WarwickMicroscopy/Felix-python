@@ -1,67 +1,60 @@
-
-#(C) 2024 by FIZ Karlsruhe - Leibniz Institute for Information Infrastructure.  All rights reserved.
-data_54697-ICSD
-_database_code_ICSD 54697
-_audit_creation_date 2005-10-01
-_chemical_name_common 'Aluminium nitride'
-_chemical_formula_structural 'Al0.85 Sc0.15 N'
-_chemical_formula_sum 'Al0.85 Sc0.15 N1'
-_chemical_name_structure_type ZnS-[2H]
-_exptl_crystal_density_diffrn 3.26
-_diffrn_ambient_temperature 301.
-_citation_title 'Rietveld-refinement study of aluminium and gallium nitrides'
+#------------------------------------------------------------------------------
+#$Date: 20220606 $
+#$Cobbled together from the olex output of Crysalis Pro $
+#$with unit cell and coordinates changed to match the nominal structure $
+#------------------------------------------------------------------------------
+#
+data_5000001
 loop_
-_citation_id
-_citation_journal_full
-_citation_year
-_citation_journal_volume
-_citation_page_first
-_citation_page_last
-_citation_journal_id_ASTM
-primary 'Journal of Alloys and Compounds' 2004 382 100 106 JALCEU
+_chemical_formula_sum            'C9 H11 N O3'
+_space_group_IT_number           19
+_symmetry_cell_setting           orthorhombic
+_symmetry_Int_Tables_number      19
+_symmetry_space_group_name_Hall  'P 2ac 2ab'
+_symmetry_space_group_name_H-M   'P 21 21 21'
+_cell_angle_alpha                90
+_cell_angle_beta                 90
+_cell_angle_gamma                90
+_cell_formula_units_Z            4
+_cell_length_a                   7.0036
+_cell_length_b                   21.2634
+_cell_length_c                   5.8598
+_cod_original_formula_sum        'C9 H11 N1 O3'
+_cod_database_code               5000001
 loop_
-_citation_author_citation_id
-_citation_author_name
-primary 'Paszkowicz, W.'
-primary 'Podsiadlo, S.'
-primary 'Minikayev, R.'
-_cell_length_a 3.11197(2)
-_cell_length_b 3.11197(2)
-_cell_length_c 4.98089(4)
-_cell_angle_alpha 90.
-_cell_angle_beta 90.
-_cell_angle_gamma 120.
-_cell_volume 41.77
-_cell_formula_units_Z 2
-_space_group_name_H-M_alt 'P 63 m c'
-_space_group_IT_number 186
-loop_
-_space_group_symop_id
 _space_group_symop_operation_xyz
-1 '-x, -x+y, z+1/2'
-2 'x-y, -y, z+1/2'
-3 'y, x, z+1/2'
-4 'x-y, x, z+1/2'
-5 'y, -x+y, z+1/2'
-6 '-x, -y, z+1/2'
-7 'x, x-y, z'
-8 '-x+y, y, z'
-9 '-y, -x, z'
-10 '-x+y, -x, z'
-11 '-y, x-y, z'
-12 'x, y, z'
-
+'x, y, z'
+'1/2+x, 1/2-y, -z'
+'-x, 1/2+y, 1/2-z'
+'1/2-x, -y, 1/2+z'
 loop_
 _atom_site_label
 _atom_site_type_symbol
-_atom_site_symmetry_multiplicity
-_atom_site_Wyckoff_symbol
 _atom_site_fract_x
 _atom_site_fract_y
 _atom_site_fract_z
 _atom_site_B_iso_or_equiv
-_atom_site_occupancy
-Al1 Al 2 b 0.3333 0.6667 0 2.13(2) 0.85
-Sc1 Sc 2 b 0.3333 0.6667 0 2.13(2) 0.15
-N1 N 2 b 0.3333 0.6667 0.3869(5) 1.87(4) 1.0
-#End of TTdata_54697-ICSD
+C1 C 0.53459 0.44483 0.81559  0.85
+C2 C 0.67502 0.30541 0.39187  0.70
+C3 C 0.50666 0.53616 0.56974  0.24
+C4 C 0.60190 0.29334 0.63404  0.40
+C5 C 0.43542 0.49825 0.40172  0.90
+C6 C 0.45001 0.40554 0.64702  0.08
+C7 C 0.55726 0.50921 0.77751  0.74
+C8 C 0.42230 0.33670 0.69004  0.75
+C9 C 0.39817 0.43367 0.43879  1.54
+H1 H 0.60025 0.24275 0.66695  2.32
+H2 H 0.60972 0.53975 0.89113  2.09
+H3 H 0.56400 0.42558 0.00230  1.89
+H4 H 0.36528 0.33777 0.87986  2.75
+H5 H 0.38866 0.51378 0.22906  2.18
+H6 H 0.79932 0.34845 0.80046  2.17
+H7 H 0.86361 0.26388 0.78296  1.12
+H8 H 0.30867 0.32778 0.60906  0.78
+H9 H 0.34416 0.38791 0.31554  1.56
+H10 H 0.54818 0.62240 0.61272  2.38
+H11 H 0.68910 0.29111 0.97178  1.98
+N1 N 0.75897 0.30394 0.80345  1.37
+O1 O 0.57883 0.28546 0.22828  1.24
+O2 O 0.83524 0.33314 0.37498  0.60
+O3 O 0.51878 0.59878 0.53077  2.00

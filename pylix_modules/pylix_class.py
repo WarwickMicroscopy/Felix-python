@@ -32,6 +32,8 @@ class Inp:
         self.incident_beam_direction = None
         self.x_direction = None
         self.normal_direction = None
+        self.n_frames = None
+        self.frame_angle = None
         self.initial_thickness = None
         self.final_thickness = None
         self.delta_thickness = None

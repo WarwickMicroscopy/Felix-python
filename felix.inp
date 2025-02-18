@@ -1,4 +1,4 @@
-# Input file for Felix version :master: v1.3 :29June2024:
+# Input file for Felix version :cRED: v0.0 :18-Feb-2025:
 # ------------------------------------
 
 # ------------------------------------
@@ -14,8 +14,8 @@ byte_size                 = 2
 image_radius              = 42
 
 # Beam selection criteria
-min_reflection_pool       = 200
-min_strong_beams          = 50
+min_reflection_pool       = 100
+min_strong_beams          = 20
 min_weak_beams            = 0
 g_limit                   = 0.0
 
@@ -24,12 +24,13 @@ debye_waller_constant     = 0.0
 absorption_per            = 10.0
 
 # Microscope settings
-convergence_angle         = 0.983
-incident_beam_direction   = [1, 0, 0]
-x_direction               = [0, 2, 1]
-normal_direction          = [1, 0, 0]
+convergence_angle         = 0.13906
+incident_beam_direction   = [100000, 13629, 46009]
+x_direction               = [100000, -518832, -63658]
+normal_direction          = [100000, -10950, -2094]
 accelerating_voltage_kv   = 200.0
-acceptance_angle          = 0.0
+frame_angle               = 0.1
+n_frames                  = 900
 
 # Image output options
 initial_thickness         = 900.0

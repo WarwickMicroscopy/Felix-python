@@ -52,7 +52,7 @@ def read_hkl_file(filename):
     Parameters:
     filename (str): The path to the input file.
     Returns:
-    inp_dict: A dictionary with variable names and values.
+    input_hkls, i_obs, sigma_obs
     """
     input_hkls = []
     i_obs = []
@@ -69,7 +69,7 @@ def read_hkl_file(filename):
 
         for line in file:
             # Remove brackets and split the line
-            line = line.strip().replace('[', '').replace(']', '').replace(',', '')
+            line = line.strip().replace('[', '').replace(']', '').replace(',', ' ')
             if line:  # skip blank lines
                 parts = line.split()
 
@@ -234,10 +234,18 @@ def read_cif(filename):
 
     # tidy up chemical formula
     if "chemical_formula_structural" in cif_dict:
+        # change list to string, if that's what was read in
+        if isinstance(cif_dict['chemical_formula_structural'], list):
+            cif_dict['chemical_formula_structural'] = \
+                "".join(cif_dict['chemical_formula_structural'])
         cif_dict['chemical_formula_structural'] = \
             re.sub(r'(?<!\d)1(?!\d)', '',
                    cif_dict['chemical_formula_structural'].replace(' ', ''))
     if "chemical_formula_sum" in cif_dict:  # preferred
+        # change list to string, if that's what was read in
+        if isinstance(cif_dict['chemical_formula_sum'], list):
+            cif_dict['chemical_formula_sum'] = \
+                "".join(cif_dict['chemical_formula_sum'])
         cif_dict['chemical_formula_sum'] = \
             re.sub(r'(?<!\d)1(?!\d)', '',
                    cif_dict['chemical_formula_sum'].replace(' ', ''))
@@ -261,16 +269,18 @@ def symop_convert(symop_xyz):
         for j, pt in enumerate(parts):
             pt = pt.strip()  # Remove extra spaces
             # Regex to capture the k/l/m (x, y, z) and the fractional part
-            match = re.match(r'([+-]?[xyz])?([+-]\d+/\d+)?([+-]?\d+)?', pt)
+            # match = re.match(r'([+-]?[xyz])?([+-]\d+/\d+)?([+-]?\d+)?', pt)
+            match = re.match(r'([+-]?\d+/\d+)?([+-]?[xyz])?', pt)
+            # r'([+-]?\d+/\d+)?([+-]?\d+)?([+-]?[xyz])?'
             if match:
                 # Extract the variable part (x, y, z)
-                var_part = match.group(1)
+                var_part = match.group(2)
                 if var_part:
                     pm1 = -1 if var_part.startswith('-') else 1
                     axis = coord_map[var_part[-1]]
                     mat[i, j, axis] = pm1
                 # Extract the fractional part
-                frac_part = match.group(2)
+                frac_part = match.group(1)
                 if frac_part:
                     numerator, denominator = map(int, frac_part.split('/'))
                     vec[i, j] = numerator / denominator
@@ -342,7 +352,8 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
 
 
 def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
-                     cell_gamma, space_group, x_dir_c, z_dir_c, norm_dir_c):
+                     cell_gamma, space_group, x_dir_c, z_dir_c, norm_dir_c,
+                     n_frames, v.frame_angle):
     """
     Produces reciprocal lattice vectors and related parameters
 
@@ -418,6 +429,9 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
     x_dir_o /= np.linalg.norm(x_dir_o)
     z_dir_o = t_mat_c2o @ z_dir_c
     z_dir_o /= np.linalg.norm(z_dir_o)
+    # orthogonality check (< 0.1 degree, cos(90-0.1)=0.001475)
+    if abs(np.dot(x_dir_o, z_dir_o)) > np.cos(89.9*np.pi/180.):
+        raise ValueError("x and z directions are not orthogonal!")
     y_dir_o = np.cross(z_dir_o, x_dir_o)
 
     # Transformation matrix from orthogonal to microscope reference frame
