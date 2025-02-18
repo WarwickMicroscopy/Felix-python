@@ -412,31 +412,31 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
     t_mat_c2o = np.column_stack((a_vec_o, b_vec_o, c_vec_o))
 
     # Unit reciprocal lattice vectors in orthogonal frame
-    x_dir_o = np.dot(x_dir_c, np.column_stack((ar_vec_o, br_vec_o, cr_vec_o)))
+    x_dir_o = x_dir_c[0]*ar_vec_o+x_dir_c[1]*br_vec_o+x_dir_c[2]*cr_vec_o
     x_dir_o /= np.linalg.norm(x_dir_o)
     z_dir_o = t_mat_c2o @ z_dir_c
     z_dir_o /= np.linalg.norm(z_dir_o)
     y_dir_o = np.cross(z_dir_o, x_dir_o)
 
     # Transformation matrix from orthogonal to microscope reference frame
-    t_mat_o2m = np.column_stack((x_dir_o, y_dir_o, z_dir_o))
+    t_mat_o2m = np.column_stack((x_dir_o, y_dir_o, z_dir_o)).T
 
     # Unit normal to the specimen in microscope frame
     norm_dir_m = t_mat_o2m @ t_mat_c2o @ norm_dir_c
     norm_dir_m /= np.linalg.norm(norm_dir_m)
 
     # Transform from crystal reference frame to microscope frame
-    a_vec_m = np.dot(t_mat_o2m, a_vec_o)
-    b_vec_m = np.dot(t_mat_o2m, b_vec_o)
-    c_vec_m = np.dot(t_mat_o2m, c_vec_o)
+    a_vec_m = t_mat_o2m @ a_vec_o
+    b_vec_m = t_mat_o2m @ b_vec_o
+    c_vec_m = t_mat_o2m @ c_vec_o
 
     # Reciprocal lattice vectors: microscope frame in 1/Angstrom units
     ar_vec_m = (2.0*np.pi * np.cross(b_vec_m, c_vec_m) /
-                np.dot(b_vec_m, np.cross(c_vec_m, a_vec_m)))
-    br_vec_m = (2.0*np.pi * np.cross(c_vec_m, a_vec_m) /
-                np.dot(c_vec_m, np.cross(a_vec_m, b_vec_m)))
-    cr_vec_m = (2.0*np.pi * np.cross(a_vec_m, b_vec_m) /
                 np.dot(a_vec_m, np.cross(b_vec_m, c_vec_m)))
+    br_vec_m = (2.0*np.pi * np.cross(c_vec_m, a_vec_m) /
+                np.dot(b_vec_m, np.cross(c_vec_m, a_vec_m)))
+    cr_vec_m = (2.0*np.pi * np.cross(a_vec_m, b_vec_m) /
+                np.dot(c_vec_m, np.cross(a_vec_m, b_vec_m)))
 
     # Output to check
     if debug:
@@ -444,13 +444,15 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
         np.set_printoptions(precision=3, suppress=True)
         print(f"a = {cell_a}, b = {cell_b}, c = {cell_c}")
         print(f"alpha = {cell_alpha*180.0/np.pi}, beta = {cell_beta*180.0/np.pi}, gamma = {cell_gamma*180.0/np.pi}")
-        print(f"x = {x_dir_c} (reciprocal space)")
-        print(f"z = {z_dir_c} (direct space)")
+        print(f"X = {x_dir_c} (reciprocal space)")
+        print(f"Z = {z_dir_c} (direct space)")
+        print(" ")
         print("Transformation crystal to orthogonal (O) frame:")
         print(t_mat_c2o)
         print(f"O frame: a = {a_vec_o}, b = {b_vec_o}, c = {c_vec_o}")
         print(f"a* = {ar_vec_o}, b* = {br_vec_o}, c* = {cr_vec_o}")
-        print(f"x = {x_dir_o}, y = {y_dir_o}, z = {z_dir_o}")
+        print(f"X = {x_dir_o}, y = {y_dir_o}, Z = {z_dir_o}")
+        print(" ")
         print("Transformation orthogonal to microscope frame:")
         print(t_mat_o2m)
         print(f"Microscope frame: a = {a_vec_m}, b = {b_vec_m}, c = {c_vec_m}")
