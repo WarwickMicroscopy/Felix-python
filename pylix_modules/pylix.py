@@ -403,16 +403,18 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
                 np.dot(c_vec_o, np.cross(a_vec_o, b_vec_o)))
     cr_vec_o = (2.0*np.pi * np.cross(a_vec_o, b_vec_o) /
                 np.dot(a_vec_o, np.cross(b_vec_o, c_vec_o)))
-
+    # not strictly needed but aren't those e-17 things annoying
     ar_vec_o[np.abs(ar_vec_o) < tiny] = 0.0
     br_vec_o[np.abs(br_vec_o) < tiny] = 0.0
     cr_vec_o[np.abs(cr_vec_o) < tiny] = 0.0
 
     # Transformation matrix from crystal to orthogonal reference frame
     t_mat_c2o = np.column_stack((a_vec_o, b_vec_o, c_vec_o))
+    # And the same for reciprocal frames
+    t_mat_cr2or = np.column_stack((ar_vec_o, br_vec_o, cr_vec_o))
 
     # Unit reciprocal lattice vectors in orthogonal frame
-    x_dir_o = x_dir_c[0]*ar_vec_o+x_dir_c[1]*br_vec_o+x_dir_c[2]*cr_vec_o
+    x_dir_o = t_mat_cr2or @ x_dir_c
     x_dir_o /= np.linalg.norm(x_dir_o)
     z_dir_o = t_mat_c2o @ z_dir_c
     z_dir_o /= np.linalg.norm(z_dir_o)
@@ -449,6 +451,7 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
         print(" ")
         print("Transformation crystal to orthogonal (O) frame:")
         print(t_mat_c2o)
+        print(t_mat_cr2or)
         print(f"O frame: a = {a_vec_o}, b = {b_vec_o}, c = {c_vec_o}")
         print(f"a* = {ar_vec_o}, b* = {br_vec_o}, c* = {cr_vec_o}")
         print(f"X = {x_dir_o}, y = {y_dir_o}, Z = {z_dir_o}")
