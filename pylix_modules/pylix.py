@@ -255,22 +255,22 @@ def symop_convert(symop_xyz):
     for i in range(symmetry_count):
         symop = symop_xyz[i]
         # Remove any numbers, extra spaces, and quotation marks
-        symop = re.sub(r'^[^a-zA-Z-]*', '', symop).replace("'", "").replace('"', '').strip()
+        symop = re.sub(r'^[\s\'\"]*', '', symop).replace("'", "").replace('"', '').strip()
         # split into 3 parts
         parts = symop.split(',')
         for j, pt in enumerate(parts):
-            pt = pt.strip()  # Remove extra spaces
-            # Regex to capture the k/l/m (x, y, z) and the fractional part
-            match = re.match(r'([+-]?[xyz])?([+-]\d+/\d+)?([+-]?\d+)?', pt)
+            match = re.search(r'([+-]?[xyz])', pt)
             if match:
                 # Extract the variable part (x, y, z)
-                var_part = match.group(1)
+                var_part = match.group()
                 if var_part:
                     pm1 = -1 if var_part.startswith('-') else 1
                     axis = coord_map[var_part[-1]]
                     mat[i, j, axis] = pm1
+            match = re.search(r'([+-]?\d+/\d+)', pt)
+            if match:
                 # Extract the fractional part
-                frac_part = match.group(2)
+                frac_part = match.group()
                 if frac_part:
                     numerator, denominator = map(int, frac_part.split('/'))
                     vec[i, j] = numerator / denominator
