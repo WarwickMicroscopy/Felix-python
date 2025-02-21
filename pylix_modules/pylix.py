@@ -263,24 +263,27 @@ def symop_convert(symop_xyz):
     for i in range(symmetry_count):
         symop = symop_xyz[i]
         # Remove any numbers, extra spaces, and quotation marks
-        symop = re.sub(r'^[^a-zA-Z-]*', '', symop).replace("'", "").replace('"', '').strip()
+        symop = re.sub(r'^[\s\'\"]*', '', symop).replace("'", "").replace('"', '').strip()
         # split into 3 parts
         parts = symop.split(',')
         for j, pt in enumerate(parts):
             pt = pt.strip()  # Remove extra spaces
             # Regex to capture the k/l/m (x, y, z) and the fractional part
             # match = re.match(r'([+-]?[xyz])?([+-]\d+/\d+)?([+-]?\d+)?', pt)
-            match = re.match(r'([+-]?\d+/\d+)?([+-]?[xyz])?', pt)
-            # r'([+-]?\d+/\d+)?([+-]?\d+)?([+-]?[xyz])?'
+            # match = re.search(r'([+-]?\d+/\d+)?([+-]?[xyz])?', pt)
+            match = re.search(r'([+-]?[xyz])', pt)
+            # match = re.match(r'([+-]?[xyz])?([+-]?\d+/\d+)?', pt)
             if match:
                 # Extract the variable part (x, y, z)
-                var_part = match.group(2)
+                var_part = match.group()
                 if var_part:
                     pm1 = -1 if var_part.startswith('-') else 1
                     axis = coord_map[var_part[-1]]
                     mat[i, j, axis] = pm1
+            match = re.search(r'([+-]?\d+/\d+)', pt)
+            if match:
                 # Extract the fractional part
-                frac_part = match.group(1)
+                frac_part = match.group()
                 if frac_part:
                     numerator, denominator = map(int, frac_part.split('/'))
                     vec[i, j] = numerator / denominator
@@ -353,7 +356,7 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
 
 def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
                      cell_gamma, space_group, x_dir_c, z_dir_c, norm_dir_c,
-                     n_frames, v.frame_angle):
+                     n_frames, frame_angle):
     """
     Produces reciprocal lattice vectors and related parameters
 
