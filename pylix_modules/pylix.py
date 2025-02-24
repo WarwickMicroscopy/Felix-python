@@ -254,7 +254,11 @@ def read_cif(filename):
 
 
 def symop_convert(symop_xyz):
-    # Converts symmetry operation xyz form into matrix+vector form
+    """ Converts symmetry operation xyz form into matrix+vector form.
+    We expect the input symop_xyz to be a list of strings describing symops.
+    Each string should consist of three parts, comma delimited.
+    Each part should have a direction x, y or z and (optional)
+    a translation expressed as a fraction of integers (with values <= 6)."""
     symmetry_count = len(symop_xyz)
     mat = np.zeros((symmetry_count, 3, 3), dtype="float")
     vec = np.zeros((symmetry_count, 3), dtype="float")
@@ -267,12 +271,8 @@ def symop_convert(symop_xyz):
         # split into 3 parts
         parts = symop.split(',')
         for j, pt in enumerate(parts):
-            pt = pt.strip()  # Remove extra spaces
             # Regex to capture the k/l/m (x, y, z) and the fractional part
-            # match = re.match(r'([+-]?[xyz])?([+-]\d+/\d+)?([+-]?\d+)?', pt)
-            # match = re.search(r'([+-]?\d+/\d+)?([+-]?[xyz])?', pt)
             match = re.search(r'([+-]?[xyz])', pt)
-            # match = re.match(r'([+-]?[xyz])?([+-]?\d+/\d+)?', pt)
             if match:
                 # Extract the variable part (x, y, z)
                 var_part = match.group()
@@ -280,6 +280,8 @@ def symop_convert(symop_xyz):
                     pm1 = -1 if var_part.startswith('-') else 1
                     axis = coord_map[var_part[-1]]
                     mat[i, j, axis] = pm1
+                else:
+                    raise ValueError('.cif read: Error in reading symops')
             match = re.search(r'([+-]?\d+/\d+)', pt)
             if match:
                 # Extract the fractional part
@@ -437,8 +439,17 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
         raise ValueError("x and z directions are not orthogonal!")
     y_dir_o = np.cross(z_dir_o, x_dir_o)
 
+    # Initial orientation matrices for each frame
+    t_mat_o2m = np.zeros((n_frames, 3, 3), dtype=float)
+    angles = np.arange(n_frames) * frame_angle  * np.pi / 180.0# Array of angles
+    cos_angles = np.cos(angles)[:, np.newaxis]  # Shape (n_frames, 1)
+    sin_angles = np.sin(angles)[:, np.newaxis]
+    t_mat_o2m[:, 0, :] = x_dir_o * cos_angles - z_dir_o * sin_angles
+    t_mat_o2m[:, 1, :] = y_dir_o  # Repeated for all frames
+    t_mat_o2m[:, 2, :] = z_dir_o * cos_angles + x_dir_o * sin_angles
+
     # Transformation matrix from orthogonal to microscope reference frame
-    t_mat_o2m = np.column_stack((x_dir_o, y_dir_o, z_dir_o)).T
+    # t_mat_o2m = np.column_stack((x_dir_o, y_dir_o, z_dir_o)).T
 
     # Unit normal to the specimen in microscope frame
     norm_dir_m = t_mat_o2m @ t_mat_c2o @ norm_dir_c
@@ -450,12 +461,15 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
     c_vec_m = t_mat_o2m @ c_vec_o
 
     # Reciprocal lattice vectors: microscope frame in 1/Angstrom units
-    ar_vec_m = (2.0*np.pi * np.cross(b_vec_m, c_vec_m) /
-                np.dot(a_vec_m, np.cross(b_vec_m, c_vec_m)))
-    br_vec_m = (2.0*np.pi * np.cross(c_vec_m, a_vec_m) /
-                np.dot(b_vec_m, np.cross(c_vec_m, a_vec_m)))
-    cr_vec_m = (2.0*np.pi * np.cross(a_vec_m, b_vec_m) /
-                np.dot(c_vec_m, np.cross(a_vec_m, b_vec_m)))
+    ar_vec_m = (2.0*np.pi * np.cross(b_vec_m, c_vec_m, axis=1) /
+                np.einsum('ij,ij->i', a_vec_m,
+                          np.cross(b_vec_m, c_vec_m, axis=1))[:, np.newaxis])
+    br_vec_m = (2.0*np.pi * np.cross(c_vec_m, a_vec_m, axis=1) /
+                np.einsum('ij,ij->i', b_vec_m,
+                          np.cross(c_vec_m, a_vec_m, axis=1))[:, np.newaxis])
+    cr_vec_m = (2.0*np.pi * np.cross(a_vec_m, b_vec_m, axis=1) /
+                np.einsum('ij,ij->i',c_vec_m,
+                          np.cross(a_vec_m, b_vec_m, axis=1))[:, np.newaxis])
 
     # Output to check
     if debug:
