@@ -11,9 +11,8 @@ class Inp:
     def __init__(self):
         self.accelerating_voltage_kv = None
         self.convergence_angle = None
-
-# class simulation:
-#     def __init__(self):
+    
+# simulation:
         self.image_radius = None
         self.min_reflection_pool = None
         self.min_strong_beams = None
@@ -26,21 +25,25 @@ class Inp:
         self.debug = None
         self.plot = None
         self.n_output_reflexions = None
-
-# class sample:
-#     def __init__(self):
-        self.incident_beam_direction = None
-        self.x_direction = None
-        self.normal_direction = None
-        self.n_frames = None
-        self.frame_angle = None
         self.initial_thickness = None
         self.final_thickness = None
         self.delta_thickness = None
         self.debye_waller_constant = None
 
-# class refinement:
-#     def __init__(self):
+# sample:
+        self.incident_beam_direction = None
+        self.x_direction = None
+        self.normal_direction = None
+
+# experimental data
+        self.n_frames = None
+        self.frame_angle = None
+        self.frame_size_x = None
+        self.frame_size_y = None
+        self.frame_resolution = None  # reciprocal Angstroms/pixel
+        self.frame_output = None  # flag to say if we output kinematical frames
+
+# refinement:
         self.refine_mode = None
         self.refine_method = None
         self.refinement_scale = None

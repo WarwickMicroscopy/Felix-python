@@ -156,6 +156,9 @@ v.g_limit = v.g_limit * 2 * np.pi
 
 # output
 print(f"Initial orientation: {v.incident_beam_direction.astype(int)}")
+print(f"{v.n_frames} frames, each integrating over {v.frame_angle} degrees")
+if v.frame_output == 1:
+    print(f"Will output kinematic frame simulation")
 if v.n_thickness == 1:
     print(f"Specimen thickness {v.initial_thickness/10} nm")
 else:
@@ -298,13 +301,18 @@ a_vec_m, b_vec_m, c_vec_m, ar_vec_m, br_vec_m, cr_vec_m, norm_dir_m = \
                         v.space_group, v.x_direction,
                         v.incident_beam_direction, v.normal_direction,
                         v.n_frames, v.frame_angle)
+
 # put the crystal in the micrcoscope reference frame, in Å
-atom_coordinate = (atom_position[:, 0, np.newaxis] * a_vec_m +
-                   atom_position[:, 1, np.newaxis] * b_vec_m +
-                   atom_position[:, 2, np.newaxis] * c_vec_m)
+# NB atom_position gives fractional coordinates of all atoms in the unit cell
+# in the crystal reference frame, atom_coordinate is the same but in the
+# microscope reference frame, for each frame, size [n_frames, n_atoms, 3]
+atom_coordinate = np.einsum('ij,njk->nij', atom_position,
+                            np.stack([a_vec_m, b_vec_m, c_vec_m], axis=2))
 
-# sim.simulate(v)
-
+# %% Initial kinematic simulation and set up outputs for rocking curves
+max_frame_g = np.sqrt(v.frame_size_x * v.frame_size_x) * v.frame_resolution
+print(f"Experimental resolution limit {max_frame_g} $\AA^{-1}$")
+ 
 # %% set up refinement
 # --------------------------------------------------------------------
 # n_variables calculated depending upon Ug and non-Ug refinement
