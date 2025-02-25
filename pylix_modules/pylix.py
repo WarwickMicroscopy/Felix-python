@@ -336,7 +336,7 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
     # make small values precisely zero
     all_atom_position[np.abs(all_atom_position) < tol] = 0.0
     # Reduce to the set of unique fractional atomic positions using tol
-    dist_matrix = np.linalg.norm(all_atom_position[:, np.newaxis, :] -
+    dist_rix = np.linalg.norm(all_atom_position[:, np.newaxis, :] -
                                  all_atom_position[np.newaxis, :, :], axis=-1)
     unique_mask = np.ones(len(all_atom_position), dtype=bool)
     i = []  # indices of unique atom positiona
@@ -344,7 +344,7 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
         if unique_mask[j]:  # If this point is still unique
             i.append(j)
             # Mark all points within tol as not unique
-            unique_mask &= (dist_matrix[j] > tol)
+            unique_mask &= (dist_rix[j] > tol)
 
     # Apply the same reduction to the labels, names, occupancies, and B_iso
     atom_position = all_atom_position[i]
@@ -354,6 +354,38 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
     B_iso = all_B_iso[i]
 
     return atom_position, atom_label, atom_name, B_iso, occupancy
+
+
+# def frame_plot(v, hkl_pool):
+#     """ makes set of frame images that should correspond to the experimental
+#     data.  Uses whole variable space v """
+    
+#     # Instrument broadening term - sets the FWHM  of a kinematic rocking curve
+#     inst = 6000.0
+#     max_intensity = 10.0  # needs to be decided somehow
+#     frame = np.zeros((v.frame_size_x, v.frame_size_y), dtype=float)
+    
+    
+#     DO ind = 1,INFrames
+#       RAngle = REAL(ind-1)*DEG2RADIAN*RFrameAngle
+#       RSim = ZERO
+#       ! output g's
+#       DO knd = 2, INhkl
+#         IF (IgOutList(knd,ind).NE.0) THEN
+#           lnd = IgPoolList(knd,ind)  ! index of reflection in the reciprocal lattice
+#           Rg = Ig(lnd,1)*RarVecO + Ig(lnd,2)*RbrVecO + Ig(lnd,3)*RcrVecO  ! g-vector
+#           RgMag = SQRT(DOT_PRODUCT(Rg,Rg))
+#           RSg = RgPoolSg(knd,ind)  !Sg
+#           ! x- and y-coords (NB swapped in the image!)
+#           Rp = RXDirO*COS(RAngle)-RZDirO*SIN(RAngle)  ! unit vector horizontal in the image
+#           ! position of the spot, 2% leeway to avoid going over the edge of the image
+#           Ix = ISim-0.98*NINT(DOT_PRODUCT(Rg,Rp)*REAL(ISim)/RGOutLimit)  
+#           Iy = ISim+0.98*NINT(DOT_PRODUCT(Rg,RYDirO)*REAL(ISim)/RGOutLimit)
+#           RSim(Iy-1:Iy+1,Ix-1:Ix+1) = RIkin(lnd)*EXP(-RInst*RSg*RSg)
+#         END IF
+#       END DO
+#       ! direct beam
+#       RSim(ISim-1:ISim+1,ISim-1:ISim+1) = RImax
 
 
 def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
@@ -425,14 +457,14 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
     cr_vec_o[np.abs(cr_vec_o) < tiny] = 0.0
 
     # Transformation matrix from crystal to orthogonal reference frame
-    t_mat_c2o = np.column_stack((a_vec_o, b_vec_o, c_vec_o))
+    t_c2o = np.column_stack((a_vec_o, b_vec_o, c_vec_o))
     # And the same for reciprocal frames
-    t_mat_cr2or = np.column_stack((ar_vec_o, br_vec_o, cr_vec_o))
+    t_cr2or = np.column_stack((ar_vec_o, br_vec_o, cr_vec_o))
 
     # Unit reciprocal lattice vectors in orthogonal frame
-    x_dir_o = t_mat_cr2or @ x_dir_c
+    x_dir_o = t_cr2or @ x_dir_c
     x_dir_o /= np.linalg.norm(x_dir_o)
-    z_dir_o = t_mat_c2o @ z_dir_c
+    z_dir_o = t_c2o @ z_dir_c
     z_dir_o /= np.linalg.norm(z_dir_o)
     # orthogonality check (< 0.1 degree, cos(90-0.1)=0.001475)
     if abs(np.dot(x_dir_o, z_dir_o)) > np.cos(89.9*np.pi/180.):
@@ -440,36 +472,21 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
     y_dir_o = np.cross(z_dir_o, x_dir_o)
 
     # Initial orientation matrices for each frame
-    t_mat_o2m = np.zeros((n_frames, 3, 3), dtype=float)
-    angles = np.arange(n_frames) * frame_angle  * np.pi / 180.0# Array of angles
+    angles = np.arange(n_frames)*frame_angle*np.pi/180.0  # Array of angles
     cos_angles = np.cos(angles)[:, np.newaxis]  # Shape (n_frames, 1)
     sin_angles = np.sin(angles)[:, np.newaxis]
-    t_mat_o2m[:, 0, :] = x_dir_o * cos_angles - z_dir_o * sin_angles
-    t_mat_o2m[:, 1, :] = y_dir_o  # Repeated for all frames
-    t_mat_o2m[:, 2, :] = z_dir_o * cos_angles + x_dir_o * sin_angles
+    # t_o2m = np.zeros((n_frames, 3, 3), dtype=float)
+    # t_o2m[:, 0, :] = x_dir_o * cos_angles - z_dir_o * sin_angles
+    # t_o2m[:, 1, :] = y_dir_o  # Repeated for all frames
+    # t_o2m[:, 2, :] = z_dir_o * cos_angles + x_dir_o * sin_angles
+    t_m2o = np.zeros((n_frames, 3, 3), dtype=float)
+    t_m2o[:, :, 0] = x_dir_o * cos_angles - z_dir_o * sin_angles
+    t_m2o[:, :, 1] = y_dir_o  # Repeated for all frames
+    t_m2o[:, :, 2] = z_dir_o * cos_angles + x_dir_o * sin_angles
 
-    # Transformation matrix from orthogonal to microscope reference frame
-    # t_mat_o2m = np.column_stack((x_dir_o, y_dir_o, z_dir_o)).T
-
-    # Unit normal to the specimen in microscope frame
-    norm_dir_m = t_mat_o2m @ t_mat_c2o @ norm_dir_c
-    norm_dir_m /= np.linalg.norm(norm_dir_m)
-
-    # Transform from crystal reference frame to microscope frame
-    a_vec_m = t_mat_o2m @ a_vec_o
-    b_vec_m = t_mat_o2m @ b_vec_o
-    c_vec_m = t_mat_o2m @ c_vec_o
-
-    # Reciprocal lattice vectors: microscope frame in 1/Angstrom units
-    ar_vec_m = (2.0*np.pi * np.cross(b_vec_m, c_vec_m, axis=1) /
-                np.einsum('ij,ij->i', a_vec_m,
-                          np.cross(b_vec_m, c_vec_m, axis=1))[:, np.newaxis])
-    br_vec_m = (2.0*np.pi * np.cross(c_vec_m, a_vec_m, axis=1) /
-                np.einsum('ij,ij->i', b_vec_m,
-                          np.cross(c_vec_m, a_vec_m, axis=1))[:, np.newaxis])
-    cr_vec_m = (2.0*np.pi * np.cross(a_vec_m, b_vec_m, axis=1) /
-                np.einsum('ij,ij->i',c_vec_m,
-                          np.cross(a_vec_m, b_vec_m, axis=1))[:, np.newaxis])
+    # Unit normal to the specimen in orthogonal frame
+    norm_dir_o = t_c2o @ norm_dir_c
+    norm_dir_o /= np.linalg.norm(norm_dir_o)
 
     # Output to check
     if debug:
@@ -481,18 +498,16 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
         print(f"Z = {z_dir_c} (direct space)")
         print(" ")
         print("Transformation crystal to orthogonal (O) frame:")
-        print(t_mat_c2o)
-        print(t_mat_cr2or)
+        print(t_c2o)
+        print(t_cr2or)
         print(f"O frame: a = {a_vec_o}, b = {b_vec_o}, c = {c_vec_o}")
         print(f"a* = {ar_vec_o}, b* = {br_vec_o}, c* = {cr_vec_o}")
         print(f"X = {x_dir_o}, y = {y_dir_o}, Z = {z_dir_o}")
         print(" ")
-        print("Transformation orthogonal to microscope frame:")
-        print(t_mat_o2m)
-        print(f"Microscope frame: a = {a_vec_m}, b = {b_vec_m}, c = {c_vec_m}")
-        print(f"Specimen surface normal = {norm_dir_m}")
-        print(f"a* = {ar_vec_m}, b* = {br_vec_m}, c* = {c_vec_m}")
-    return a_vec_m, b_vec_m, c_vec_m, ar_vec_m, br_vec_m, cr_vec_m, norm_dir_m
+        print("Transformation microscope to orthogonal frame:")
+        print(t_m2o)
+
+    return t_m2o, t_c2o, t_cr2or
 
 
 def change_origin(space_group, basis_atom_position, basis_wyckoff):

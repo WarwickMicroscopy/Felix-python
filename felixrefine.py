@@ -289,37 +289,25 @@ print(f"  Mean inner potential = {mip:.1f} Volts")
 # Wave vector magnitude in crystal
 # high-energy approximation (not HOLZ compatible)
 # K^2=k^2+U0
-big_k_mag = electron_wave_vector_magnitude
-# big_k_mag = np.sqrt(electron_wave_vector_magnitude**2+mip)
+# big_k_mag = electron_wave_vector_magnitude, in reciprocal Angstroms
+big_k_mag = np.sqrt(electron_wave_vector_magnitude**2+mip)
 # k-vector for the incident beam (k is along z in the microscope frame)
-big_k = np.array([0.0, 0.0, big_k_mag])
+# big_k = np.array([0.0, 0.0, big_k_mag])
 
-# set up reference frames - we have vectors a,b,c,n, a*,b*,c* for n_frames
-# not sure this is the best approach, may be better to work in a fixed
-# orthogonal crystal frame and put each beam orientation into that
-# (the alternative involves transforming the crystal and g-vectors for each
+# set up reference frames
+# We work in a fixed orthogonal crystal frame _o (the alternative involves
+# transforming the crystal and g-vectors for each
 # frame, which is a lot of unnecessary calculation)
-a_vec_m, b_vec_m, c_vec_m, ar_vec_m, br_vec_m, cr_vec_m, norm_dir_m = \
+t_m2o, t_c2o, t_cr2or = \
     px.reference_frames(v.debug, v.cell_a, v.cell_b, v.cell_c,
                         v.cell_alpha, v.cell_beta, v.cell_gamma,
                         v.space_group, v.x_direction,
                         v.incident_beam_direction, v.normal_direction,
                         v.n_frames, v.frame_angle)
-# we will work in the initial microscope frame and 
-# a*, b*, c*
-ar0 = ar_vec_m[0, :]  # in the initial orientation
-br0 = br_vec_m[0, :]
-cr0 = cr_vec_m[0, :]
-# magnitudes, add to v class for subsequent calculations 
-v.ar_mag = np.linalg.norm(ar0)
-v.br_mag = np.linalg.norm(br0)
-v.cr_mag = np.linalg.norm(cr0)
-# now put the crystal in the initial micrcoscope reference frame, in Å
-# NB atom_position gives fractional coordinates of all atoms in the unit cell
-# in the crystal reference frame, atom_coordinate is the same but in the
-# microscope reference frame, for each frame, size [n_frames, n_atoms, 3]
-atom_coordinate = np.einsum('ij,njk->nij', atom_position,
-                            np.stack([a_vec_m, b_vec_m, c_vec_m], axis=2))
+# magnitudes of a*, b*, c*, (((add to v class for later calculations?)))
+ar_mag = np.linalg.norm(t_cr2or[:, 0])
+br_mag = np.linalg.norm(t_cr2or[:, 1])
+cr_mag = np.linalg.norm(t_cr2or[:, 2])
 
 # %% Initial kinematic simulation and set up outputs for rocking curves
 
@@ -327,19 +315,72 @@ max_frame_g = np.pi*np.sqrt(v.frame_size_x * v.frame_size_y)*v.frame_resolution
 print(f"Experimental resolution limit {0.5*max_frame_g/np.pi:.3} reciprocal Angstroms")
 
 # we want a reciprocal lattice bigger than max_frame_g in all directions.
-# initial set works for rectilinear cells
-max_h = int(max_frame_g/v.ar_mag+1)
-max_k = int(max_frame_g/v.br_mag+1)
-max_l = int(max_frame_g/v.cr_mag+1)
-print(f"na,nb,nc: {max_h},{max_k},{max_l}")
+# NB sin divisor is an attempt to increase range for non-rectilinear cells
+max_h = int(max_frame_g/ar_mag+1)/np.sin(v.cell_alpha)
+max_k = int(max_frame_g/br_mag+1)/np.sin(v.cell_beta)
+max_l = int(max_frame_g/cr_mag+1)/np.sin(v.cell_gamma)
 # but needs adjusting for cell angles
 # Generate grid of h, k, l values
-h_range = np.arange(-max_h, max_h + 1)
-k_range = np.arange(-max_k, max_k + 1)
-l_range = np.arange(-max_l, max_l + 1)
+h_range, k_range, l_range = np.ogrid[-max_h:max_h+1, -max_k:max_k+1,
+                                     -max_l:max_l+1]
+# hkl_pool = np.column_stack((h_range.ravel(), k_range.ravel(), l_range.ravel()))
 h_, k_, l_ = np.meshgrid(h_range, k_range, l_range, indexing='ij')
-hkl_pool = np.stack((h_.ravel(), k_.ravel(), l_.ravel()), axis=-1)
+hkl_pool = np.stack((h_.ravel(), k_.ravel(), l_.ravel()), axis=-1)  # hkl's
+g_pool = hkl_pool @ t_cr2or.T  # in reciprocal Angstroms, in _o frame
+g_mag = np.linalg.norm(g_pool, axis=1)  # in reciprocal Angstroms
+# sort them in ascending order
+f = np.argsort(g_mag)
+g_pool = g_pool[f]
+g_mag = g_mag[f]
+# get rid of 000
+g_pool = g_pool[1:]
+g_mag = g_mag[1:]
+print(f"Kinematic beam pool of {len(g_mag)} reflexions")  # n_g
 
+# incident wave vector, size [n_frames, 3]
+z_dir_o = t_c2o @ np.array([0., 0., 1.])
+z_dir_o /= np.linalg.norm(z_dir_o)
+big_k = big_k_mag * z_dir_o
+# k.g for all frames and g-vectors, size [n_frames, n_g]
+k_dot_g = np.einsum('ij,kj->ik', big_k, g_pool)
+
+# Calculate Sg by getting the vector k0, which is coplanar with k and g and
+# corresponds to an incident beam at the Bragg condition
+# First we need the vector component of k perpendicular to g, which we call p
+p = (big_k[:, np.newaxis, :] - (k_dot_g[..., np.newaxis] * g_pool) /
+     (g_mag**2)[np.newaxis, :, np.newaxis])  # Shape [n_frames, n_g, 3]
+# and now make k0 by adding vectors parallel to g and p
+# i.e. k0 = (p/|p|)*(k^2-g^2/4)^0.5 - g/2
+p_norm = np.linalg.norm(p, axis=2)
+k0 = (np.sqrt(big_k_mag**2 - 0.25*g_mag**2)[np.newaxis, :, np.newaxis] *
+      p/p_norm[..., np.newaxis]) - 0.5*g_pool  # Shape [n_frames, n_g, 3]
+# The angle phi between big_k and k0 is how far we are from the Bragg condition
+k_dot_k0 = np.einsum('ij,ikj->ik', big_k, k0)
+phi = np.arccos(k_dot_k0 / big_k_mag**2)
+# and now Sg is 2g sin(phi/2), with the sign of |K|-|K+g|, size [n_frames, n_g]
+k_plus_g = big_k[:, np.newaxis, :] + g_pool
+sg = 2*g_mag[np.newaxis, :]*np.sin(0.5*phi) \
+    * np.sign(big_k_mag - np.linalg.norm(k_plus_g, axis=2))
+
+# set up frame image
+dw = 3
+i0 = 10.0  # max_intensity, needs to be decided somehow
+x = v.frame_size_x
+y = v.frame_size_y
+x0 = int(x/2)
+y0 = int(y/2)
+x_dir_o = t_cr2or @ v.x_direction
+x_dir_o /= np.linalg.norm(x_dir_o)
+frame = np.zeros((x, y), dtype=float)
+frame[x0-dw:x0+dw, y0-dw:y0+dw] = i0
+sg_frame = sg[0, :]
+spot_frame = np.where(np.abs(sg_frame) < 0.1)
+x1 = x0 + np.dot(g_pool[spot_frame, :], x_dir_o) * v.frame_resolution
+
+plt.imshow(frame)
+plt.show()
+
+# px.frame_plot(v, hkl_pool)
  
 # %% set up refinement
 # --------------------------------------------------------------------
