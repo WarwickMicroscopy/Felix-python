@@ -39,7 +39,7 @@ delta_thickness           = 50.0
 precision                 = 0.00002
 frame_size_x			  = 512
 frame_size_y			  = 512
-frame_resolution		  = 0.001953125
+frame_resolution		  = 0.00390625
 frame_output			  = 1
 
 # Refinement specific flags
