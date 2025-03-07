@@ -149,16 +149,19 @@ v.x_direction = np.array(v.x_direction, dtype='float')
 v.atomic_sites = np.array(v.atomic_sites, dtype='int')
 
 # set up orientation matrices for each frame
-v.o_mat = np.zeros([v.n_frames, 3, 3])
+# v.o_mat = np.zeros([v.n_frames, 3, 3])
 
 # crystallography exp(2*pi*i*g.r) to physics convention exp(i*g.r)
-v.g_limit = v.g_limit * 2 * np.pi
+v.frame_g_limit *= 2 * np.pi
+# *** temporary definition of frame resolution A^-1/pixel ***
+v.frame_resolution =  (v.frame_size_x//2) / v.frame_g_limit
+v.g_limit *= 2 * np.pi
 
 # output
 print(f"Initial orientation: {v.incident_beam_direction.astype(int)}")
 print(f"{v.n_frames} frames, each integrating over {v.frame_angle} degrees")
 if v.frame_output == 1:
-    print(f"Will output kinematic frame simulation")
+    print("Will output kinematic frame simulation")
 if v.n_thickness == 1:
     print(f"Specimen thickness {v.initial_thickness/10} nm")
 else:
@@ -286,18 +289,16 @@ for i in range(n_atoms):  # get the scattering factor
 mip = mip.item()*scatt_fac_to_volts  # NB convert array to float
 print(f"  Mean inner potential = {mip:.1f} Volts")
 
-# Wave vector magnitude in crystal
+# Wave vector magnitude in crystal, in reciprocal Angstroms
 # high-energy approximation (not HOLZ compatible)
 # K^2=k^2+U0
-# big_k_mag = electron_wave_vector_magnitude, in reciprocal Angstroms
 big_k_mag = np.sqrt(electron_wave_vector_magnitude**2+mip)
-# k-vector for the incident beam (k is along z in the microscope frame)
-# big_k = np.array([0.0, 0.0, big_k_mag])
 
-# set up reference frames
-# We work in a fixed orthogonal crystal frame _o (the alternative involves
-# transforming the crystal and g-vectors for each
-# frame, which is a lot of unnecessary calculation)
+# %% set up reference frames
+# We work in a fixed orthogonal crystal frame _o
+# t_m2o = transformation microscope to orthogonal
+# t_c2o = transformation crystal to orthogonal
+# t_cr2o = transformation crystal to orthogonal, reciprocal space
 t_m2o, t_c2o, t_cr2or = \
     px.reference_frames(v.debug, v.cell_a, v.cell_b, v.cell_c,
                         v.cell_alpha, v.cell_beta, v.cell_gamma,
@@ -311,77 +312,100 @@ cr_mag = np.linalg.norm(t_cr2or[:, 2])
 
 # %% Initial kinematic simulation and set up outputs for rocking curves
 
-max_frame_g = np.pi*np.sqrt(v.frame_size_x * v.frame_size_y)*v.frame_resolution
-print(f"Experimental resolution limit {0.5*max_frame_g/np.pi:.3} reciprocal Angstroms")
-
+# kinematic beam pool
+print(f"Experimental resolution limit {0.5*v.frame_g_limit/np.pi:.3} reciprocal Angstroms")
 # we want a reciprocal lattice bigger than max_frame_g in all directions.
 # NB sin divisor is an attempt to increase range for non-rectilinear cells
-max_h = int(max_frame_g/ar_mag+1)/np.sin(v.cell_alpha)
-max_k = int(max_frame_g/br_mag+1)/np.sin(v.cell_beta)
-max_l = int(max_frame_g/cr_mag+1)/np.sin(v.cell_gamma)
-# but needs adjusting for cell angles
+max_h = int(v.frame_g_limit/ar_mag+1)/np.sin(v.cell_alpha)
+max_k = int(v.frame_g_limit/br_mag+1)/np.sin(v.cell_beta)
+max_l = int(v.frame_g_limit/cr_mag+1)/np.sin(v.cell_gamma)
+
 # Generate grid of h, k, l values
 h_range, k_range, l_range = np.ogrid[-max_h:max_h+1, -max_k:max_k+1,
                                      -max_l:max_l+1]
-# hkl_pool = np.column_stack((h_range.ravel(), k_range.ravel(), l_range.ravel()))
 h_, k_, l_ = np.meshgrid(h_range, k_range, l_range, indexing='ij')
 hkl_pool = np.stack((h_.ravel(), k_.ravel(), l_.ravel()), axis=-1)  # hkl's
 g_pool = hkl_pool @ t_cr2or.T  # in reciprocal Angstroms, in _o frame
 g_mag = np.linalg.norm(g_pool, axis=1)  # in reciprocal Angstroms
 # sort them in ascending order
 f = np.argsort(g_mag)
+hkl_pool = hkl_pool[f]
 g_pool = g_pool[f]
 g_mag = g_mag[f]
+# cut down to g limit
+hkl_pool = hkl_pool[g_mag < v.frame_g_limit]
+g_pool = g_pool[g_mag < v.frame_g_limit]
+g_mag = g_mag[g_mag < v.frame_g_limit]
 # get rid of 000
-g_pool = g_pool[1:]
-g_mag = g_mag[1:]
+hkl_pool = hkl_pool[1:]
+g_pool = g_pool[1:]  # Shape [n_g, 3]
+g_mag = g_mag[1:]  # Shape [n_g]
+n_g = len(g_mag)
 print(f"Kinematic beam pool of {len(g_mag)} reflexions")  # n_g
 
-# incident wave vector, size [n_frames, 3]
-z_dir_o = t_c2o @ np.array([0., 0., 1.])
-z_dir_o /= np.linalg.norm(z_dir_o)
-big_k = big_k_mag * z_dir_o
-# k.g for all frames and g-vectors, size [n_frames, n_g]
-k_dot_g = np.einsum('ij,kj->ik', big_k, g_pool)
+# structure factor Fg
+# calculate g.r for all g-vectors and atom positions [n_g, n_atoms]
+g_dot_r = np.einsum('ij,kj->ik', g_pool, atom_position)
+# exp(i g.r) [n_hkl, n_hkl, n_atoms]
+phase = np.exp(-1j * g_dot_r)
+f_g = np.zeros((n_g, n_atoms))  # container for scattering factors fg
+for i in range(n_atoms):
+    # get the scattering factor
+    if v.scatter_factor_method == 0:
+        f_g[:, i] = px.f_kirkland(atomic_number[i], g_mag)
+    elif v.scatter_factor_method == 1:
+        f_g[:, i] = px.f_lobato(atomic_number[i], g_mag)
+    elif v.scatter_factor_method == 2:
+        f_g[:, i] = px.f_peng(atomic_number[i], g_mag)
+    elif v.scatter_factor_method == 3:
+        f_g[:, i] = px.f_doyle_turner(atomic_number[i], g_mag)
+    else:
+        raise ValueError("No scattering factors chosen in felix.inp")
+F_g = np.sum(f_g * phase, axis=1)
+I_g = (F_g * np.conj(F_g)).real
+# incident wave vector lies along Z in the microscope frame
+# so we can get if for all frames from the last column of the
+# transformation matrix t_m20. size [n_frames, 3]
+big_k = big_k_mag * t_m2o[:, :, 2]
 
-# Calculate Sg by getting the vector k0, which is coplanar with k and g and
-# corresponds to an incident beam at the Bragg condition
-# First we need the vector component of k perpendicular to g, which we call p
-p = (big_k[:, np.newaxis, :] - (k_dot_g[..., np.newaxis] * g_pool) /
-     (g_mag**2)[np.newaxis, :, np.newaxis])  # Shape [n_frames, n_g, 3]
-# and now make k0 by adding vectors parallel to g and p
-# i.e. k0 = (p/|p|)*(k^2-g^2/4)^0.5 - g/2
-p_norm = np.linalg.norm(p, axis=2)
-k0 = (np.sqrt(big_k_mag**2 - 0.25*g_mag**2)[np.newaxis, :, np.newaxis] *
-      p/p_norm[..., np.newaxis]) - 0.5*g_pool  # Shape [n_frames, n_g, 3]
-# The angle phi between big_k and k0 is how far we are from the Bragg condition
-k_dot_k0 = np.einsum('ij,ikj->ik', big_k, k0)
-phi = np.arccos(k_dot_k0 / big_k_mag**2)
-# and now Sg is 2g sin(phi/2), with the sign of |K|-|K+g|, size [n_frames, n_g]
-k_plus_g = big_k[:, np.newaxis, :] + g_pool
-sg = 2*g_mag[np.newaxis, :]*np.sin(0.5*phi) \
-    * np.sign(big_k_mag - np.linalg.norm(k_plus_g, axis=2))
+# Deviation parameter sg for all frames and g-vectors, size [n_frames, n_g]
+sg = px.sg(big_k, g_pool)
 
 # set up frame image
-dw = 3
-i0 = 10.0  # max_intensity, needs to be decided somehow
-x = v.frame_size_x
-y = v.frame_size_y
-x0 = int(x/2)
-y0 = int(y/2)
-x_dir_o = t_cr2or @ v.x_direction
-x_dir_o /= np.linalg.norm(x_dir_o)
-frame = np.zeros((x, y), dtype=float)
-frame[x0-dw:x0+dw, y0-dw:y0+dw] = i0
-sg_frame = sg[0, :]
-spot_frame = np.where(np.abs(sg_frame) < 0.1)
-x1 = x0 + np.dot(g_pool[spot_frame, :], x_dir_o) * v.frame_resolution
+bb = 5
+dw = 3  # width of spot
+i0 = np.max(I_g)  # max_intensity, needs to be decided somehow
+# centre of plot, position of 000
+x0 = v.frame_size_x//2
+y0 = v.frame_size_y//2
 
-plt.imshow(frame)
-plt.show()
+# *** sg limit used to determine whether a reflexion is in the frame
+ds = 0.05
+
+# %% plot
+for i in range(v.n_frames):  # frame number v.n_frames
+    ff = np.where(np.abs(sg[i, :]) < ds)
+    hkl_frame = hkl_pool[ff]
+    g_frame_o = g_pool[ff]
+    I_g_frame = I_g[ff]
+    xy = np.einsum('kij,li->klj', t_m2o, g_frame_o) * v.frame_resolution
+    xy = np.round(xy).astype(int)
+
+    frame = np.zeros((v.frame_size_x, v.frame_size_y), dtype=float)
+    frame[x0-dw:x0+dw, y0-dw:y0+dw] = i0
+    for j in range(len(xy[1])):
+        frame[x0+xy[i, j, 0]-dw:x0+xy[i, j, 0]+dw, y0+xy[i, j, 1]-dw:y0+xy[i, j, 1]+dw] = I_g_frame[i]
+
+    fig = plt.figure(frameon=False)
+    plt.imshow(frame)
+    plt.axis("off")
+    # fig, ax = plt.subplots(figsize=(bb, bb))
+    # plt.scatter(xy[i, :, 0], xy[i, :, 1])
+    plt.show()
 
 # px.frame_plot(v, hkl_pool)
  
+
 # %% set up refinement
 # --------------------------------------------------------------------
 # n_variables calculated depending upon Ug and non-Ug refinement

@@ -14,6 +14,7 @@ def read_inp_file(filename):
     Reads in the file felix.inp and assigns values based on text labels.
     Each line in the file should have the format: variable_name = value.
     The order of variables in the file does not matter.
+    Expected variable names are in pylix_class Inp
 
     Parameters:
     filename (str): The path to the input file.
@@ -356,36 +357,34 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
     return atom_position, atom_label, atom_name, B_iso, occupancy
 
 
-# def frame_plot(v, hkl_pool):
-#     """ makes set of frame images that should correspond to the experimental
-#     data.  Uses whole variable space v """
+def frame_plot(v, hkl_pool):
+    """ makes set of frame images that should correspond to the experimental
+    data.  Uses whole variable space v """
     
-#     # Instrument broadening term - sets the FWHM  of a kinematic rocking curve
-#     inst = 6000.0
-#     max_intensity = 10.0  # needs to be decided somehow
-#     frame = np.zeros((v.frame_size_x, v.frame_size_y), dtype=float)
-    
-    
-#     DO ind = 1,INFrames
-#       RAngle = REAL(ind-1)*DEG2RADIAN*RFrameAngle
-#       RSim = ZERO
-#       ! output g's
-#       DO knd = 2, INhkl
-#         IF (IgOutList(knd,ind).NE.0) THEN
-#           lnd = IgPoolList(knd,ind)  ! index of reflection in the reciprocal lattice
-#           Rg = Ig(lnd,1)*RarVecO + Ig(lnd,2)*RbrVecO + Ig(lnd,3)*RcrVecO  ! g-vector
-#           RgMag = SQRT(DOT_PRODUCT(Rg,Rg))
-#           RSg = RgPoolSg(knd,ind)  !Sg
-#           ! x- and y-coords (NB swapped in the image!)
-#           Rp = RXDirO*COS(RAngle)-RZDirO*SIN(RAngle)  ! unit vector horizontal in the image
-#           ! position of the spot, 2% leeway to avoid going over the edge of the image
-#           Ix = ISim-0.98*NINT(DOT_PRODUCT(Rg,Rp)*REAL(ISim)/RGOutLimit)  
-#           Iy = ISim+0.98*NINT(DOT_PRODUCT(Rg,RYDirO)*REAL(ISim)/RGOutLimit)
-#           RSim(Iy-1:Iy+1,Ix-1:Ix+1) = RIkin(lnd)*EXP(-RInst*RSg*RSg)
-#         END IF
-#       END DO
-#       ! direct beam
-#       RSim(ISim-1:ISim+1,ISim-1:ISim+1) = RImax
+    # DO ind = 1,INFrames
+    #   RAngle = REAL(ind-1)*DEG2RADIAN*RFrameAngle
+    #   RSim = ZERO
+    #   # output g's
+    #   DO knd = 2, INhkl
+    #     IF (IgOutList(knd,ind).NE.0) THEN
+    #       lnd = IgPoolList(knd,ind)  ! index of reflection in the reciprocal lattice
+    #       Rg = Ig(lnd,1)*RarVecO + Ig(lnd,2)*RbrVecO + Ig(lnd,3)*RcrVecO  ! g-vector
+    #       RgMag = SQRT(DOT_PRODUCT(Rg,Rg))
+    #       RSg = RgPoolSg(knd,ind)  !Sg
+    #       ! x- and y-coords (NB swapped in the image!)
+    #       Rp = RXDirO*COS(RAngle)-RZDirO*SIN(RAngle)  ! unit vector horizontal in the image
+    #       ! position of the spot, 2% leeway to avoid going over the edge of the image
+    #       Ix = ISim-0.98*NINT(DOT_PRODUCT(Rg,Rp)*REAL(ISim)/RGOutLimit)  
+    #       Iy = ISim+0.98*NINT(DOT_PRODUCT(Rg,RYDirO)*REAL(ISim)/RGOutLimit)
+    #       RSim(Iy-1:Iy+1,Ix-1:Ix+1) = RIkin(lnd)*EXP(-RInst*RSg*RSg)
+    #     END IF
+    #   END DO
+    #   ! direct beam
+    #   RSim(ISim-1:ISim+1,ISim-1:ISim+1) = RImax
+    # Instrument broadening term - sets the FWHM  of a kinematic rocking curve
+    inst = 6000.0
+    max_intensity = 10.0  # needs to be decided somehow
+    frame = np.zeros((v.frame_size_x, v.frame_size_y), dtype=float)
 
 
 def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
@@ -451,17 +450,13 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
                 np.dot(c_vec_o, np.cross(a_vec_o, b_vec_o)))
     cr_vec_o = (2.0*np.pi * np.cross(a_vec_o, b_vec_o) /
                 np.dot(a_vec_o, np.cross(b_vec_o, c_vec_o)))
-    # not strictly needed but aren't those e-17 things annoying
-    ar_vec_o[np.abs(ar_vec_o) < tiny] = 0.0
-    br_vec_o[np.abs(br_vec_o) < tiny] = 0.0
-    cr_vec_o[np.abs(cr_vec_o) < tiny] = 0.0
 
     # Transformation matrix from crystal to orthogonal reference frame
     t_c2o = np.column_stack((a_vec_o, b_vec_o, c_vec_o))
     # And the same for reciprocal frames
     t_cr2or = np.column_stack((ar_vec_o, br_vec_o, cr_vec_o))
 
-    # Unit reciprocal lattice vectors in orthogonal frame
+    # Initial unit X and Z vectors in orthogonal frame
     x_dir_o = t_cr2or @ x_dir_c
     x_dir_o /= np.linalg.norm(x_dir_o)
     z_dir_o = t_c2o @ z_dir_c
@@ -471,14 +466,10 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
         raise ValueError("x and z directions are not orthogonal!")
     y_dir_o = np.cross(z_dir_o, x_dir_o)
 
-    # Initial orientation matrices for each frame
+    # Orientation matrices for each frame
     angles = np.arange(n_frames)*frame_angle*np.pi/180.0  # Array of angles
     cos_angles = np.cos(angles)[:, np.newaxis]  # Shape (n_frames, 1)
     sin_angles = np.sin(angles)[:, np.newaxis]
-    # t_o2m = np.zeros((n_frames, 3, 3), dtype=float)
-    # t_o2m[:, 0, :] = x_dir_o * cos_angles - z_dir_o * sin_angles
-    # t_o2m[:, 1, :] = y_dir_o  # Repeated for all frames
-    # t_o2m[:, 2, :] = z_dir_o * cos_angles + x_dir_o * sin_angles
     t_m2o = np.zeros((n_frames, 3, 3), dtype=float)
     t_m2o[:, :, 0] = x_dir_o * cos_angles - z_dir_o * sin_angles
     t_m2o[:, :, 1] = y_dir_o  # Repeated for all frames
@@ -499,6 +490,7 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
         print(" ")
         print("Transformation crystal to orthogonal (O) frame:")
         print(t_c2o)
+        print("Transformation crystal to orthogonal (O) frame, reciprocal space:")
         print(t_cr2or)
         print(f"O frame: a = {a_vec_o}, b = {b_vec_o}, c = {c_vec_o}")
         print(f"a* = {ar_vec_o}, b* = {br_vec_o}, c* = {cr_vec_o}")
@@ -1176,6 +1168,37 @@ def deviation_parameter(convergence_angle, image_radius, big_k_mag, g_pool,
 
     return s_g, tilted_k
 
+
+def sg(big_k, g_pool):
+    """ Calculates deviation parameter sg for a set of incident wave vectors
+    big_k and a set of g-vectors g_pool, both experessed in the same
+    orthogonal reference frame"""
+    g_mag = np.linalg.norm(g_pool, axis=1)
+    big_k_mag = np.linalg.norm(big_k[0])
+    # k.g for all frames and g-vectors, size [n_frames, n_g]
+    k_dot_g = np.einsum('ij,kj->ik', big_k, g_pool)
+    # Calculate Sg by getting the vector k0, which is coplanar with k and g and
+    # corresponds to an incident beam at the Bragg condition
+    # First we need the component of k perpendicular to g, which we call p
+    p = (big_k[:, np.newaxis, :] - (k_dot_g[..., np.newaxis] * g_pool) /
+         (g_mag**2)[np.newaxis, :, np.newaxis])  # Shape [n_frames, n_g, 3]
+    # and now make k0 by adding vectors parallel to g and p
+    # i.e. k0 = (p/|p|)*(k^2-g^2/4)^0.5 - g/2, Shape [n_frames, n_g, 3]
+    p_norm = np.linalg.norm(p, axis=2)
+    k0 = (np.sqrt(big_k_mag**2 - 0.25*g_mag**2)[np.newaxis, :, np.newaxis] *
+          p/p_norm[..., np.newaxis]) - 0.5*g_pool[np.newaxis, ...]
+    # The angle phi between big_k and k0
+    # is how far we are from the Bragg condition
+    k_dot_k0 = np.einsum('ij,ikj->ik', big_k, k0) / big_k_mag**2
+    k_dot_k0[k_dot_k0 > 1] = 1.0  # clean up overflows
+    phi = np.arccos(k_dot_k0)
+    # Sg is 2g sin(phi/2), with the sign of |K|-|K+g|, size [n_frames, n_g]
+    k_plus_g = big_k[:, np.newaxis, :] + g_pool
+    sg = 2*g_mag[np.newaxis, :]*np.sin(0.5*phi) \
+        * np.sign(big_k_mag - np.linalg.norm(k_plus_g, axis=2))
+
+    return sg
+    
 
 def strong_beams(s_g_pix, ug_matrix, min_strong_beams):
     """

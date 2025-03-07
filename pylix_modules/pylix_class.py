@@ -41,6 +41,7 @@ class Inp:
         self.frame_size_x = None
         self.frame_size_y = None
         self.frame_resolution = None  # reciprocal Angstroms/pixel
+        self.frame_g_limit = None  # reciprocal Angstroms
         self.frame_output = None  # flag to say if we output kinematical frames
 
 # refinement:

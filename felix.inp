@@ -1,4 +1,4 @@
-# Input file for Felix version :cRED: v0.0 :18-Feb-2025:
+# Input file for Felix version :cRED: v0.0 :7-Mar-2025:
 # ------------------------------------
 
 # ------------------------------------
@@ -29,8 +29,8 @@ incident_beam_direction   = [100000, 13629, 46009]
 x_direction               = [100000, -518832, -63658]
 normal_direction          = [100000, -10950, -2094]
 accelerating_voltage_kv   = 200.0
-frame_angle               = 0.1
-n_frames                  = 2
+frame_angle               = 1
+n_frames                  = 140
 
 # Image output options
 initial_thickness         = 900.0
@@ -39,7 +39,8 @@ delta_thickness           = 50.0
 precision                 = 0.00002
 frame_size_x			  = 512
 frame_size_y			  = 512
-frame_resolution		  = 0.00390625
+frame_resolution          = 0.0064
+frame_g_limit             = 1.0
 frame_output			  = 1
 
 # Refinement specific flags
