@@ -11,6 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patheffects import withStroke
 import matplotlib.colors as mcolors
+import matplotlib.animation as animation
 import time
 from scipy.constants import c, h, e, m_e, angstrom
 
@@ -362,7 +363,7 @@ for i in range(n_atoms):
     else:
         raise ValueError("No scattering factors chosen in felix.inp")
 F_g = np.sum(f_g * phase, axis=1)
-I_g = (F_g * np.conj(F_g)).real
+I_kin = (F_g * np.conj(F_g)).real
 # incident wave vector lies along Z in the microscope frame
 # so we can get if for all frames from the last column of the
 # transformation matrix t_m20. size [n_frames, 3]
@@ -372,9 +373,8 @@ big_k = big_k_mag * t_m2o[:, :, 2]
 sg = px.sg(big_k, g_pool)
 
 # set up frame image
-bb = 5
-dw = 3  # width of spot
-i0 = np.max(I_g)  # max_intensity, needs to be decided somehow
+
+dw = 5  # width of spot
 # centre of plot, position of 000
 x0 = v.frame_size_x//2
 y0 = v.frame_size_y//2
@@ -383,28 +383,59 @@ y0 = v.frame_size_y//2
 ds = 0.05
 
 # %% plot
-for i in range(v.n_frames):  # frame number v.n_frames
-    ff = np.where(np.abs(sg[i, :]) < ds)
-    hkl_frame = hkl_pool[ff]
-    g_frame_o = g_pool[ff]
-    I_g_frame = I_g[ff]
-    xy = np.einsum('kij,li->klj', t_m2o, g_frame_o) * v.frame_resolution
-    xy = np.round(xy).astype(int)
+inst = 10.0  # 
+mask = np.abs(sg) < ds  # find all reflexions in all frames in the sg limit
+hkl_indices = [np.where(mask[i])[0] for i in range(mask.shape[0])]  # indices
+sg_frame = [sg[j, i] for j, i in enumerate(hkl_indices)]
+hkl_frame = [hkl_pool[i] for i in hkl_indices]  # indices
+g_frame_o = [g_pool[i] for i in hkl_indices]  # orthogonal g-vectors
+I_kin_frame = [I_kin[i] for i in hkl_indices]  # kinematic intensities
+I_calc_frame = [np.array(I_k_f) * np.exp(-inst * np.abs(np.array(sg_)))
+                for I_k_f, sg_ in zip(I_kin_frame, sg_frame)]  # fade with sg
+I000 = np.max(np.concatenate(I_kin_frame))
+# positions, all reflexions in all frames
+x_y = [np.round((g_f @ t_m2o[i]) * v.frame_resolution).astype(int)
+       for i, g_f in enumerate(g_frame_o)]
 
+# # Initialize figure
+# fig, ax = plt.subplots(frameon=False)
+# ax.set_xticks([])  # Hide ticks
+# ax.set_yticks([])
+# frame_img = ax.imshow(np.zeros((v.frame_size_x, v.frame_size_y)), cmap='cividis',
+#                       vmin=0, vmax=I000)
+
+# def update(frame_idx):
+#     frame = np.zeros((v.frame_size_x, v.frame_size_y), dtype=float)
+#     if hkl_indices[frame_idx].size > 0:
+#         # Set max intensity in the center region
+#         frame[x0 - dw:x0 + dw, y0 - dw:x0 + dw] = I000
+
+#         # Place intensities at calculated positions
+#         for j, xy in enumerate(x_y[frame_idx]):
+#             frame[x0 + xy[0] - dw:x0 + xy[0] + dw,
+#                   y0 + xy[1] - dw:y0 + xy[1] + dw] = I_kin_frame[frame_idx][j]
+#     frame_img.set_array(frame)
+#     return [frame_img]
+    
+# ani = animation.FuncAnimation(fig, update, frames=v.n_frames, interval=38.46, blit=False)
+# plt.show()
+# ani.save("animation.gif", writer="pillow", fps=26)
+
+for i in range(v.n_frames):  # frame number v.n_frames
+    # make a blank image
     frame = np.zeros((v.frame_size_x, v.frame_size_y), dtype=float)
-    frame[x0-dw:x0+dw, y0-dw:y0+dw] = i0
-    for j in range(len(xy[1])):
-        frame[x0+xy[i, j, 0]-dw:x0+xy[i, j, 0]+dw, y0+xy[i, j, 1]-dw:y0+xy[i, j, 1]+dw] = I_g_frame[i]
+    frame[x0-dw:x0+dw, y0-dw:y0+dw] = I000
+    for j, xy in enumerate(x_y[i]):
+        frame[x0+xy[0]-dw:x0+xy[0]+dw,
+              y0+xy[1]-dw:y0+xy[1]+dw] = I_calc_frame[i][j]
 
     fig = plt.figure(frameon=False)
-    plt.imshow(frame)
+    plt.imshow(frame, cmap='grey')
     plt.axis("off")
-    # fig, ax = plt.subplots(figsize=(bb, bb))
-    # plt.scatter(xy[i, :, 0], xy[i, :, 1])
     plt.show()
 
 # px.frame_plot(v, hkl_pool)
- 
+
 
 # %% set up refinement
 # --------------------------------------------------------------------

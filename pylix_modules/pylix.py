@@ -466,7 +466,9 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
         raise ValueError("x and z directions are not orthogonal!")
     y_dir_o = np.cross(z_dir_o, x_dir_o)
 
-    # Orientation matrices for each frame
+    # t_m2o = orientation matrix for each frame, size [(n_frames, 3, 3]
+    # convert microscope v_m to orthogonal v_o by v_o = t_m2o[i,:,:] @ v_m
+    # convert orthogonal v_o to microscope v_m by v_m = v_o @ t_m2o[i,:,:]
     angles = np.arange(n_frames)*frame_angle*np.pi/180.0  # Array of angles
     cos_angles = np.cos(angles)[:, np.newaxis]  # Shape (n_frames, 1)
     sin_angles = np.sin(angles)[:, np.newaxis]
