@@ -372,11 +372,11 @@ g_frame_o = [g_pool[i] for i in g_where]  # g-vectors (orthogonal frame)
 # kinematic intensity is constant for each reflexion
 I_kin_frame = [I_kin[i] for i in g_where]
 
-# set 000 to have the intensity of the strongest reflexion
-I000 = np.max(np.concatenate(I_kin_frame))
+# set intensity of the strongest reflexion to unity
+I_100 = np.max(np.concatenate(I_kin_frame))
 # calculated intensity applies the rocking curve profile
 I_calc_frame = [np.array(I_k) *
-                np.exp(-np.abs(np.array(sg_))*np.abs(np.array(sg_))/cc)
+                np.exp(-np.abs(np.array(sg_))*np.abs(np.array(sg_))/cc)/I_100
                 for I_k, sg_ in zip(I_kin_frame, sg_frame)]
 
 # reflexion positions in all frames
@@ -387,7 +387,7 @@ x_y = [np.round((g_f @ t_m2o[i]) * v.frame_resolution).astype(int)
 for i in range(v.n_frames):  # frame number v.n_frames
     # make a blank image
     frame = np.zeros((v.frame_size_x, v.frame_size_y), dtype=float)
-    frame[x0-dw:x0+dw, y0-dw:y0+dw] = I000
+    frame[x0-dw:x0+dw, y0-dw:y0+dw] = 1.0
     for j, xy in enumerate(x_y[i]):
         frame[x0+xy[0]-dw:x0+xy[0]+dw,
               y0+xy[1]-dw:y0+xy[1]+dw] = I_calc_frame[i][j]
@@ -400,10 +400,17 @@ for i in range(v.n_frames):  # frame number v.n_frames
 
 # %% rocking curves
 for g in np.unique(np.concatenate(g_where)):
-    rc = [I_f[idx_list == g]  # Extract intensity where reflexion index matches
-          for I_f, idx_list in zip(I_calc_frame, g_where)
-          for idx, i in enumerate(idx_list) if i == g]
-    plt.plot(rc)
+    # Extract intensity where reflexion index matches
+    rc = np.squeeze([I_f[idx_list == g]
+                     for I_f, idx_list in zip(I_calc_frame, g_where)
+                     for idx, i in enumerate(idx_list) if i == g])
+
+    fig = plt.figure(figsize=(5, 3.5))
+    ax = fig.add_subplot(111)
+    ax.plot(rc)
+    ax.set_xlabel('Frame')
+    ax.set_ylabel('Intensity')
+    plt.suptitle(f"{hkl_pool[g]}")
     plt.show()
 
 # %% set up refinement
