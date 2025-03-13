@@ -149,8 +149,9 @@ v.normal_direction = np.array(v.normal_direction, dtype='float')
 v.x_direction = np.array(v.x_direction, dtype='float')
 v.atomic_sites = np.array(v.atomic_sites, dtype='int')
 
-# set up orientation matrices for each frame
-# v.o_mat = np.zeros([v.n_frames, 3, 3])
+# set up absorption if needed
+if v.absorption_method != 1:
+    v.absorption_per = 0.0
 
 # crystallography exp(2*pi*i*g.r) to physics convention exp(i*g.r)
 v.frame_g_limit *= 2 * np.pi
@@ -323,9 +324,12 @@ n_g = len(g_mag)
 print(f"Kinematic beam pool of {len(g_mag)} reflexions")  # n_g
 
 # structure factor Fg for all reflexions in g_pool
-F_g = px.Fg(g_pool, g_mag, atom_position, atomic_number, v.scatter_factor_method, v.absorption_method)
+F_g = px.Fg(g_pool, g_mag, atom_position, atomic_number, occupancy,
+            v.scatter_factor_method, v.absorption_method,
+            v.absorption_per, electron_velocity, B_iso)
 
 I_kin = (F_g * np.conj(F_g)).real
+
 # incident wave vector lies along Z in the microscope frame
 # so we can get if for all frames from the last column of the
 # transformation matrix t_m20. size [n_frames, 3]

@@ -1048,20 +1048,28 @@ def hkl_make(t_cr2or, g_limit, lattice_type):
     return hkl_pool, g_pool, g_mag
 
 
-def Fg(g_pool, g_mag, atom_position, atomic_number,
-       scatter_factor_method, absorption_method):
+def Fg(g_pool, g_mag, atom_position, atomic_number, occupancy,
+       scatter_factor_method, absorption_method, absorption_per,
+       electron_velocity, B_iso):
     """ Generates structure factors F_g
-    for an input numpy array of g-vectors g_pool
+    for an input g_pool, numpy array [n_g, 3], vectors in reciprocal Angstroms
     """
     # calculate g.r for all g-vectors and atom positions [n_g, n_atoms]
     g_dot_r = np.einsum('ij,kj->ik', g_pool, atom_position)
     # exp(i g.r) [n_hkl, n_hkl, n_atoms]
     phase = np.exp(-1j * g_dot_r)
 
+    # Debye-waller factor
+    dwf = np.ones((len(g_pool), len(atom_position)), dtype=np.complex128)
+
     # scattering factor
-    f_g = np.zeros((len(g_pool), len(atom_position)))
+    f_g = np.zeros((len(g_pool), len(atom_position)), dtype=np.complex128)
+    # absorptive scattering factor, NB if fg' = 0 if method != 1, line 152
+    f_g_prime = 1j * f_g * absorption_per/100.0
+
+    # atom by atom calculations
     for i in range(len(atom_position)):
-        # get the scattering factor
+        # atomic scattering factor
         if scatter_factor_method == 0:
             f_g[:, i] = f_kirkland(atomic_number[i], g_mag)
         elif scatter_factor_method == 1:
@@ -1073,19 +1081,15 @@ def Fg(g_pool, g_mag, atom_position, atomic_number,
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
 
-    # absorptive scattering factor (null for absorption_method==0)
-    # no absorption
-    if absorption_method == 0:
-        f_g_prime = np.zeros_like(f_g)
-    # proportional model
-    elif absorption_method == 1:
-        f_g_prime = 1j * f_g * absorption_per/100.0
-    # Bird & King model, parameterised by Thomas (Acta Cryst 2023)
-    elif absorption_method == 2:
-        f_g_prime = 1j * f_thomas(g_mag, B_iso[i],
-                                  atomic_number[i], electron_velocity)
+        # Bird & King model, parameterised by Thomas (Acta Cryst 2023)
+        if absorption_method == 2:
+            f_g_prime[:, i] = 1j * f_thomas(g_mag, B_iso[i], atomic_number[i],
+                                            electron_velocity)
 
-    F_g = np.sum((f_g + f_g_prime) * phase, axis=1)
+        # Debye-waller factor
+        dwf[:, i] = np.exp(-(B_iso[i] * g_mag * g_mag)/(16*np.pi**2))
+
+    F_g = np.sum((f_g + f_g_prime) * dwf * occupancy * phase, axis=1)
 
     return F_g
 
