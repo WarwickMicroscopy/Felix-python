@@ -951,9 +951,10 @@ def preferred_basis(space_group, basis_atom_position, basis_wyckoff):
         return basis_atom_position
 
 
-def hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k, lattice_type,
-             min_reflection_pool, min_strong_beams, g_limit, input_hkls,
-             electron_wave_vector_magnitude):
+def hkl_make(t_cr2or, g_limit, lattice_type):
+    # def hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k, lattice_type,
+    #              min_reflection_pool, min_strong_beams, g_limit, input_hkls,
+    #              electron_wave_vector_magnitude):
     """
     Generates Miller indices that satisfy the selection rules for a given
     lattice type and are close to the Bragg condition.
@@ -973,10 +974,14 @@ def hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k, lattice_type,
     g_magnitudes (ndarray): their magnitudes
     """
 
-    # Calculate the magnitude of reciprocal lattice basis vectors
-    ar_mag = np.linalg.norm(ar_vec_m)
-    br_mag = np.linalg.norm(br_vec_m)
-    cr_mag = np.linalg.norm(cr_vec_m)
+    # Reciprocal lattice vectors are the columns in t_cr2or, in o frame
+    ar = t_cr2or[:, 0]
+    br = t_cr2or[:, 1]
+    cr = t_cr2or[:, 2]
+    # Magnitudes
+    ar_mag = np.linalg.norm(ar)
+    br_mag = np.linalg.norm(br)
+    cr_mag = np.linalg.norm(cr)
 
     # Determine shell size (smallest basis vector)
     shell = min(ar_mag, br_mag, cr_mag)
@@ -1024,53 +1029,65 @@ def hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k, lattice_type,
     hkl_pool = hkl_pool[mask]
 
     # Calculate g-vectors and their magnitudes
-    g_pool = hkl_pool @ np.array([ar_vec_m, br_vec_m, cr_vec_m])
+    g_pool = hkl_pool @ np.array([ar, br, cr])
     g_mag = np.linalg.norm(g_pool, axis=1) + 1.0e-12
+    # sort them in ascending order
     sorter = np.argsort(g_mag)
     g_pool = g_pool[sorter]
     hkl_pool = hkl_pool[sorter]
-    g_mag = np.linalg.norm(g_pool, axis=1) + 1.0e-12
+    g_mag = g_mag[sorter]
+    # cut down to g limit
+    hkl_pool = hkl_pool[g_mag < g_limit]
+    g_pool = g_pool[g_mag < g_limit]
+    g_mag = g_mag[g_mag < g_limit]
+    # get rid of 000
+    hkl_pool = hkl_pool[1:]
+    g_pool = g_pool[1:]
+    g_mag = g_mag[1:]
 
-    # Calculate deviation from Bragg condition
-    g_plus_k = g_pool + big_k
-    deviations = np.abs(electron_wave_vector_magnitude -
-                        np.linalg.norm(g_plus_k, axis=1)) / g_mag
-    deviations[0] = 0  # 000 beam
-    
-    # we choose reflections by increasing the radius of reciprocal space
-    # explored until we have enough
-    # (limited by g_limit or min_reflection_pool, whichever is smallest)
+    return hkl_pool, g_pool, g_mag
 
-    # first shell
-    lnd = 1.0  # Number of the shell
-    current_g_limit = shell*lnd
-    mask = (g_mag <= current_g_limit) & (deviations < 0.08)
-    hkl = hkl_pool[mask]
-    # expand until we have enough
-    while (len(hkl) < min_reflection_pool) and (lnd * shell < g_limit):
-        lnd += 1.0
-        current_g_limit = shell*lnd
-        mask = (g_mag <= current_g_limit) & (deviations < 0.08)
-        hkl = hkl_pool[mask]
-    g_pool = g_pool[mask]
-    g_mag = g_mag[mask]
 
-    # Check if enough beams are present
-    if len(hkl) < min_strong_beams:
-        raise ValueError("Beam pool is too small, please increase g_limit!")
+def Fg(g_pool, g_mag, atom_position, atomic_number,
+       scatter_factor_method, absorption_method):
+    """ Generates structure factors F_g
+    for an input numpy array of g-vectors g_pool
+    """
+    # calculate g.r for all g-vectors and atom positions [n_g, n_atoms]
+    g_dot_r = np.einsum('ij,kj->ik', g_pool, atom_position)
+    # exp(i g.r) [n_hkl, n_hkl, n_atoms]
+    phase = np.exp(-1j * g_dot_r)
 
-    # Check if required output HKLs are in the hkl list
-    g_output = ([])
-    for g in input_hkls:
-        comparison = np.all(hkl == g, axis=1)
-        if not np.any(comparison):
-            print(f"Input hkl not found: {g}")
-        idx = np.where(comparison)
-        if len(idx[0]) > 0:
-            g_output.append(idx[0][0])
-    g_output = np.append([0],np.array(g_output))
+    # scattering factor
+    f_g = np.zeros((len(g_pool), len(atom_position)))
+    for i in range(len(atom_position)):
+        # get the scattering factor
+        if scatter_factor_method == 0:
+            f_g[:, i] = f_kirkland(atomic_number[i], g_mag)
+        elif scatter_factor_method == 1:
+            f_g[:, i] = f_lobato(atomic_number[i], g_mag)
+        elif scatter_factor_method == 2:
+            f_g[:, i] = f_peng(atomic_number[i], g_mag)
+        elif scatter_factor_method == 3:
+            f_g[:, i] = f_doyle_turner(atomic_number[i], g_mag)
+        else:
+            raise ValueError("No scattering factors chosen in felix.inp")
 
-    return hkl, g_pool, g_mag, np.array(g_output)
+    # absorptive scattering factor (null for absorption_method==0)
+    # no absorption
+    if absorption_method == 0:
+        f_g_prime = np.zeros_like(f_g)
+    # proportional model
+    elif absorption_method == 1:
+        f_g_prime = 1j * f_g * absorption_per/100.0
+    # Bird & King model, parameterised by Thomas (Acta Cryst 2023)
+    elif absorption_method == 2:
+        f_g_prime = 1j * f_thomas(g_mag, B_iso[i],
+                                  atomic_number[i], electron_velocity)
+
+    F_g = np.sum((f_g + f_g_prime) * phase, axis=1)
+
+    return F_g
 
 
 def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,

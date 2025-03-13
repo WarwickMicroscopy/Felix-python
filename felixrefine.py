@@ -306,63 +306,25 @@ t_m2o, t_c2o, t_cr2or = \
                         v.space_group, v.x_direction,
                         v.incident_beam_direction, v.normal_direction,
                         v.n_frames, v.frame_angle)
-# magnitudes of a*, b*, c*, (((add to v class for later calculations?)))
-ar_mag = np.linalg.norm(t_cr2or[:, 0])
-br_mag = np.linalg.norm(t_cr2or[:, 1])
-cr_mag = np.linalg.norm(t_cr2or[:, 2])
+
 
 # %% Initial kinematic simulation and set up outputs for rocking curves
 
 # kinematic beam pool
 print(f"Experimental resolution limit {0.5*v.frame_g_limit/np.pi:.3} reciprocal Angstroms")
-# we want a reciprocal lattice bigger than max_frame_g in all directions.
-# NB sin divisor is an attempt to increase range for non-rectilinear cells
-max_h = int(v.frame_g_limit/ar_mag+1)/np.sin(v.cell_alpha)
-max_k = int(v.frame_g_limit/br_mag+1)/np.sin(v.cell_beta)
-max_l = int(v.frame_g_limit/cr_mag+1)/np.sin(v.cell_gamma)
 
-# Generate grid of h, k, l values
-h_range, k_range, l_range = np.ogrid[-max_h:max_h+1, -max_k:max_k+1,
-                                     -max_l:max_l+1]
-h_, k_, l_ = np.meshgrid(h_range, k_range, l_range, indexing='ij')
-hkl_pool = np.stack((h_.ravel(), k_.ravel(), l_.ravel()), axis=-1)  # hkl's
-g_pool = hkl_pool @ t_cr2or.T  # in reciprocal Angstroms, in _o frame
-g_mag = np.linalg.norm(g_pool, axis=1)  # in reciprocal Angstroms
-# sort them in ascending order
-f = np.argsort(g_mag)
-hkl_pool = hkl_pool[f]
-g_pool = g_pool[f]
-g_mag = g_mag[f]
-# cut down to g limit
-hkl_pool = hkl_pool[g_mag < v.frame_g_limit]
-g_pool = g_pool[g_mag < v.frame_g_limit]
-g_mag = g_mag[g_mag < v.frame_g_limit]
-# get rid of 000
-hkl_pool = hkl_pool[1:]
-g_pool = g_pool[1:]  # Shape [n_g, 3]
-g_mag = g_mag[1:]  # Shape [n_g]
+# NB sine divisor is an attempt to expand range for non-rectilinear cells
+expand = np.min([np.sin(v.cell_alpha),
+                 np.sin(v.cell_beta), np.sin(v.cell_gamma)])
+g_limit = int(v.frame_g_limit/expand)
+hkl_pool, g_pool, g_mag = px.hkl_make(t_cr2or, g_limit, v.lattice_type)
 n_g = len(g_mag)
+
 print(f"Kinematic beam pool of {len(g_mag)} reflexions")  # n_g
 
-# structure factor Fg
-# calculate g.r for all g-vectors and atom positions [n_g, n_atoms]
-g_dot_r = np.einsum('ij,kj->ik', g_pool, atom_position)
-# exp(i g.r) [n_hkl, n_hkl, n_atoms]
-phase = np.exp(-1j * g_dot_r)
-f_g = np.zeros((n_g, n_atoms))  # container for scattering factors fg
-for i in range(n_atoms):
-    # get the scattering factor
-    if v.scatter_factor_method == 0:
-        f_g[:, i] = px.f_kirkland(atomic_number[i], g_mag)
-    elif v.scatter_factor_method == 1:
-        f_g[:, i] = px.f_lobato(atomic_number[i], g_mag)
-    elif v.scatter_factor_method == 2:
-        f_g[:, i] = px.f_peng(atomic_number[i], g_mag)
-    elif v.scatter_factor_method == 3:
-        f_g[:, i] = px.f_doyle_turner(atomic_number[i], g_mag)
-    else:
-        raise ValueError("No scattering factors chosen in felix.inp")
-F_g = np.sum(f_g * phase, axis=1)
+# structure factor Fg for all reflexions in g_pool
+F_g = px.Fg(g_pool, g_mag, atom_position, atomic_number, v.scatter_factor_method, v.absorption_method)
+
 I_kin = (F_g * np.conj(F_g)).real
 # incident wave vector lies along Z in the microscope frame
 # so we can get if for all frames from the last column of the
@@ -379,48 +341,45 @@ dw = 5  # width of spot
 x0 = v.frame_size_x//2
 y0 = v.frame_size_y//2
 
-# *** sg limit used to determine whether a reflexion is in the frame
+
+# %% frame by frame calculations
+
+# we assume kinematic rocking curves are Gaussian in shape
+# with FWHM rc_fwhm, in reciprocal angstroms, when plotted against sg
+rc_fwhm = 0.02  # could be an input, but must be less than ds below!!!
+cc = (rc_fwhm/(2**1.5 * np.log(2)))**2  # term in gaussian denominator
+
+# A sg limit is used to determine whether a reflexion is in the frame
+# note that sg of 0.1 is a long way from the Bragg condition at 200kV
+# a value of 0.05 seems about right to match to experiment
+# could be an input or a multiple of rc_fwhm, but keep as a fixed value for now
 ds = 0.05
 
-# %% plot
-inst = 10.0  # 
-mask = np.abs(sg) < ds  # find all reflexions in all frames in the sg limit
-hkl_indices = [np.where(mask[i])[0] for i in range(mask.shape[0])]  # indices
-sg_frame = [sg[j, i] for j, i in enumerate(hkl_indices)]
-hkl_frame = [hkl_pool[i] for i in hkl_indices]  # indices
-g_frame_o = [g_pool[i] for i in hkl_indices]  # orthogonal g-vectors
-I_kin_frame = [I_kin[i] for i in hkl_indices]  # kinematic intensities
-I_calc_frame = [np.array(I_k_f) * np.exp(-inst * np.abs(np.array(sg_)))
-                for I_k_f, sg_ in zip(I_kin_frame, sg_frame)]  # fade with sg
+# find all reflexions in all frames in the sg limit
+mask = np.abs(sg) < ds  # boolean, size [n_frames, n_g]
+
+# Now we make lists of numpy arrays, using this mask
+# The first list g_where, length n_frames, gives the indices of the reflexions
+# in the numpy arrays sg, hkl_pool, g_pool, I_kin
+g_where = [np.where(mask[i])[0] for i in range(mask.shape[0])]
+sg_frame = [sg[j, i] for j, i in enumerate(g_where)]  # sg values 
+hkl_frame = [hkl_pool[i] for i in g_where]  # Miller indices
+g_frame_o = [g_pool[i] for i in g_where]  # g-vectors (orthogonal frame)
+# kinematic intensity is constant for each reflexion
+I_kin_frame = [I_kin[i] for i in g_where]
+
+# set 000 to have the intensity of the strongest reflexion
 I000 = np.max(np.concatenate(I_kin_frame))
-# positions, all reflexions in all frames
+# calculated intensity applies the rocking curve profile
+I_calc_frame = [np.array(I_k) *
+                np.exp(-np.abs(np.array(sg_))*np.abs(np.array(sg_))/cc)
+                for I_k, sg_ in zip(I_kin_frame, sg_frame)]
+
+# reflexion positions in all frames
 x_y = [np.round((g_f @ t_m2o[i]) * v.frame_resolution).astype(int)
        for i, g_f in enumerate(g_frame_o)]
 
-# # Initialize figure
-# fig, ax = plt.subplots(frameon=False)
-# ax.set_xticks([])  # Hide ticks
-# ax.set_yticks([])
-# frame_img = ax.imshow(np.zeros((v.frame_size_x, v.frame_size_y)), cmap='cividis',
-#                       vmin=0, vmax=I000)
-
-# def update(frame_idx):
-#     frame = np.zeros((v.frame_size_x, v.frame_size_y), dtype=float)
-#     if hkl_indices[frame_idx].size > 0:
-#         # Set max intensity in the center region
-#         frame[x0 - dw:x0 + dw, y0 - dw:x0 + dw] = I000
-
-#         # Place intensities at calculated positions
-#         for j, xy in enumerate(x_y[frame_idx]):
-#             frame[x0 + xy[0] - dw:x0 + xy[0] + dw,
-#                   y0 + xy[1] - dw:y0 + xy[1] + dw] = I_kin_frame[frame_idx][j]
-#     frame_img.set_array(frame)
-#     return [frame_img]
-    
-# ani = animation.FuncAnimation(fig, update, frames=v.n_frames, interval=38.46, blit=False)
-# plt.show()
-# ani.save("animation.gif", writer="pillow", fps=26)
-
+# plot the frames
 for i in range(v.n_frames):  # frame number v.n_frames
     # make a blank image
     frame = np.zeros((v.frame_size_x, v.frame_size_y), dtype=float)
@@ -434,8 +393,14 @@ for i in range(v.n_frames):  # frame number v.n_frames
     plt.axis("off")
     plt.show()
 
-# px.frame_plot(v, hkl_pool)
 
+# %% rocking curves
+for g in np.unique(np.concatenate(g_where)):
+    rc = [I_f[idx_list == g]  # Extract intensity where reflexion index matches
+          for I_f, idx_list in zip(I_calc_frame, g_where)
+          for idx, i in enumerate(idx_list) if i == g]
+    plt.plot(rc)
+    plt.show()
 
 # %% set up refinement
 # --------------------------------------------------------------------
@@ -943,3 +908,31 @@ print(f"Bloch wave calculation in {bwc:.1f} s ({1000*(bwc)/(4*v.image_radius**2)
 print(f"Total time {total_time:.1f} s")
 print("-----------------------------------------------------------------")
 print("|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||")
+
+
+###|||JUNK ZONE|||###
+
+# attempt at an animated set of frames
+# # Initialize figure
+# fig, ax = plt.subplots(frameon=False)
+# ax.set_xticks([])  # Hide ticks
+# ax.set_yticks([])
+# frame_img = ax.imshow(np.zeros((v.frame_size_x, v.frame_size_y)), cmap='cividis',
+#                       vmin=0, vmax=I000)
+
+# def update(frame_idx):
+#     frame = np.zeros((v.frame_size_x, v.frame_size_y), dtype=float)
+#     if hkl_indices[frame_idx].size > 0:
+#         # Set max intensity in the center region
+#         frame[x0 - dw:x0 + dw, y0 - dw:x0 + dw] = I000
+
+#         # Place intensities at calculated positions
+#         for j, xy in enumerate(x_y[frame_idx]):
+#             frame[x0 + xy[0] - dw:x0 + xy[0] + dw,
+#                   y0 + xy[1] - dw:y0 + xy[1] + dw] = I_kin_frame[frame_idx][j]
+#     frame_img.set_array(frame)
+#     return [frame_img]
+    
+# ani = animation.FuncAnimation(fig, update, frames=v.n_frames, interval=38.46, blit=False)
+# plt.show()
+# ani.save("animation.gif", writer="pillow", fps=26)
