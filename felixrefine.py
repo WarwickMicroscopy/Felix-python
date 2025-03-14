@@ -395,26 +395,38 @@ if v.frame_output == 1:
         plt.show()
 
 
-# %% rocking curves
-if v.frame_output == 1:
-    for g in np.unique(np.concatenate(g_where)):
-        # Extract intensity where reflexion index matches
-        I_rc = np.squeeze([I_f[idx_list == g]
-                          for I_f, idx_list in zip(I_calc_frame, g_where)
-                          for idx, i in enumerate(idx_list) if i == g])
-        s_rc = np.squeeze([s_f[idx_list == g]
-                          for s_f, idx_list in zip(sg_frame, g_where)
-                          for idx, i in enumerate(idx_list) if i == g])
-        f_rc = [i for i, indices in enumerate(g_where) if g in indices]
-        
+# %% Bragg position and rocking curves
+bragg = np.zeros_like(g_mag)
+for g in np.unique(np.concatenate(g_where)):
+    # Extract intensity for this g
+    I_rc = np.squeeze([I_f[idx_list == g]
+                      for I_f, idx_list in zip(I_calc_frame, g_where)
+                      for idx, i in enumerate(idx_list) if i == g])
+    sg_rc = np.squeeze([s_f[idx_list == g]
+                       for s_f, idx_list in zip(sg_frame, g_where)
+                       for idx, i in enumerate(idx_list) if i == g])
+    f_rc = [i for i, indices in enumerate(g_where) if g in indices]
+
+    # get the position of sg = 0, sub-frame precision
+    if np.min(sg_rc) >= 0 or np.max(sg_rc) <= 0:
+        pass  # (skip iteration)
+    else:
+        neg = np.where(sg_rc < 0)[0][-1]  # Last occurrence of a -ve value
+        pos = np.where(sg_rc > 0)[0][0]   # First occurrence of a +ve value
+        # Compute ds/df
+        # dsdf = sg_rc[pos] - sg_rc[neg]
+        # Compute bragg position
+        bragg[g] = 0.5 * (f_rc[neg] + f_rc[pos]) + \
+            (sg_rc[neg]+sg_rc[pos]) / (abs(sg_rc[neg])+abs(sg_rc[pos]))
+
+    if v.frame_output == 1:
         # functions for a double x axis
-        
         def frame2sg(x):
-            return s_rc[0] + (x - f_rc[0])*(s_rc[1] - s_rc[0])
-        
+            return sg_rc[0] + (x - f_rc[0])*(sg_rc[1] - sg_rc[0])
+
         def sg2frame(x):
-            return f_rc[0] + (x - s_rc[0])/(s_rc[1] - s_rc[0])
-        
+            return f_rc[0] + (x - sg_rc[0])/(sg_rc[1] - sg_rc[0])
+
         fig = plt.figure(figsize=(5, 3.5))
         ax = fig.add_subplot(111)
         ax.plot(f_rc, I_rc)
@@ -430,6 +442,11 @@ if v.frame_output == 1:
         ax.set_ylabel('Intensity')
         ax.set_title(f"{hkl_pool[g]}")
         plt.show()
+
+
+# %% dynamical calculation
+i = 0
+g_pool_f = g_frame_o[i]
 
 # %% set up refinement
 # --------------------------------------------------------------------
