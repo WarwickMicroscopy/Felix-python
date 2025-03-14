@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patheffects import withStroke
 import matplotlib.colors as mcolors
-import matplotlib.animation as animation
+from matplotlib.ticker import MaxNLocator
 import time
 from scipy.constants import c, h, e, m_e, angstrom
 
@@ -338,13 +338,6 @@ big_k = big_k_mag * t_m2o[:, :, 2]
 # Deviation parameter sg for all frames and g-vectors, size [n_frames, n_g]
 sg = px.sg(big_k, g_pool)
 
-# set up frame image
-
-dw = 5  # width of spot
-# centre of plot, position of 000
-x0 = v.frame_size_x//2
-y0 = v.frame_size_y//2
-
 
 # %% frame by frame calculations
 
@@ -353,7 +346,7 @@ y0 = v.frame_size_y//2
 rc_fwhm = 0.02  # could be an input, but must be less than ds below!!!
 cc = (rc_fwhm/(2**1.5 * np.log(2)))**2  # term in gaussian denominator
 
-# A sg limit is used to determine whether a reflexion is in the frame
+# The sg limit ds is used to determine whether a reflexion is in a frame
 # note that sg of 0.1 is a long way from the Bragg condition at 200kV
 # a value of 0.05 seems about right to match to experiment
 # could be an input or a multiple of rc_fwhm, but keep as a fixed value for now
@@ -366,52 +359,77 @@ mask = np.abs(sg) < ds  # boolean, size [n_frames, n_g]
 # The first list g_where, length n_frames, gives the indices of the reflexions
 # in the numpy arrays sg, hkl_pool, g_pool, I_kin
 g_where = [np.where(mask[i])[0] for i in range(mask.shape[0])]
-sg_frame = [sg[j, i] for j, i in enumerate(g_where)]  # sg values 
+sg_frame = [sg[j, i] for j, i in enumerate(g_where)]  # sg values
 hkl_frame = [hkl_pool[i] for i in g_where]  # Miller indices
 g_frame_o = [g_pool[i] for i in g_where]  # g-vectors (orthogonal frame)
 # kinematic intensity is constant for each reflexion
 I_kin_frame = [I_kin[i] for i in g_where]
 
-# set intensity of the strongest reflexion to unity
+# set intensity of the strongest reflexion to unity (100%)
 I_100 = np.max(np.concatenate(I_kin_frame))
 # calculated intensity applies the rocking curve profile
 I_calc_frame = [np.array(I_k) *
                 np.exp(-np.abs(np.array(sg_))*np.abs(np.array(sg_))/cc)/I_100
                 for I_k, sg_ in zip(I_kin_frame, sg_frame)]
 
-# reflexion positions in all frames
-x_y = [np.round((g_f @ t_m2o[i]) * v.frame_resolution).astype(int)
-       for i, g_f in enumerate(g_frame_o)]
-
-# plot the frames
-for i in range(v.n_frames):  # frame number v.n_frames
-    # make a blank image
-    frame = np.zeros((v.frame_size_x, v.frame_size_y), dtype=float)
-    frame[x0-dw:x0+dw, y0-dw:y0+dw] = 1.0
-    for j, xy in enumerate(x_y[i]):
-        frame[x0+xy[0]-dw:x0+xy[0]+dw,
-              y0+xy[1]-dw:y0+xy[1]+dw] = I_calc_frame[i][j]
-
-    fig = plt.figure(frameon=False)
-    plt.imshow(frame, cmap='grey')
-    plt.axis("off")
-    plt.show()
+if v.frame_output == 1:
+    # reflexion positions in all frames
+    x_y = [np.round((g_f @ t_m2o[i]) * v.frame_resolution).astype(int)
+           for i, g_f in enumerate(g_frame_o)]
+    # centre of plot, position of 000
+    x0 = v.frame_size_x//2
+    y0 = v.frame_size_y//2
+    dw = 5  # width of spot
+    # plot the frames
+    for i in range(v.n_frames):  # frame number v.n_frames
+        # make a blank image
+        frame = np.zeros((v.frame_size_x, v.frame_size_y), dtype=float)
+        frame[x0-dw:x0+dw, y0-dw:y0+dw] = 1.0
+        for j, xy in enumerate(x_y[i]):
+            frame[x0+xy[0]-dw:x0+xy[0]+dw,
+                  y0+xy[1]-dw:y0+xy[1]+dw] = I_calc_frame[i][j]
+    
+        fig = plt.figure(frameon=False)
+        plt.imshow(frame, cmap='grey')
+        plt.axis("off")
+        plt.show()
 
 
 # %% rocking curves
-for g in np.unique(np.concatenate(g_where)):
-    # Extract intensity where reflexion index matches
-    rc = np.squeeze([I_f[idx_list == g]
-                     for I_f, idx_list in zip(I_calc_frame, g_where)
-                     for idx, i in enumerate(idx_list) if i == g])
-
-    fig = plt.figure(figsize=(5, 3.5))
-    ax = fig.add_subplot(111)
-    ax.plot(rc)
-    ax.set_xlabel('Frame')
-    ax.set_ylabel('Intensity')
-    plt.suptitle(f"{hkl_pool[g]}")
-    plt.show()
+if v.frame_output == 1:
+    for g in np.unique(np.concatenate(g_where)):
+        # Extract intensity where reflexion index matches
+        I_rc = np.squeeze([I_f[idx_list == g]
+                          for I_f, idx_list in zip(I_calc_frame, g_where)
+                          for idx, i in enumerate(idx_list) if i == g])
+        s_rc = np.squeeze([s_f[idx_list == g]
+                          for s_f, idx_list in zip(sg_frame, g_where)
+                          for idx, i in enumerate(idx_list) if i == g])
+        f_rc = [i for i, indices in enumerate(g_where) if g in indices]
+        
+        # functions for a double x axis
+        
+        def frame2sg(x):
+            return s_rc[0] + (x - f_rc[0])*(s_rc[1] - s_rc[0])
+        
+        def sg2frame(x):
+            return f_rc[0] + (x - s_rc[0])/(s_rc[1] - s_rc[0])
+        
+        fig = plt.figure(figsize=(5, 3.5))
+        ax = fig.add_subplot(111)
+        ax.plot(f_rc, I_rc)
+        # plt.xticks(range(int(min(f_rc)), int(max(f_rc)) + 1))
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+        # plt.annotate(np.max(I_rc), xy=(min(f_rc), max(I_rc)))
+        plt.xlim(left=min(f_rc), right=max(f_rc))
+        plt.ylim(bottom=0.0)
+        secax = ax.secondary_xaxis(0.4, functions=(frame2sg, sg2frame))
+        secax.xaxis.set_tick_params(rotation=90)
+        # secax.set_xlabel('$s_g$')
+        ax.set_xlabel('Frame')
+        ax.set_ylabel('Intensity')
+        ax.set_title(f"{hkl_pool[g]}")
+        plt.show()
 
 # %% set up refinement
 # --------------------------------------------------------------------
