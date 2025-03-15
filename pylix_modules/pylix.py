@@ -3,6 +3,7 @@ import re
 import subprocess
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 from scipy.constants import c
 from scipy.linalg import eig, inv
 from CifFile import CifFile
@@ -382,6 +383,33 @@ def frame_plot(t_m2o, g_frame_o, I_calc_frame, n_frames, frame_size_x,
         plt.imshow(frame, cmap='grey')
         plt.axis("off")
         plt.show()
+
+
+def rock_plot(hkl_pool, g, sg_rc, f_rc, I_rc):
+    # rocking curve plot
+    def frame2sg(x):
+        # functions for a double x axis
+        return sg_rc[0] + (x - f_rc[0])*(sg_rc[1] - sg_rc[0])
+
+    def sg2frame(x):
+        # functions for a double x axis
+        return f_rc[0] + (x - sg_rc[0])/(sg_rc[1] - sg_rc[0])
+
+    fig = plt.figure(figsize=(5, 3.5))
+    ax = fig.add_subplot(111)
+    ax.plot(f_rc, I_rc)
+    # plt.xticks(range(int(min(f_rc)), int(max(f_rc)) + 1))
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+    # plt.annotate(np.max(I_rc), xy=(min(f_rc), max(I_rc)))
+    plt.xlim(left=min(f_rc), right=max(f_rc))
+    plt.ylim(bottom=0.0)
+    secax = ax.secondary_xaxis(0.4, functions=(frame2sg, sg2frame))
+    secax.xaxis.set_tick_params(rotation=90)
+    # secax.set_xlabel('$s_g$')
+    ax.set_xlabel('Frame')
+    ax.set_ylabel('Intensity')
+    ax.set_title(f"{hkl_pool[g]}")
+    plt.show()
 
 
 def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,

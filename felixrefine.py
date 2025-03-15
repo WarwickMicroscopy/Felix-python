@@ -11,7 +11,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patheffects import withStroke
 import matplotlib.colors as mcolors
-from matplotlib.ticker import MaxNLocator
 import time
 from scipy.constants import c, h, e, m_e, angstrom
 
@@ -402,28 +401,7 @@ for g in np.unique(np.concatenate(g_where)):
             (sg_rc[neg]+sg_rc[pos]) / (abs(sg_rc[neg])+abs(sg_rc[pos]))
 
     if v.frame_output == 1:
-        # functions for a double x axis
-        def frame2sg(x):
-            return sg_rc[0] + (x - f_rc[0])*(sg_rc[1] - sg_rc[0])
-
-        def sg2frame(x):
-            return f_rc[0] + (x - sg_rc[0])/(sg_rc[1] - sg_rc[0])
-
-        fig = plt.figure(figsize=(5, 3.5))
-        ax = fig.add_subplot(111)
-        ax.plot(f_rc, I_rc)
-        # plt.xticks(range(int(min(f_rc)), int(max(f_rc)) + 1))
-        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-        # plt.annotate(np.max(I_rc), xy=(min(f_rc), max(I_rc)))
-        plt.xlim(left=min(f_rc), right=max(f_rc))
-        plt.ylim(bottom=0.0)
-        secax = ax.secondary_xaxis(0.4, functions=(frame2sg, sg2frame))
-        secax.xaxis.set_tick_params(rotation=90)
-        # secax.set_xlabel('$s_g$')
-        ax.set_xlabel('Frame')
-        ax.set_ylabel('Intensity')
-        ax.set_title(f"{hkl_pool[g]}")
-        plt.show()
+        px.rock_plot(hkl_pool, g, sg_rc, f_rc, I_rc)
 
 
 # %% dynamical calculation
