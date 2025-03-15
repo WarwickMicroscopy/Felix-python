@@ -373,26 +373,8 @@ I_calc_frame = [np.array(I_k) *
                 for I_k, sg_ in zip(I_kin_frame, sg_frame)]
 
 if v.frame_output == 1:
-    # reflexion positions in all frames
-    x_y = [np.round((g_f @ t_m2o[i]) * v.frame_resolution).astype(int)
-           for i, g_f in enumerate(g_frame_o)]
-    # centre of plot, position of 000
-    x0 = v.frame_size_x//2
-    y0 = v.frame_size_y//2
-    dw = 5  # width of spot
-    # plot the frames
-    for i in range(v.n_frames):  # frame number v.n_frames
-        # make a blank image
-        frame = np.zeros((v.frame_size_x, v.frame_size_y), dtype=float)
-        frame[x0-dw:x0+dw, y0-dw:y0+dw] = 1.0
-        for j, xy in enumerate(x_y[i]):
-            frame[x0+xy[0]-dw:x0+xy[0]+dw,
-                  y0+xy[1]-dw:y0+xy[1]+dw] = I_calc_frame[i][j]
-    
-        fig = plt.figure(frameon=False)
-        plt.imshow(frame, cmap='grey')
-        plt.axis("off")
-        plt.show()
+    px.frame_plot(t_m2o, g_frame_o, I_calc_frame, v.n_frames, v.frame_size_x,
+                  v.frame_size_y, v.frame_resolution)
 
 
 # %% Bragg position and rocking curves

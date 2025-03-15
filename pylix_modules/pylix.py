@@ -2,6 +2,7 @@ import ast
 import re
 import subprocess
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.constants import c
 from scipy.linalg import eig, inv
 from CifFile import CifFile
@@ -357,34 +358,30 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
     return atom_position, atom_label, atom_name, B_iso, occupancy
 
 
-def frame_plot(v, hkl_pool):
+def frame_plot(t_m2o, g_frame_o, I_calc_frame, n_frames, frame_size_x,
+               frame_size_y, frame_resolution):
     """ makes set of frame images that should correspond to the experimental
     data.  Uses whole variable space v """
-    
-    # DO ind = 1,INFrames
-    #   RAngle = REAL(ind-1)*DEG2RADIAN*RFrameAngle
-    #   RSim = ZERO
-    #   # output g's
-    #   DO knd = 2, INhkl
-    #     IF (IgOutList(knd,ind).NE.0) THEN
-    #       lnd = IgPoolList(knd,ind)  ! index of reflection in the reciprocal lattice
-    #       Rg = Ig(lnd,1)*RarVecO + Ig(lnd,2)*RbrVecO + Ig(lnd,3)*RcrVecO  ! g-vector
-    #       RgMag = SQRT(DOT_PRODUCT(Rg,Rg))
-    #       RSg = RgPoolSg(knd,ind)  !Sg
-    #       ! x- and y-coords (NB swapped in the image!)
-    #       Rp = RXDirO*COS(RAngle)-RZDirO*SIN(RAngle)  ! unit vector horizontal in the image
-    #       ! position of the spot, 2% leeway to avoid going over the edge of the image
-    #       Ix = ISim-0.98*NINT(DOT_PRODUCT(Rg,Rp)*REAL(ISim)/RGOutLimit)  
-    #       Iy = ISim+0.98*NINT(DOT_PRODUCT(Rg,RYDirO)*REAL(ISim)/RGOutLimit)
-    #       RSim(Iy-1:Iy+1,Ix-1:Ix+1) = RIkin(lnd)*EXP(-RInst*RSg*RSg)
-    #     END IF
-    #   END DO
-    #   ! direct beam
-    #   RSim(ISim-1:ISim+1,ISim-1:ISim+1) = RImax
-    # Instrument broadening term - sets the FWHM  of a kinematic rocking curve
-    inst = 6000.0
-    max_intensity = 10.0  # needs to be decided somehow
-    frame = np.zeros((v.frame_size_x, v.frame_size_y), dtype=float)
+    # reflexion positions in all frames
+    x_y = [np.round((g_f @ t_m2o[i]) * frame_resolution).astype(int)
+           for i, g_f in enumerate(g_frame_o)]
+    # centre of plot, position of 000
+    x0 = frame_size_x//2
+    y0 = frame_size_y//2
+    dw = 5  # width of spot
+    # plot the frames
+    for i in range(n_frames):  # frame number v.n_frames
+        # make a blank image
+        frame = np.zeros((frame_size_x, frame_size_y), dtype=float)
+        frame[x0-dw:x0+dw, y0-dw:y0+dw] = 1.0
+        for j, xy in enumerate(x_y[i]):
+            frame[x0+xy[0]-dw:x0+xy[0]+dw,
+                  y0+xy[1]-dw:y0+xy[1]+dw] = I_calc_frame[i][j]
+
+        fig = plt.figure(frameon=False)
+        plt.imshow(frame, cmap='grey')
+        plt.axis("off")
+        plt.show()
 
 
 def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
