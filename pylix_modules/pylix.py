@@ -4,6 +4,7 @@ import subprocess
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
+import matplotlib.colors as mcolors
 from scipy.constants import c
 from scipy.linalg import eig, inv
 from CifFile import CifFile
@@ -409,6 +410,42 @@ def rock_plot(hkl_pool, g, sg_rc, f_rc, I_rc):
     ax.set_xlabel('Frame')
     ax.set_ylabel('Intensity')
     ax.set_title(f"{hkl_pool[g]}")
+    plt.show()
+
+
+def pool_plot(g_pool, g_pool_mag):
+    # plots beam pool in reciprocal space
+    # uses first two coordinates for position and 3rd for colour
+    xm = np.ceil(np.max(g_pool_mag/(2*np.pi)))
+    fig, ax = plt.subplots(1, 1)
+    w_f = 10
+    fig.set_size_inches(w_f, w_f)
+    ax.set_facecolor('black')
+    # colour according to Laue zone
+    lz_cvals = mcolors.Normalize(vmin=np.min(g_pool[:, 2]),
+                                 vmax=np.max(g_pool[:, 2]))
+    lz_cmap = plt.cm.brg
+    lz_colours = lz_cmap(lz_cvals(g_pool[:, 2]))
+    # plots the g-vectors in the pool, colours for different Laue zones
+    plt.scatter(g_pool[:, 0]/(2*np.pi), g_pool[:, 1]/(2*np.pi),
+                s=20, color=lz_colours)
+    # title
+    plt.annotate("Beam pool", xy=(5, 5), color='white',
+                 xycoords='axes pixels', size=24)
+    # major grid at 1 1/Å
+    plt.grid(True,  which='major', color='lightgrey',
+             linestyle='-', linewidth=1.0)
+    plt.gca().set_xticks(np.arange(-xm, xm, 1))
+    plt.gca().set_yticks(np.arange(-xm, xm, 1))
+    plt.grid(True, which='minor', color='grey', linestyle='--',
+             linewidth=0.5)
+    # minor grid at 0.2 1/Å
+    plt.gca().set_xticks(np.arange(-xm, xm, 0.2), minor=True)
+    plt.gca().set_yticks(np.arange(-xm, xm, 0.2), minor=True)
+    # remove axis labels
+    plt.tick_params(axis='both', which='both', bottom=False, top=False,
+                    left=False, right=False,
+                    labelbottom=False, labelleft=False)
     plt.show()
 
 
@@ -1219,7 +1256,7 @@ def deviation_parameter(convergence_angle, image_radius, big_k_mag, g_pool,
 
 def sg(big_k, g_pool):
     """ Calculates deviation parameter sg for a set of incident wave vectors
-    big_k and a set of g-vectors g_pool, both experessed in the same
+    big_k and a set of g-vectors g_pool, both expressed in the same
     orthogonal reference frame"""
     g_mag = np.linalg.norm(g_pool, axis=1)
     big_k_mag = np.linalg.norm(big_k[0])
@@ -1227,9 +1264,10 @@ def sg(big_k, g_pool):
     k_dot_g = np.einsum('ij,kj->ik', big_k, g_pool)
     # Calculate Sg by getting the vector k0, which is coplanar with k and g and
     # corresponds to an incident beam at the Bragg condition
+    g_sq = (g_mag**2)[np.newaxis, :, np.newaxis]
     # First we need the component of k perpendicular to g, which we call p
-    p = (big_k[:, np.newaxis, :] - (k_dot_g[..., np.newaxis] * g_pool) /
-         (g_mag**2)[np.newaxis, :, np.newaxis])  # Shape [n_frames, n_g, 3]
+    # Shape [n_frames, n_g, 3], using where to avoid /0 for 000
+    p = (big_k[:, np.newaxis, :] - (k_dot_g[..., np.newaxis] * g_pool) / g_sq)
     # and now make k0 by adding vectors parallel to g and p
     # i.e. k0 = (p/|p|)*(k^2-g^2/4)^0.5 - g/2, Shape [n_frames, n_g, 3]
     p_norm = np.linalg.norm(p, axis=2)
@@ -1248,10 +1286,10 @@ def sg(big_k, g_pool):
     return sg
     
 
-def strong_beams(s_g_pix, ug_matrix, min_strong_beams):
+def strong_beams(s_g_frame, ug_matrix, min_strong_beams):
     """
     returns a list of strong beams according to their perturbation strength
-    NB s_g_pix here is a 1D array of values for a given pixel, and is different
+    NB s_g_frame here is a 1D array of values for a given pixel, and is different
     to the s_g in the main code which is for all pixels & g-vectors
 
     Perturbation Strength Eq. 8 Zuo Ultramicroscopy 57 (1995) 375, |Ug/2KSg|
@@ -1261,16 +1299,16 @@ def strong_beams(s_g_pix, ug_matrix, min_strong_beams):
 
     # Perturbation strength |Ug/Sg|, put 100 where we have s_g=0
     u_g = np.abs(ug_matrix[:, 0])
-    pert = np.divide(u_g, np.abs(s_g_pix),
-                     out=np.full_like(s_g_pix, 100.0), where=s_g_pix != 0)
+    pert = np.divide(u_g, np.abs(s_g_frame),
+                     out=np.full_like(s_g_frame, 100.0), where=s_g_frame != 0)
     # deviation parameter and perturbation thresholds for strong beams
     max_sg = 0.001
 
     # Determine strong beams: Increase max_sg until enough beams are found
-    strong = np.zeros_like(s_g_pix, dtype=int)
+    strong = np.zeros_like(s_g_frame, dtype=int)
     while np.sum(strong) < min_strong_beams:
         min_pert_strong = 0.025 / max_sg
-        strong = np.where((np.abs(s_g_pix) < max_sg)
+        strong = np.where((np.abs(s_g_frame) < max_sg)
                           | (pert >= min_pert_strong), 1, 0)
         max_sg += 0.001
 
@@ -1278,12 +1316,15 @@ def strong_beams(s_g_pix, ug_matrix, min_strong_beams):
     return np.flatnonzero(strong)
 
 
-def bloch(g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl,
+def bloch(ug_sg_matrix, debug):
+    """ replacing the old version for LACBED 
+    
+def bloch(g_output, s_g_frame, ug_matrix, min_strong_beams, n_hkl,
           big_k_mag, g_dot_norm, k_dot_n_pix, debug):
 
     # strong_beam_indices gives the index of a strong beam in the beam pool
     # Use Sg and perturbation strength to define strong beams
-    strong_beam = strong_beams(s_g_pix, ug_matrix, min_strong_beams)
+    strong_beam = strong_beams(s_g_frame, ug_matrix, min_strong_beams)
     # which ones are new (i.e. not already in the output list)
     strong_new = np.setdiff1d(strong_beam, g_output)
     # make the structure matrix for this pixel, outputs top of the list
@@ -1304,10 +1345,10 @@ def bloch(g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl,
     ug_sg_matrix = 2.0*np.pi**2 * ug_sg_matrix / big_k_mag
     # replace the diagonal with strong beam deviation parameters
     ug_sg_matrix[np.arange(n_beams), np.arange(n_beams)] = \
-        s_g_pix[strong_beam_indices]
+        s_g_frame[strong_beam_indices]
 
     # weak beam correction (NOT WORKING)
-    # px.weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_indices,
+    # px.weak_beams(s_g_frame, ug_matrix, ug_sg_matrix, strong_beam_indices,
     #                min_weak_beams, big_k_mag)
 
     # surface normal correction part 1
@@ -1320,24 +1361,42 @@ def bloch(g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl,
     # Invert using LU decomposition (similar to ZGETRI in Fortran)
     inv_eigenvecs = inv(eigenvecs)
 
-    # if debug:
-    #     np.set_printoptions(precision=3, suppress=True)
-    #     print("eigenvectors")
-    #     print(eigenvecs[:5, :5])
+    if debug:
+        np.set_printoptions(precision=3, suppress=True)
+        print("eigenvectors")
+        print(eigenvecs[:5, :5])
 
-    return n_beams, strong_beam_indices, gamma, eigenvecs, inv_eigenvecs
+    return n_beams, strong_beam_indices, gamma, eigenvecs, inv_eigenvecs """
+    # get eigenvalues (gamma), eigenvecs
+    gamma, eigenvecs = eig(ug_sg_matrix)
+    # Invert using LU decomposition (similar to ZGETRI in Fortran)
+    inv_eigenvecs = inv(eigenvecs)
+
+    if debug:
+        np.set_printoptions(precision=3, suppress=True)
+        print("eigenvectors")
+        print(eigenvecs[:5, :5])
+
+    return gamma, eigenvecs, inv_eigenvecs
 
 
-def wave_functions(g_output, s_g_pix, ug_matrix, min_strong_beams,
+def wave_functions(ug_sg_matrix, thickness, debug):
+    """ old def
+    def wave_functions(g_output, s_g_frame, ug_sg_matrix, min_strong_beams,
                    n_hkl, big_k_mag, g_dot_norm,
-                   k_dot_n_pix, thickness, debug):
+                   k_dot_n_pix, thickness, debug): """
     # calculates wave functions for a given thickness by calling the bloch
     # subroutine to get the eigenvector matrices
     # and evaluating for a range of thicknesses
 
-    n_beams, strong_beam_indices, gamma, eigenvecs, inv_eigenvecs = bloch(
-        g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl, big_k_mag,
-        g_dot_norm, k_dot_n_pix, debug)
+    gamma, eigenvecs, inv_eigenvecs = bloch(ug_sg_matrix, debug)
+    n_beams = len(ug_sg_matrix)
+
+    # old version
+    # n_beams, strong_beam_indices, gamma, eigenvecs, inv_eigenvecs = bloch(
+    #     g_output, s_g_frame, ug_matrix, min_strong_beams, n_hkl, big_k_mag,
+    #     g_dot_norm, k_dot_n_pix, debug)
+
     # calculate intensities
 
     # Initialize incident (complex) wave function psi0
@@ -1345,43 +1404,25 @@ def wave_functions(g_output, s_g_pix, ug_matrix, min_strong_beams,
     psi0 = np.zeros(n_beams, dtype=np.complex128)
     psi0[0] = 1.0 + 0j
 
-    # surface normal correction part 2
-    m_ii = np.sqrt(1 + g_dot_norm[strong_beam_indices] / k_dot_n_pix)
-    inverted_m = np.diag(m_ii)
-    m_matrix = np.diag(1/m_ii)
+    # # surface normal correction part 2
+    # m_ii = np.sqrt(1 + g_dot_norm[strong_beam_indices] / k_dot_n_pix)
+    # inverted_m = np.diag(m_ii)
+    # m_matrix = np.diag(1/m_ii)
 
     # evaluate for the range of thicknesses
     wave_function = ([])
-    if thickness.ndim == 0:  # just one thickness
-        gamma_t = np.diag(np.exp(1j * thickness * gamma))
-        wave_function.append(m_matrix @ eigenvecs @ gamma_t
-                             @ inv_eigenvecs @ inverted_m @ psi0)
-    else:  # multiple thicknesses
-        for t in thickness:
-            gamma_t = np.diag(np.exp(1j * t * gamma))
-            # calculate wave functions
-            wave_function.append(m_matrix @ eigenvecs @ gamma_t
-                                 @ inv_eigenvecs @ inverted_m @ psi0)
-
-    # ... or, for all thicknesses at once! not working, boo
-    # would avoid the type change when making wave_functions a numpy array
-    # thickness = thickness[:, np.newaxis]
-    # gamma_t = np.array([np.diag(np.exp(1j * t * gamma))
-    #                          for t in thickness.flatten()])
-    # wave_functions = np.einsum(
-    #     'ij,jk,tkm,mn,nl,l->ti',
-    #     m_matrix,
-    #     eigenvecs,
-    #     gamma_t,
-    #     inv_eigenvecs,
-    #     inverted_m,
-    #     psi0
-    # )
+    for t in thickness:
+        gamma_t = np.diag(np.exp(1j * t * gamma))
+        # calculate wave functions
+        wave_function.append(eigenvecs @ gamma_t
+                             @ inv_eigenvecs @ psi0)
+        # wave_function.append(m_matrix @ eigenvecs @ gamma_t
+        #                      @ inv_eigenvecs @ inverted_m @ psi0)
 
     return np.array(wave_function)
 
 
-def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list,
+def weak_beams(s_g_frame, ug_matrix, ug_sg_matrix, strong_beam_list,
                min_weak_beams, big_k_mag):
     """
     Updates the Ug-Sg matrix usingweak beams according to their perturbation
@@ -1393,11 +1434,11 @@ def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list,
 
     # Perturbation strength |Ug/Sg|, put 100 where we have s_g=0
     u_g = np.abs(ug_matrix[:, 0])
-    pert = np.divide(u_g, np.abs(s_g_pix),
-                     out=np.full_like(s_g_pix, 100.0), where=s_g_pix != 0)
+    pert = np.divide(u_g, np.abs(s_g_frame),
+                     out=np.full_like(s_g_frame, 100.0), where=s_g_frame != 0)
 
     # We start with all non-strong beams in the list.
-    weak = np.ones_like(s_g_pix)
+    weak = np.ones_like(s_g_frame)
     weak[strong_beam_list] = 0
     max_pert_weak = 0.0001
     # increasing threshold till we have few enough
@@ -1415,7 +1456,7 @@ def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list,
     # and diagonal elements (sumD)
     # new version using broadcasting
     # (NOT WORKING, SIZE mismatch ug_wj * ug_wj_weak)
-    weak_beam_sg = s_g_pix[weak_beam_list]
+    weak_beam_sg = s_g_frame[weak_beam_list]
     ug_w0 = ug_matrix[weak_beam_list, 0]
     ug_wj = ug_matrix[strong_beam_list[:, None], weak_beam_list]
     ug_wj_weak = ug_matrix[weak_beam_list[:, None], strong_beam_list]
@@ -1440,12 +1481,12 @@ def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list,
     #         # Eq. 4 from Zuo & Weickenmeier (Ultramicroscopy 57, 1995)
     #         sum_c += (ug_matrix[strong_beam_list[j], weak[i]] *
     #                   ug_matrix[weak[i], 0] /
-    #                   (2.0 * big_k_mag * s_g_pix[weak_beam_list[i]]))
+    #                   (2.0 * big_k_mag * s_g_frame[weak_beam_list[i]]))
 
     #         # Eq. 5 from Zuo & Weickenmeier (Ultramicroscopy 57, 1995)
     #         sum_d += (ug_matrix[strong_beam_list[j], weak_beam_list[i]] *
     #                   ug_matrix[weak_beam_list[i], strong_beam_list[j]] /
-    #                   (2.0 * big_k_mag * s_g_pix[weak[i]]))
+    #                   (2.0 * big_k_mag * s_g_frame[weak[i]]))
 
     #     # Update the first column of the ug_sg_matrix
     #     mask = ug_sg_matrix == ug_sg_matrix[j, 0]

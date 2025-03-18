@@ -138,8 +138,8 @@ if (v.final_thickness > v.initial_thickness + v.delta_thickness):
                             v.delta_thickness)
     v.n_thickness = len(v.thickness)
 else:
-    # need np.array rather than float so wave_functions works for 1 or many t's
-    v.thickness = np.array(v.initial_thickness)
+    # redefine a single value to be a list [] so it's iterable
+    v.thickness = [v.initial_thickness]
     v.n_thickness = 1
 
 # convert arrays to numpy
@@ -218,7 +218,7 @@ v.input_hkls, v.i_obs, v.sigma_obs = px.read_hkl_file("felix.hkl")
 v.n_out = len(v.input_hkls)+1  # we expect 000 NOT to be in the hkl list
 
 
-# %% Setup calculations
+# %% Setup kV and unit cell
 
 # Electron velocity in metres per second
 electron_velocity = (c * np.sqrt(1.0 - ((m_e * c**2) /
@@ -308,11 +308,12 @@ t_m2o, t_c2o, t_cr2or = \
                         v.n_frames, v.frame_angle)
 
 
-# %% Initial kinematic simulation and set up outputs for rocking curves
+# %% Observable reflexions, their structure factor and deviation parameter
 
 # kinematic beam pool
 print(f"Experimental resolution limit {0.5*v.frame_g_limit/np.pi:.3} reciprocal Angstroms")
 
+# Observable reflections are found within frame_g_limit
 # NB sine divisor is an attempt to expand range for non-rectilinear cells
 expand = np.min([np.sin(v.cell_alpha),
                  np.sin(v.cell_beta), np.sin(v.cell_gamma)])
@@ -320,7 +321,8 @@ g_limit = int(v.frame_g_limit/expand)
 hkl_pool, g_pool, g_mag = px.hkl_make(t_cr2or, g_limit, v.lattice_type)
 n_g = len(g_mag)
 
-print(f"Kinematic beam pool of {len(g_mag)} reflexions")  # n_g
+print(f"giving {len(g_mag)} reflexions")  # n_g
+px.pool_plot(g_pool, g_mag)
 
 # structure factor Fg for all reflexions in g_pool
 F_g = px.Fg(g_pool, g_mag, atom_position, atomic_number, occupancy,
@@ -338,7 +340,7 @@ big_k = big_k_mag * t_m2o[:, :, 2]
 sg = px.sg(big_k, g_pool)
 
 
-# %% frame by frame calculations
+# %% kinematic simulation
 
 # we assume kinematic rocking curves are Gaussian in shape
 # with FWHM rc_fwhm, in reciprocal angstroms, when plotted against sg
@@ -361,6 +363,10 @@ g_where = [np.where(mask[i])[0] for i in range(mask.shape[0])]
 sg_frame = [sg[j, i] for j, i in enumerate(g_where)]  # sg values
 hkl_frame = [hkl_pool[i] for i in g_where]  # Miller indices
 g_frame_o = [g_pool[i] for i in g_where]  # g-vectors (orthogonal frame)
+direct = np.array([[0, 0, 0]])  # Shape (1,3) for proper stacking
+gD_frame_o = [np.vstack((direct, g)) for g in g_frame_o]  # g-vectors and 000
+# expanded g-pool for each frame that will make the F_g matrix
+g_pool_dyn = [(g[:, np.newaxis, :] - g[np.newaxis, :, :]) for g in gD_frame_o]
 # kinematic intensity is constant for each reflexion
 I_kin_frame = [I_kin[i] for i in g_where]
 
@@ -371,18 +377,62 @@ I_calc_frame = [np.array(I_k) *
                 np.exp(-np.abs(np.array(sg_))*np.abs(np.array(sg_))/cc)/I_100
                 for I_k, sg_ in zip(I_kin_frame, sg_frame)]
 
+print("Kinematic simulation complete")
+
 if v.frame_output == 1:
     px.frame_plot(t_m2o, g_frame_o, I_calc_frame, v.n_frames, v.frame_size_x,
                   v.frame_size_y, v.frame_resolution)
+
+
+# %% dynamical simulation
+
+I_dyn_frame = ([])
+for i in range(v.n_frames):
+    # i = 0
+    # g pool for this frame, reshaped as a list of g's to go into px.Fg
+    g_pool_f = g_pool_dyn[i].reshape(-1, 3)
+    g_mag_f = np.linalg.norm(g_pool_f, axis=1) + 1.0e-12  # their magnitudes
+    sg_f = sg_frame[i]  # sg's for first column of F_g matrix
+    ng_f = len(sg_f)  # F_g matrix is size [ng_f, ng_f]
+
+    if v.plot:
+        # show the beam pool for this frame
+        px.pool_plot(g_pool_f, g_mag_f)
+
+    # structure factor Fg_matrix for this frame's g_pool
+    # diagonal values depend on sg
+    Fg_matrix = px.Fg(g_pool_f, g_mag_f, atom_position, atomic_number,
+                      occupancy, v.scatter_factor_method, v.absorption_method,
+                      v.absorption_per, electron_velocity,
+                      B_iso).reshape(ng_f, ng_f)
+    # Conversion factor from F_g to U_g
+    Fg_to_Ug = relativistic_correction / cell_volume
+    ug_matrix = Fg_to_Ug * Fg_matrix
+    # Spence's (1990) 'Structure matrix'
+    # off-diagonal elements are Ug/2K, diagonal elements are Sg
+    ug_sg_matrix = 2.0*np.pi * ug_matrix / big_k_mag
+    # replace the diagonal with strong beam deviation parameters
+    ug_sg_matrix[np.arange(ng_f), np.arange(ng_f)] = sg_f
+    if v.debug:
+        np.set_printoptions(precision=3, suppress=True)
+        print("Structure matrix")
+        print(ug_sg_matrix[:5, :5])
+
+    wave_functions = px.wave_functions(ug_sg_matrix, v.thickness, v.debug)
+    I_dyn_frame.append(np.squeeze(np.abs(wave_functions)**2))
+print("Dynamic simulation complete")
 
 
 # %% Bragg position and rocking curves
 bragg = np.zeros_like(g_mag)
 for g in np.unique(np.concatenate(g_where)):
     # Extract intensity for this g
-    I_rc = np.squeeze([I_f[idx_list == g]
-                      for I_f, idx_list in zip(I_calc_frame, g_where)
-                      for idx, i in enumerate(idx_list) if i == g])
+    I_kin_rc = np.squeeze([I_f[idx_list == g]
+                           for I_f, idx_list in zip(I_calc_frame, g_where)
+                           for idx, i in enumerate(idx_list) if i == g])
+    I_dyn_rc = np.squeeze([I_f[idx_list == g]
+                           for I_f, idx_list in zip(I_dyn_frame, g_where)
+                           for idx, i in enumerate(idx_list) if i == g])
     sg_rc = np.squeeze([s_f[idx_list == g]
                        for s_f, idx_list in zip(sg_frame, g_where)
                        for idx, i in enumerate(idx_list) if i == g])
@@ -401,24 +451,7 @@ for g in np.unique(np.concatenate(g_where)):
             (sg_rc[neg]+sg_rc[pos]) / (abs(sg_rc[neg])+abs(sg_rc[pos]))
 
     if v.frame_output == 1:
-        px.rock_plot(hkl_pool, g, sg_rc, f_rc, I_rc)
-
-
-# %% dynamical calculation
-
-# expanded g-pool for each frame that will make the F_g matrix
-g_pool_d = [(g[:, np.newaxis, :] - g[np.newaxis, :, :]).reshape(-1, 3)
-            for g in g_frame_o]
-
-# for i in range(n_frames):
-i=0
-g_pool_f = g_pool_d[i]
-g_mag_f = np.linalg.norm(g_pool_f, axis=1) + 1.0e-12
-ng_f = int(np.sqrt(len(g_mag_f)))
-# structure factor Fg for all reflexions in g_pool
-F_g = px.Fg(g_pool_f, g_mag_f, atom_position, atomic_number, occupancy,
-            v.scatter_factor_method, v.absorption_method,
-            v.absorption_per, electron_velocity, B_iso).reshape(ng_f, ng_f)
+        px.rock_plot(hkl_pool, g, sg_rc, f_rc, I_dyn_rc)
 
 
 # %% set up refinement
