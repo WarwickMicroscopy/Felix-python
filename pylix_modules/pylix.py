@@ -259,10 +259,13 @@ def symop_convert(symop_xyz):
         # split into 3 parts
         parts = symop.split(',')
         for j, pt in enumerate(parts):
-            match = re.search(r'([+-]?[xyz])', pt)
-            if match:
+            pt = pt.strip()  # Remove extra spaces
+            # Regex to capture the k/l/m (x, y, z) and the fractional part
+            # match = re.match(r'([+-]?\d+/\d+)?([+-]?[xyz])?', pt)
+            mat = re.match(r'(?:(?P<f0>[+-]?\d+/\d+)[+-]?)?(?P<v>[+-]?[xyz])?(?:(?P<f1>[+-]?\d+/\d+))?', pt)
+            if mat:
                 # Extract the variable part (x, y, z)
-                var_part = match.group()
+                var_part = mat.group('v')
                 if var_part:
                     pm1 = -1 if var_part.startswith('-') else 1
                     axis = coord_map[var_part[-1]]
@@ -270,7 +273,7 @@ def symop_convert(symop_xyz):
             match = re.search(r'([+-]?\d+/\d+)', pt)
             if match:
                 # Extract the fractional part
-                frac_part = match.group()
+                frac_part = mat.group('f0') or mat.group('f1')
                 if frac_part:
                     numerator, denominator = map(int, frac_part.split('/'))
                     vec[i, j] = numerator / denominator
