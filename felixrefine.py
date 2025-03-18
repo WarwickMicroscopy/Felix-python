@@ -445,8 +445,21 @@ for g in np.unique(np.concatenate(g_where)):
 
 
 # %% dynamical calculation
-i = 0
-g_pool_f = g_frame_o[i]
+
+# expanded g-pool for each frame that will make the F_g matrix
+g_pool_d = [(g[:, np.newaxis, :] - g[np.newaxis, :, :]).reshape(-1, 3)
+            for g in g_frame_o]
+
+# for i in range(n_frames):
+i=0
+g_pool_f = g_pool_d[i]
+g_mag_f = np.linalg.norm(g_pool_f, axis=1) + 1.0e-12
+ng_f = int(np.sqrt(len(g_mag_f)))
+# structure factor Fg for all reflexions in g_pool
+F_g = px.Fg(g_pool_f, g_mag_f, atom_position, atomic_number, occupancy,
+            v.scatter_factor_method, v.absorption_method,
+            v.absorption_per, electron_velocity, B_iso).reshape(ng_f, ng_f)
+
 
 # %% set up refinement
 # --------------------------------------------------------------------
