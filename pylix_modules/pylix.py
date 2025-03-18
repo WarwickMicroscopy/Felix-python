@@ -361,9 +361,9 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
 
 
 def frame_plot(t_m2o, g_frame_o, I_calc_frame, n_frames, frame_size_x,
-               frame_size_y, frame_resolution):
+               frame_size_y, frame_resolution, log_scale):
     """ makes set of frame images that should correspond to the experimental
-    data.  Uses whole variable space v """
+    data.  """
     # reflexion positions in all frames
     x_y = [np.round((g_f @ t_m2o[i]) * frame_resolution).astype(int)
            for i, g_f in enumerate(g_frame_o)]
@@ -371,14 +371,25 @@ def frame_plot(t_m2o, g_frame_o, I_calc_frame, n_frames, frame_size_x,
     x0 = frame_size_x//2
     y0 = frame_size_y//2
     dw = 5  # width of spot
+    I_000 = np.max(np.concatenate(I_calc_frame))
+    I_min = np.min(np.concatenate(I_calc_frame))
+    if log_scale:
+        I_000 = np.log(I_000)
     # plot the frames
     for i in range(n_frames):  # frame number v.n_frames
         # make a blank image
-        frame = np.zeros((frame_size_x, frame_size_y), dtype=float)
-        frame[x0-dw:x0+dw, y0-dw:y0+dw] = 1.0
+        if log_scale:
+            frame = np.ones((frame_size_x, frame_size_y), dtype=float) \
+                * np.log(I_min)
+        else:
+            frame = np.zeros((frame_size_x, frame_size_y), dtype=float)
+        frame[x0-dw:x0+dw, y0-dw:y0+dw] = I_000
         for j, xy in enumerate(x_y[i]):
+            I_ij = I_calc_frame[i][j]
+            if log_scale:
+                I_ij = np.log(I_ij)
             frame[x0+xy[0]-dw:x0+xy[0]+dw,
-                  y0+xy[1]-dw:y0+xy[1]+dw] = I_calc_frame[i][j]
+                  y0+xy[1]-dw:y0+xy[1]+dw] = I_ij
 
         fig = plt.figure(frameon=False)
         plt.imshow(frame, cmap='grey')

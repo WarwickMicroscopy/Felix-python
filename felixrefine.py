@@ -344,14 +344,14 @@ sg = px.sg(big_k, g_pool)
 
 # we assume kinematic rocking curves are Gaussian in shape
 # with FWHM rc_fwhm, in reciprocal angstroms, when plotted against sg
-rc_fwhm = 0.02  # could be an input, but must be less than ds below!!!
+rc_fwhm = 0.04  # could be an input, but must be less than ds below!!!
 cc = (rc_fwhm/(2**1.5 * np.log(2)))**2  # term in gaussian denominator
 
 # The sg limit ds is used to determine whether a reflexion is in a frame
 # note that sg of 0.1 is a long way from the Bragg condition at 200kV
 # a value of 0.05 seems about right to match to experiment
 # could be an input or a multiple of rc_fwhm, but keep as a fixed value for now
-ds = 0.05
+ds = 0.1
 
 # find all reflexions in all frames in the sg limit
 mask = np.abs(sg) < ds  # boolean, size [n_frames, n_g]
@@ -379,9 +379,10 @@ I_calc_frame = [np.array(I_k) *
 
 print("Kinematic simulation complete")
 
+log_scale = True
 if v.frame_output == 1:
     px.frame_plot(t_m2o, g_frame_o, I_calc_frame, v.n_frames, v.frame_size_x,
-                  v.frame_size_y, v.frame_resolution)
+                  v.frame_size_y, v.frame_resolution, log_scale)
 
 
 # %% dynamical simulation
@@ -392,12 +393,12 @@ for i in range(v.n_frames):
     # g pool for this frame, reshaped as a list of g's to go into px.Fg
     g_pool_f = g_pool_dyn[i].reshape(-1, 3)
     g_mag_f = np.linalg.norm(g_pool_f, axis=1) + 1.0e-12  # their magnitudes
-    sg_f = sg_frame[i]  # sg's for first column of F_g matrix
+    sg_f = np.concatenate(([0], sg_frame[i]))  # sg's for first column of F_g matrix
     ng_f = len(sg_f)  # F_g matrix is size [ng_f, ng_f]
 
-    if v.plot:
-        # show the beam pool for this frame
-        px.pool_plot(g_pool_f, g_mag_f)
+    # if v.plot:
+    #     # show the beam pool for this frame
+    #     px.pool_plot(g_pool_f, g_mag_f)
 
     # structure factor Fg_matrix for this frame's g_pool
     # diagonal values depend on sg
@@ -419,8 +420,14 @@ for i in range(v.n_frames):
         print(ug_sg_matrix[:5, :5])
 
     wave_functions = px.wave_functions(ug_sg_matrix, v.thickness, v.debug)
-    I_dyn_frame.append(np.squeeze(np.abs(wave_functions)**2))
+    # Dynamical intensities, discarding 000 so we have the same output length
+    I_dyn_frame.append(np.squeeze(np.abs(wave_functions)**2)[1:])
 print("Dynamic simulation complete")
+
+log_scale = True
+if v.frame_output == 1:
+    px.frame_plot(t_m2o, g_frame_o, I_dyn_frame, v.n_frames, v.frame_size_x,
+                  v.frame_size_y, v.frame_resolution, log_scale)
 
 
 # %% Bragg position and rocking curves
@@ -451,7 +458,7 @@ for g in np.unique(np.concatenate(g_where)):
             (sg_rc[neg]+sg_rc[pos]) / (abs(sg_rc[neg])+abs(sg_rc[pos]))
 
     if v.frame_output == 1:
-        px.rock_plot(hkl_pool, g, sg_rc, f_rc, I_dyn_rc)
+        px.rock_plot(hkl_pool, g, sg_rc, f_rc, I_kin_rc, I_dyn_rc)
 
 
 # %% set up refinement
