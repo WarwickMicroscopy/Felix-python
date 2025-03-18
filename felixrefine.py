@@ -11,7 +11,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patheffects import withStroke
 import matplotlib.colors as mcolors
-from matplotlib.ticker import MaxNLocator
 import time
 from scipy.constants import c, h, e, m_e, angstrom
 
@@ -373,26 +372,8 @@ I_calc_frame = [np.array(I_k) *
                 for I_k, sg_ in zip(I_kin_frame, sg_frame)]
 
 if v.frame_output == 1:
-    # reflexion positions in all frames
-    x_y = [np.round((g_f @ t_m2o[i]) * v.frame_resolution).astype(int)
-           for i, g_f in enumerate(g_frame_o)]
-    # centre of plot, position of 000
-    x0 = v.frame_size_x//2
-    y0 = v.frame_size_y//2
-    dw = 5  # width of spot
-    # plot the frames
-    for i in range(v.n_frames):  # frame number v.n_frames
-        # make a blank image
-        frame = np.zeros((v.frame_size_x, v.frame_size_y), dtype=float)
-        frame[x0-dw:x0+dw, y0-dw:y0+dw] = 1.0
-        for j, xy in enumerate(x_y[i]):
-            frame[x0+xy[0]-dw:x0+xy[0]+dw,
-                  y0+xy[1]-dw:y0+xy[1]+dw] = I_calc_frame[i][j]
-    
-        fig = plt.figure(frameon=False)
-        plt.imshow(frame, cmap='grey')
-        plt.axis("off")
-        plt.show()
+    px.frame_plot(t_m2o, g_frame_o, I_calc_frame, v.n_frames, v.frame_size_x,
+                  v.frame_size_y, v.frame_resolution)
 
 
 # %% Bragg position and rocking curves
@@ -420,28 +401,7 @@ for g in np.unique(np.concatenate(g_where)):
             (sg_rc[neg]+sg_rc[pos]) / (abs(sg_rc[neg])+abs(sg_rc[pos]))
 
     if v.frame_output == 1:
-        # functions for a double x axis
-        def frame2sg(x):
-            return sg_rc[0] + (x - f_rc[0])*(sg_rc[1] - sg_rc[0])
-
-        def sg2frame(x):
-            return f_rc[0] + (x - sg_rc[0])/(sg_rc[1] - sg_rc[0])
-
-        fig = plt.figure(figsize=(5, 3.5))
-        ax = fig.add_subplot(111)
-        ax.plot(f_rc, I_rc)
-        # plt.xticks(range(int(min(f_rc)), int(max(f_rc)) + 1))
-        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-        # plt.annotate(np.max(I_rc), xy=(min(f_rc), max(I_rc)))
-        plt.xlim(left=min(f_rc), right=max(f_rc))
-        plt.ylim(bottom=0.0)
-        secax = ax.secondary_xaxis(0.4, functions=(frame2sg, sg2frame))
-        secax.xaxis.set_tick_params(rotation=90)
-        # secax.set_xlabel('$s_g$')
-        ax.set_xlabel('Frame')
-        ax.set_ylabel('Intensity')
-        ax.set_title(f"{hkl_pool[g]}")
-        plt.show()
+        px.rock_plot(hkl_pool, g, sg_rc, f_rc, I_rc)
 
 
 # %% dynamical calculation
