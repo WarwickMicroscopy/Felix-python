@@ -386,19 +386,20 @@ def frame_plot(t_m2o, g_frame_o, I_calc_frame, n_frames, frame_size_x,
         plt.show()
 
 
-def rock_plot(hkl_pool, g, sg_rc, f_rc, I_rc):
+def rock_plot(hkl_pool, g, sg_rc, f_rc, I1_rc, I2_rc):
     # rocking curve plot
+
+    # functions for a double x axis
     def frame2sg(x):
-        # functions for a double x axis
         return sg_rc[0] + (x - f_rc[0])*(sg_rc[1] - sg_rc[0])
 
     def sg2frame(x):
-        # functions for a double x axis
         return f_rc[0] + (x - sg_rc[0])/(sg_rc[1] - sg_rc[0])
 
     fig = plt.figure(figsize=(5, 3.5))
     ax = fig.add_subplot(111)
-    ax.plot(f_rc, I_rc)
+    ax.plot(f_rc, I1_rc)
+    ax.plot(f_rc, I2_rc)
     # plt.xticks(range(int(min(f_rc)), int(max(f_rc)) + 1))
     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     # plt.annotate(np.max(I_rc), xy=(min(f_rc), max(I_rc)))

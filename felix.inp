@@ -29,12 +29,12 @@ incident_beam_direction   = [100000, 13629, 46009]
 x_direction               = [100000, -518832, -63658]
 normal_direction          = [100000, -10950, -2094]
 accelerating_voltage_kv   = 200.0
-frame_angle               = 0.1
-n_frames                  = 50
+frame_angle               = 0.05
+n_frames                  = 100
 
 # Image output options
-initial_thickness         = 900.0
-final_thickness           = 910.0
+initial_thickness         = 400.0
+final_thickness           = 410.0
 delta_thickness           = 50.0
 precision                 = 0.00002
 frame_size_x			  = 1024
