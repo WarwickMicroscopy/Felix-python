@@ -388,8 +388,9 @@ def frame_plot(t_m2o, g_frame_o, I_calc_frame, n_frames, frame_size_x,
             I_ij = I_calc_frame[i][j]
             if log_scale:
                 I_ij = np.log(I_ij)
-            frame[x0+xy[0]-dw:x0+xy[0]+dw,
-                  y0+xy[1]-dw:y0+xy[1]+dw] = I_ij
+            # *** swap x and y to match data ***
+            frame[x0-xy[1]-dw:x0-xy[1]+dw,
+                  y0-xy[0]-dw:y0-xy[0]+dw] = I_ij
 
         fig = plt.figure(frameon=False)
         plt.imshow(frame, cmap='grey')

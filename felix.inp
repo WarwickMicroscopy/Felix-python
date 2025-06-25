@@ -24,23 +24,23 @@ debye_waller_constant     = 0.0
 absorption_per            = 10.0
 
 # Microscope settings
-convergence_angle         = 0.13906
-incident_beam_direction   = [100000, 13629, 46009]
-x_direction               = [100000, -518832, -63658]
-normal_direction          = [100000, -10950, -2094]
+convergence_angle         = 0.1035
+incident_beam_direction   = [-23762, 100000, 38938]
+x_direction               = [5348, 40209, -100000]
+normal_direction          = [1, 0, -1]
 accelerating_voltage_kv   = 200.0
-frame_angle               = 0.2
+frame_angle               = 0.1035
 n_frames                  = 250
 
 # Image output options
-initial_thickness         = 400.0
-final_thickness           = 410.0
+initial_thickness         = 1850.0
+final_thickness           = 1850.0
 delta_thickness           = 50.0
 precision                 = 0.00002
 frame_size_x			  = 1024
 frame_size_y			  = 1024
 frame_resolution          = 0.0064
-frame_g_limit             = 1.0
+frame_g_limit             = 2.0
 frame_output	          = 1
 
 # Refinement specific flags

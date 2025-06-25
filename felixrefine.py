@@ -351,7 +351,7 @@ cc = (rc_fwhm/(2**1.5 * np.log(2)))**2  # term in gaussian denominator
 # note that sg of 0.1 is a long way from the Bragg condition at 200kV
 # a value of 0.05 seems about right to match to experiment
 # could be an input or a multiple of rc_fwhm, but keep as a fixed value for now
-ds = 0.1
+ds = 0.15
 
 # find all reflexions in all frames in the sg limit
 mask = np.abs(sg) < ds  # boolean, size [n_frames, n_g]
