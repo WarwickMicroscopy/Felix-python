@@ -25,9 +25,9 @@ absorption_per            = 10.0
 
 # Microscope settings
 convergence_angle         = 0.983
-incident_beam_direction   = [1, 0, 0]
-x_direction               = [0, 2, 1]
-normal_direction          = [1, 0, 0]
+incident_beam_direction   = [-1, 1, 0]
+x_direction               = [1, 1, 0]
+normal_direction          = [-1, 1, 0]
 accelerating_voltage_kv   = 200.0
 acceptance_angle          = 0.0
 
