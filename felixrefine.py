@@ -633,12 +633,6 @@ if 'S' not in v.refine_mode:
 #         j += 1
 
 
-# %% baseline simulation
-print("-------------------------------")
-print("Baseline simulation:")
-# uses the whole v=Var class
-setup, bwc = sim.simulate(v)
-
 # %% read in experimental images
 if 'S' not in v.refine_mode:
     v.lacbed_expt = np.zeros([2*v.image_radius, 2*v.image_radius, v.n_out])
