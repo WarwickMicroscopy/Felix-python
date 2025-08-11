@@ -1297,7 +1297,7 @@ def sg(big_k, g_pool):
         * np.sign(big_k_mag - np.linalg.norm(k_plus_g, axis=2))
 
     return sg
-    
+
 
 def strong_beams(s_g_frame, ug_matrix, min_strong_beams):
     """

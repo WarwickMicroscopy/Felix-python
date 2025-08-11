@@ -321,6 +321,8 @@ g_limit = int(v.frame_g_limit/expand)
 hkl_pool, g_pool, g_mag = px.hkl_make(t_cr2or, g_limit, v.lattice_type)
 n_g = len(g_mag)
 
+# Bragg angles
+bragg = np.arcsin(0.5*g_mag/big_k_mag)
 print(f"giving {len(g_mag)} reflexions")  # n_g
 px.pool_plot(g_pool, g_mag)
 
@@ -332,7 +334,7 @@ F_g = px.Fg(g_pool, g_mag, atom_position, atomic_number, occupancy,
 I_kin = (F_g * np.conj(F_g)).real
 
 # incident wave vector lies along Z in the microscope frame
-# so we can get if for all frames from the last column of the
+# so we can get it for all frames from the last column of the
 # transformation matrix t_m20. size [n_frames, 3]
 big_k = big_k_mag * t_m2o[:, :, 2]
 
@@ -358,8 +360,9 @@ mask = np.abs(sg) < ds  # boolean, size [n_frames, n_g]
 
 # Now we make lists of numpy arrays, using this mask
 # The first list g_where, length n_frames, gives the indices of the reflexions
-# in the numpy arrays sg, hkl_pool, g_pool, I_kin
+# in the numpy arrays bragg, sg, hkl_pool, g_pool, I_kin
 g_where = [np.where(mask[i])[0] for i in range(mask.shape[0])]
+bragg_frame = [bragg[i] for i in g_where]  # Bragg angles
 sg_frame = [sg[j, i] for j, i in enumerate(g_where)]  # sg values
 hkl_frame = [hkl_pool[i] for i in g_where]  # Miller indices
 g_frame_o = [g_pool[i] for i in g_where]  # g-vectors (orthogonal frame)
@@ -383,6 +386,55 @@ log_scale = True
 if v.frame_output == 1:
     px.frame_plot(t_m2o, g_frame_o, I_calc_frame, v.n_frames, v.frame_size_x,
                   v.frame_size_y, v.frame_resolution, log_scale)
+
+
+# %% plane trace & Bragg condition plots
+# We work on the surface of a sphere of radius K and plot each plane trace
+# as a straight line y = m*x + c_plane (ok for a small angular range)
+# The gradient m = -g[0]/g[1] in the microscope reference frame
+# The constant is given by the tilt d_phi of the plane away from the beam
+# direction z, c_plane = K*tan(d_phi)*sqrt(g[0]**2+g[1]**2)/g[1]
+# We add the Bragg angle onto d_phi to get the traces of Bragg conditions
+# which are parllel to plane traces but have y = m*x + c_bragg
+
+# a for loop, since each frame can have a different number [n] of g-vectors
+# c_plane_list = []
+# c_bragg_list = []
+j = 0  # frame counter
+for g_f, bragg, t in zip(g_frame_o, bragg_frame, t_m2o):
+    g_frame = g_f @ t  # g-vectors in microscope frame, size [n, 3]
+    # The tilt of g out of the diffraction pattern plane is the angle
+    # d_phi = arctan(g[2]/sqrt(g[0]**2+g[1]**2))
+    g_frame_ip = np.sqrt(g_frame[:, 0]**2 + g_frame[:, 1]**2)  # in plane part
+    d_phi = np.arctan(g_frame[:, 2] / g_frame_ip)
+    # plane trace
+    c_plane = big_k_mag * np.tan(d_phi) * g_frame_ip / g_frame[:, 1]
+    # Bragg
+    d_theta = d_phi + bragg
+    c_bragg = big_k_mag * np.tan(d_theta) * g_frame_ip / g_frame[:, 1]
+
+#     c_plane_list.append(c_plane)
+#     c_bragg_list.append(c_bragg)
+    
+    # set up the plot range - to + x
+    k_range = 10.0
+    x = np.arange(-k_range, k_range, 0.1)
+    bp = np.zeros(len(x))  # beam path at y=0
+    plt.style.use('dark_background')
+    fig = plt.figure(figsize=(5, 5))
+    ax = fig.add_subplot(111)
+    ax.axis('off')
+    plt.annotate(f"Frame {j}", xy=(5, 5), color='white',
+                 xycoords='axes pixels', size=10)
+    for i in range(len(g_frame)):
+        y_p = x*(g_frame[i, 0]/g_frame[i, 1]) + c_plane[i]  # plane traces
+        plt.plot(x, y_p, lw=0.5, color='grey')
+        y_g = x*(g_frame[i, 0]/g_frame[i, 1]) + c_bragg[i]  # Bragg traces
+        plt.plot(x, y_g, lw=1.0, color='b')
+        plt.plot(x, bp, lw=1.0, color='r')
+    plt.ylim(bottom=-k_range, top=k_range)
+    plt.show()
+    j += 1
 
 
 # %% dynamical simulation
