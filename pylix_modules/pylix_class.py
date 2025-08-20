@@ -4,6 +4,8 @@ Created on Thu Nov  7 08:54:05 2024
 
 @author: Richard
 """
+import numpy as np
+from dataclasses import dataclass, field
 # ----------------------------------------------------------------------------
 # variables to get from felix.inp
 # class microscope:
@@ -122,51 +124,12 @@ class Var(Inp, Cif):
     def __init__(self):
         Inp.__init__(self)
         Cif.__init__(self)
-    # self.chemical_formula = None
-    # self.space_group = None
-    # self.space_group_number = None
-    # self.lattice_type = None
-    # self.cell_a = None
-    # self.cell_b = None
-    # self.cell_c = None
-    # self.cell_alpha = None
-    # self.cell_beta = None
-    # self.cell_gamma = None
-    # self.n_basis = None
-    # self.symmetry_matrix = None
-    # self.symmetry_vector = None
-    # self.basis_atom_label = None
-    # self.basis_atom_name = None
-    # self.basis_wyckoff = None
-    # self.basis_atom_position = None
-    # self.basis_occupancy = None
-    # self.basis_B_iso = None
-    # self.thickness = None
-    # self.n_thickness = None
-    # self.incident_beam_direction = None
-    # self.normal_direction = None
-    # self.x_direction = None
-    # self.convergence_angle = None
-    # self.accelerating_voltage_kv = None
-    # self.atomic_sites = None
-    # self.g_limit = None
-    # self.refine_mode = None
-    # self.scatter_factor_method = None
-    # self.plot = None
-    # self.debug = None
-    # self.input_hkls = None
-    # self.i_obs = None
-    # self.sigma_obs = None
-    # self.refined_variable = None
-    # self.refined_variable_type = None
-    # self.atom_refine_flag = None
-    # self.refined_variable_atom = None
-    # self.thickness = None
-    # self.thickness = None
-    # self.thickness = None
-    # self.thickness = None
-    # self.thickness = None
-    # self.thickness = None
-    # self.thickness = None
-    # self.thickness = None
-        
+
+class RefinementState:
+    best_fit: float
+    last_fit: float
+    df: float = 1.0
+    p: np.ndarray = field(default_factory=lambda: np.array([]))
+    last_p: np.ndarray = field(default_factory=lambda: np.array([]))
+    var_pl: list = field(default_factory=list)
+    fit_pl: list = field(default_factory=list)        

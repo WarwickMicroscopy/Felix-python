@@ -5,7 +5,7 @@ _database_code_ICSD 84578
 _audit_creation_date 1999-01-19
 _audit_update_record 2006-04-01
 _chemical_name_common 'Lithium niobate'
-_chemical_formula_structural 'Li (Nb O3)'
+_chemical_formula_structural 'Li Nb O3'
 _chemical_formula_sum 'Li1 Nb1 O3'
 _chemical_name_structure_type LiNbO3
 _exptl_crystal_density_diffrn 4.63

@@ -88,8 +88,8 @@ else:
     raise ValueError("Symmetry operations not found in .cif")
 
 # extract the basis from the raw cif values
-# take basis atom labels as given
-v.basis_atom_label = v.atom_site_label.rstrip()  # removing any trailing blanks
+# take basis atom labels as given, removing any trailing blanks
+v.basis_atom_label = [s.rstrip() for s in v.atom_site_label]
 # atom symbols, stripping any charge etc.
 v.basis_atom_name = [''.join(filter(str.isalpha, name))
                      for name in v.atom_site_type_symbol]
@@ -239,7 +239,8 @@ if 'S' not in v.refine_mode:
             # allowed movements for an atom (depending on its Wyckoff
             # symbol and space group) as row vectors with magnitude 1.
             # ***NB NOT ALL SPACE GROUPS IMPLEMENTED ***
-            moves = px.atom_move(v.space_group_number, v.basis_wyckoff[i])
+            moves = px.atom_move(v.space_group_number,
+                                 v.basis_wyckoff[v.atomic_sites[i]])
             degrees_of_freedom = np.sum(np.any(moves, axis=1))
             if degrees_of_freedom == 0:
                 raise ValueError(f"Coordinate refinement of atom \
@@ -396,7 +397,7 @@ if 'S' not in v.refine_mode:
 print("-------------------------------")
 print("Baseline simulation:")
 # uses the whole v=Var class
-setup, bwc = sim.simulate(v)
+sim.simulate(v)
 
 # %% read in experimental images
 if 'S' not in v.refine_mode:
@@ -468,7 +469,7 @@ else:
 if 'S' not in v.refine_mode:
     # Initialise variables for refinement
     fit0 = fom*1.0
-    best_fit = fom*1.0
+    v.best_fit = fom*1.0
     last_fit = fom*1.0
     # p is a vector along the gradient in n-dimensional space
     p = np.ones(v.n_variables)
@@ -480,16 +481,15 @@ if 'S' not in v.refine_mode:
     independent_delta = 0.0
     
     # for a plot
-    var_pl = ([])
-    fit_pl = ([])
+    v.fit_log = ([last_fit])
     
     # Refinement loop
     while df >= v.exit_criteria:
         # v.refined_variable is the working set of variables going into a sim
         # best_var is the running best fit during this refinement cycle
-        best_var = np.copy(v.refined_variable)
+        v.best_var = np.copy(v.refined_variable)
         # next_var is the predicted next (best) point
-        next_var = np.copy(v.refined_variable)
+        v.next_var = np.copy(v.refined_variable)
         # if all parameters have been refined and we're still in the loop, reset
         if np.sum(np.abs(last_p)) < 1e-10:
             last_p = np.ones(v.n_variables)
@@ -505,114 +505,96 @@ if 'S' not in v.refine_mode:
             if abs(last_p[i]) < 1e-10:
                 p[i] = 0.0
                 continue
-            v.current_variable_type = v.refined_variable_type[i]
-            # Check if Debye-Waller factor is zero, skip if so
-            if v.current_variable_type == 4 and v.refined_variable[i] <= 1e-10:
-                p[i] = 0.0
-                continue
-    
+            p[i] = sim.refine_single_variable(v, i)
+            # v.current_variable_type = v.refined_variable_type[i]
+            # # Check if Debye-Waller factor is zero, skip if so
+            # if v.current_variable_type == 4 and v.refined_variable[i] <= 1e-10:
+            #     p[i] = 0.0
+            #     continue
+
             # middle point is the previous best simulation
-            r3_var[1] = v.refined_variable[i]*1.0
-            r3_fom[1] = last_fit*1.0
-            var_pl.append(v.refined_variable[i])
-            fit_pl.append(last_fit)
-    
+            # r3_var[1] = v.refined_variable[i]*1.0
+            # r3_fom[1] = last_fit*1.0
+            # var_pl.append(v.refined_variable[i])
+            # fit_pl.append(last_fit)
+
             # Update iteration
-            
-    
-            print(f"Finding gradient, variable {i+1} of {v.n_variables}")
-    
-            # Display messages based on variable type (last digit)
-            if v.current_variable_type % 10 == 1:
-                print("Changing Ug")
-            elif v.current_variable_type % 10 == 2:
-                print("Changing atomic coordinate")
-            elif v.current_variable_type % 10 == 3:
-                print("Changing occupancy")
-            elif v.current_variable_type % 10 == 4:
-                print("Changing isotropic Debye-Waller factor")
-            elif v.current_variable_type % 10 == 5:
-                print("Changing anisotropic Debye-Waller factor")
-            elif v.current_variable_type % 10 == 6:
-                print("Changing lattice parameter")
-            elif v.current_variable_type % 10 == 8:
-                print("Changing convergence angle")
-    
+            # print(f"Finding gradient, variable {i+1} of {v.n_variables}")
+            # print(sim.variable_message(v.current_variable_type))
+
             # dx is a small change in the current variable determined by RScale
             # which is either refinement_scale for atomic coordinates and
             # refinement_scale*variable for everything else
-            dx = abs(v.refinement_scale * v.refined_variable[i])
-            if v.refined_variable_type[i] == 2:
-                dx = abs(v.refinement_scale)
-    
-            # Three-point gradient measurement, starting with plus
-            print(f"initial {v.refined_variable[i]}")  # ***#*
-            v.refined_variable[i] += dx
-            print(f"now {v.refined_variable[i]}")  # ***#*
+            # dx = abs(v.refinement_scale * v.refined_variable[i])
+            # if v.refined_variable_type[i] == 2:
+            #     dx = abs(v.refinement_scale)
+
+            # # Three-point gradient measurement, starting with plus
+            # v.refined_variable[i] += dx
             # update variables
-            sim.update_variables(v)
-            sim.print_current_var(v, v.refined_variable[i])
-            # simulate
-            setup, bwc = sim.simulate(v)
+            # sim.update_variables(v)
+            # sim.print_current_var(v, i)
+            # # simulate
+            # setup, bwc = sim.simulate(v)
             # figure of merit
-            fom = sim.figure_of_merit(v)
-            if (fom < best_fit):
-                best_fit = fom*1.0
-                best_var = np.copy(v.refined_variable)
-            r3_var[2] = v.refined_variable[i]*1.0
-            r3_fom[2] = fom*1.0
-            print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-            print(f"-1-----------------------------")  # {r3_var},{r3_fom}")
-            var_pl.append(v.refined_variable[i])
-            fit_pl.append(fom)
-    
-            # keep going or turn round?
-            if r3_fom[2] < r3_fom[1]:  # keep going
-                v.refined_variable[i] += np.exp(0.5) * dx
-            else:  # turn round
-                dx = - dx
-                v.refined_variable[i] += np.exp(0.75) * dx
-    
-            # update variables
-            sim.update_variables(v)
-            sim.print_current_var(v, v.refined_variable[i])
-            # simulate
-            setup, bwc = sim.simulate(v)
-            # figure of merit
-            fom = sim.figure_of_merit(v)
-            if (fom < best_fit):
-                best_fit = fom*1.0
-                best_var = np.copy(v.refined_variable)
-            r3_var[0] = v.refined_variable[i]*1.0
-            r3_fom[0] = fom*1.0
-            print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-            print(f"-2-----------------------------")  # {r3_var},{r3_fom}")
-            var_pl.append(v.refined_variable[i])
-            fit_pl.append(fom)
-    
-            # predict the next point as a minimum or a step on
-            next_var[i], exclude = px.convex(r3_var, r3_fom)
-            if exclude:
-                p[i] = 0.0  # this variable doesn't get included in vector downhill
-            else:
-                # we weight the variable by -df/dx
-                p[i] = -(r3_fom[2] - r3_fom[0]) / (2 * dx)
-                # error estimate goes here
-                # independent_delta[i] = delta_x(r3_var, r3_fom, precision, err)
-                # uncert_brak(var_min, independent_delta[i])
-    
+            # fom = sim.figure_of_merit(v)
+            # if (fom < best_fit):
+            #     best_fit = fom*1.0
+            #     best_var = np.copy(v.refined_variable)
+            # r3_var[2] = v.refined_variable[i]*1.0
+            # r3_fom[2] = fom*1.0
+            # print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
+            # print(f"-1-----------------------------")  # {r3_var},{r3_fom}")
+            # var_pl.append(v.refined_variable[i])
+            # fit_pl.append(fom)
+
+            # # keep going or turn round?
+            # if r3_fom[2] < r3_fom[1]:  # keep going
+            #     v.refined_variable[i] += np.exp(0.5) * dx
+            # else:  # turn round
+            #     dx = - dx
+            #     v.refined_variable[i] += np.exp(0.75) * dx
+
+            # # update variables
+            # sim.update_variables(v)
+            # sim.print_current_var(v, i)
+            # # simulate
+            # setup, bwc = sim.simulate(v)
+            # # figure of merit
+            # fom = sim.figure_of_merit(v)
+            # if (fom < best_fit):
+            #     best_fit = fom*1.0
+            #     best_var = np.copy(v.refined_variable)
+            # r3_var[0] = v.refined_variable[i]*1.0
+            # r3_fom[0] = fom*1.0
+            # print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
+            # print(f"-2-----------------------------")  # {r3_var},{r3_fom}")
+            # var_pl.append(v.refined_variable[i])
+            # fit_pl.append(fom)
+
+            # # predict the next point as a minimum or a step on
+            # next_var[i], exclude = px.convex(r3_var, r3_fom)
+            # if exclude:
+            #     p[i] = 0.0  # this variable doesn't get included in vector downhill
+            # else:
+            #     # we weight the variable by -df/dx
+            #     p[i] = -(r3_fom[2] - r3_fom[0]) / (2 * dx)
+            #     # error estimate goes here
+            #     # independent_delta[i] = delta_x(r3_var, r3_fom, precision, err)
+            #     # uncert_brak(var_min, independent_delta[i])
+
         # ===========vector descent
         # either: point 1 of 3, or final simulation using the prediction next_var
-        v.refined_variable = np.copy(next_var)
+        v.refined_variable = np.copy(v.next_var)
         # simulation
         sim.update_variables(v)
-        setup, bwc = sim.simulate(v)
+        sim.simulate(v)
         fom = sim.figure_of_merit(v)
-        if (fom < best_fit):
+        if (fom < v.best_fit):
             best_fit = fom*1.0
             best_var = np.copy(v.refined_variable)
-        print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-        fit_pl.append(fom)
+        print(f"  Figure of merit {100*fom:.2f}% (best {100*v.best_fit:.2f}%)")
+        v.fit_log.append(fom)
         sim.print_LACBED(v)
     
         # Reset the gradient vector magnitude and initialize vector descent
@@ -623,7 +605,7 @@ if 'S' not in v.refine_mode:
             p = p / p_mag   # Normalized direction of max/min gradient
             j = np.where(np.abs(p) >= 1e-10)[0][0]
             v.current_variable_type = v.refined_variable_type[j]
-            sim.print_current_var(v, v.refined_variable[i])
+            sim.print_current_var(v, i)
             print(f"Refining, refinement vector {p}")
             # Find index of the first non-zero element in the gradient vector
             # reset the refinement scale (last term reverses sign if we overshot)
@@ -638,9 +620,9 @@ if 'S' not in v.refine_mode:
             # NB vectors here, not individual variables
             v.refined_variable = v.refined_variable + p * p_mag
             # simulation
-            sim.print_current_var(v, v.refined_variable[j])
+            sim.print_current_var(v, j)
             sim.update_variables(v)
-            setup, bwc = sim.simulate(v)
+            sim.simulate(v)
             fom = sim.figure_of_merit(v)
             if (fom < best_fit):
                 best_fit = fom*1.0
@@ -649,8 +631,8 @@ if 'S' not in v.refine_mode:
             r3_fom[1] = fom*1.0
             print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
             print(f"-b-----------------------------")  # {r3_var},{r3_fom}")
-            var_pl.append(v.refined_variable[j])
-            fit_pl.append(fom)
+            # var_pl.append(v.refined_variable[j])
+            v.fit_log.append(fom)
     
             # Third point
             print("Refining, point 3 of 3")
@@ -661,9 +643,9 @@ if 'S' not in v.refine_mode:
                 v.refined_variable += p*p_mag
     
             # simulation
-            sim.print_current_var(v, v.refined_variable[j])
+            sim.print_current_var(v, j)
             sim.update_variables(v)
-            setup, bwc = sim.simulate(v)
+            sim.simulate(v)
             fom = sim.figure_of_merit(v)
             if (fom < best_fit):
                 best_fit = fom*1.0
@@ -672,8 +654,8 @@ if 'S' not in v.refine_mode:
             r3_fom[2] = fom*1.0
             print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
             print(f"-c-----------------------------")  # {r3_var},{r3_fom}")
-            var_pl.append(v.refined_variable[j])
-            fit_pl.append(fom)
+            # var_pl.append(v.refined_variable[j])
+            v.fit_log.append(fom)
     
             # we continue until we get a predicted minnymum
             minny = False
@@ -683,9 +665,9 @@ if 'S' not in v.refine_mode:
                 next_x, minny = px.convex(r3_var, r3_fom)
                 v.refined_variable += p * (next_x-last_x) / p[j]
                 # simulation
-                sim.print_current_var(v, v.refined_variable[j])
+                sim.print_current_var(v, j)
                 sim.update_variables(v)
-                setup, bwc = sim.simulate(v)
+                sim.simulate(v)
                 fom = sim.figure_of_merit(v)
                 if (fom < best_fit):
                     best_fit = fom*1.0
@@ -698,8 +680,8 @@ if 'S' not in v.refine_mode:
                     minny = True
                 print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
                 print(f"-.-----------------------------")  # {r3_var},{r3_fom}")
-                var_pl.append(v.refined_variable[j])
-                fit_pl.append(fom)
+                # var_pl.append(v.refined_variable[j])
+                v.fit_log.append(fom)
     
             # End of this cycle
             print("Refinement cycle complete")
@@ -713,7 +695,7 @@ if 'S' not in v.refine_mode:
         v.refinement_scale *= (1 - 1 / (2 * v.n_variables))
         print(f"Improvement in fit {100*df:.2f}%, will stop at {100*v.exit_criteria:.2f}%")
         print("-------------------------------")
-        plt.plot(fit_pl)
+        plt.plot(v.fit_log)
         # plt.scatter(var_pl, fit_pl)
         plt.show()
     

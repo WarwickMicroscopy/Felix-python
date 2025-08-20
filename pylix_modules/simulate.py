@@ -58,7 +58,7 @@ def simulate(v):
     atomic_number = np.array([fu.atomic_number_map[na] for na in atom_name])
 
     n_atoms = len(atom_label)
-    if v.iter_count == 1:
+    if v.iter_count == 0:
         print("  There are "+str(n_atoms)+" atoms in the unit cell")
     # plot
     if v.iter_count == 0 and v.plot:
@@ -99,7 +99,7 @@ def simulate(v):
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
     mip = mip.item()*scatt_fac_to_volts  # NB convert array to float
-    if v.iter_count == 1:
+    if v.iter_count == 0:
         print(f"  Mean inner potential = {mip:.1f} Volts")
     # Wave vector magnitude in crystal
     # high-energy approximation (not HOLZ compatible)
@@ -196,7 +196,6 @@ def simulate(v):
                                         B_iso, g_matrix, g_magnitude,
                                         v.absorption_method, v.absorption_per,
                                         electron_velocity)
-    # ug_matrix = 10 ug_matrix
     # matrix of dot products with the surface normal
     g_dot_norm = np.dot(g_pool, norm_dir_m)
     if v.iter_count == 0:
@@ -246,16 +245,17 @@ def simulate(v):
             # note x and y swapped!
             v.lacbed_sim[:, -pix_y, pix_x, :] = intensity[:, :len(v.g_output)]
 
-    print("\rBloch wave calculation... done    ")
-
     # timings
     setup = mid-strt
     bwc = time.time()-mid
+    print(f"\rBloch wave calculation... done in {bwc:.1f} s (beam pool setup {setup:.1f} s)")
+    if v.iter_count == 0:
+        print(f"    {1000*(bwc)/(4*v.image_radius**2):.2f} ms/pixel")
 
     # increment iteration counter
     v.iter_count += 1
 
-    return setup, bwc
+    return
 
 
 def zncc(img1, img2):
@@ -360,7 +360,9 @@ def update_variables(v):
     in the basis that is being refined. (-1 = not an atomic refinement)
     basis_atom_position is the position of an atom (in A, microscope frame???)
     basis_atom_delta is the uncertainty in position of an atom, forgotten
-    how this works
+    how this works!
+    
+    All updated variables are in the global class v so no specific return
     """
 
     # will tackle this when doing atomic position refinement
@@ -379,14 +381,12 @@ def update_variables(v):
             atom_id = v.atom_refine_flag[i]
 
             # Update position: r' = r - v*(r.v) + v*current_var
-            r_dot_v = np.dot(v.basis_atom_position[v.atomic_sites[i]],
+            r_dot_v = np.dot(v.basis_atom_position[atom_id],
                              v.atom_refine_vec[i])
             v.basis_atom_position[atom_id, :] = np.mod(
                 v.basis_atom_position[atom_id, :] + v.atom_refine_vec[i] *
                 (v.refined_variable[i] - r_dot_v), 1)
-            with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
-                print(f"    Atom {atom_id}: {v.basis_atom_label[atom_id]} \
-                      {v.basis_atom_position[atom_id, :]}")
+
             # error estimate - needs work
             # Update uncertainty if independent_delta is non-zero
             # if abs(independent_delta[i]) > 1e-10:  # Tiny threshold
@@ -486,21 +486,114 @@ def print_LACBED_pattern(i, j, v):
     ax.annotate(annotation, xy=(5, 5), xycoords='axes pixels',
                      size=30, color='w', path_effects=[text_effect])
 
-def print_current_var(v, var):
+
+def print_current_var(v, i):
     # prints the variable being refined
+    var = v.refined_variable[i]
+    atom_id = v.atom_refine_flag[i]
     if v.current_variable_type % 10 == 1:
-        print(f"Current Ug {var:.3f}")
+        print(f"  Current Ug {var:.3f}")
     elif v.current_variable_type % 10 == 2:
-        print(f"Current atomic coordinate {var:.4f}")
+        with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
+            print(f"  Atom {atom_id}: {v.basis_atom_label[atom_id]} {v.basis_atom_position[atom_id, :]}")
+        # print(f"Current atomic coordinate {var:.4f}")
     elif v.current_variable_type % 10 == 3:
-        print(f"Current occupancy {var:.2f}")
+        print(f"  Current occupancy {var:.2f}")
     elif v.current_variable_type % 10 == 4:
-        print(f"Current isotropic Debye-Waller factor {var:.2f}")
+        print(f"  Current Biso {var:.2f}")
     elif v.current_variable_type % 10 == 5:
-        print(f"Current anisotropic Debye-Waller factor {var:.2f}")
+        print(f"  Current U[ij] {var:.2f}")
     elif v.current_variable_type % 10 == 6:
-        print(f"Current lattice parameter {var:.4f}")
+        print(f"  Current lattice parameter {var:.4f}")
     elif v.current_variable_type % 10 == 8:
-        print(f"Current convergence angle {var:.3f} Å^-1")
+        print(f"  Current convergence angle {var:.3f} Å^-1")
     elif v.current_variable_type % 10 == 9:
-        print(f"Current accelerating voltage {var:.1f} kV")
+        print(f"  Current accelerating voltage {var:.1f} kV")
+
+
+def variable_message(vtype):
+    """Map variable type → message string."""
+    msg = {
+        1: "Changing Ug",
+        2: "Changing atomic coordinate",
+        3: "Changing occupancy",
+        4: "Changing isotropic thermal displacement parameter Biso",
+        5: "Changing anisotropic thermal displacement parameter U[ij]",
+        6: "Changing lattice parameter",
+        8: "Changing convergence angle",
+    }
+    return msg.get(vtype % 10, "Unknown variable type")
+
+
+def sim_fom(v, i):
+    ''' wraps multiple subroutines into a single line '''
+    update_variables(v)
+    print_current_var(v, i)
+    simulate(v)
+    # figure of merit
+    fom = figure_of_merit(v)
+    v.fit_log.append(fom)
+    if (fom < v.best_fit):
+        v.best_fit = fom*1.0
+        v.best_var = np.copy(v.refined_variable)
+    print(f"  Figure of merit {100*fom:.2f}% (best {100*v.best_fit:.2f}%)")
+
+    return fom
+
+
+def refine_single_variable(v, i):
+    '''
+    Does 3-point refinement for a single variable and if no nimimum is found
+    retuns the step size for a subsequent multidimensional refinement
+    '''
+    r3_var = np.zeros(3)  # for parabolic minimum
+    r3_fom = np.zeros(3)
+    v.current_variable_type = v.refined_variable_type[i]
+    # Check if Debye-Waller factor is zero, skip if so
+    if v.current_variable_type == 4 and v.refined_variable[i] <= 1e-10:
+        p = 0.0
+    else:
+        # middle point is the previous best simulation
+        r3_var[1] = v.refined_variable[i]*1.0
+        r3_fom[1] = v.best_fit*1.0
+        print(f"Finding gradient, variable {i+1} of {v.n_variables}")
+        print(variable_message(v.current_variable_type))
+
+        # dx is a small change in the current variable
+        # which is either refinement_scale for atomic coordinates and
+        # refinement_scale*variable for everything else
+        dx = abs(v.refinement_scale * v.refined_variable[i])
+        if v.refined_variable_type[i] == 2:
+            dx = abs(v.refinement_scale)
+        # Three-point gradient measurement, starting with plus
+        v.refined_variable[i] += dx
+        # simulate and get figure of merit
+        fom = sim_fom(v, i)
+        r3_var[2] = v.refined_variable[i]*1.0
+        r3_fom[2] = fom*1.0
+        print("-1-----------------------------")  # {r3_var},{r3_fom}")
+
+        # keep going or turn round?
+        if r3_fom[2] < r3_fom[1]:  # keep going
+            v.refined_variable[i] += np.exp(0.5) * dx
+        else:  # turn round
+            dx = - dx
+            v.refined_variable[i] += np.exp(0.75) * dx
+        # simulate and get figure of merit
+        fom = sim_fom(v, i)
+        r3_var[0] = v.refined_variable[i]*1.0
+        r3_fom[0] = fom*1.0
+        print("-2-----------------------------")
+
+        # predict the next point as a minimum or a step onwards
+        v.next_var[i], exclude = px.convex(r3_var, r3_fom)
+        if exclude:
+            p = 0.0  # this variable doesn't get included in vector downhill
+        else:
+            # we weight the variable by -df/dx
+            p = -(r3_fom[2] - r3_fom[0]) / (2 * dx)
+        # error estimate goes here
+        # independent_delta[i] = delta_x(r3_var, r3_fom, precision, err)
+        # uncert_brak(var_min, independent_delta[i])
+
+    return p

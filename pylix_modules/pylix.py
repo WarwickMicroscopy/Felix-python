@@ -1714,7 +1714,7 @@ def convex(r3_x, r3_y):
         print("Convex, continuing")  # going to {next_x:.2f}")
     else:
         next_x, next_y = parabo3(r3_x, r3_y)
-        print(f"Concave, predict minimum at {next_x:.3f} with fit index {100*next_y:.2f}%")
+        print(f"Concave, predict minimum at {next_x:.4f} with fit index {100*next_y:.2f}%")
         minny = True
 
     return next_x, minny
