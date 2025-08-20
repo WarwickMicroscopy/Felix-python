@@ -374,21 +374,23 @@ def update_variables(v):
             # Structure factor refinement (handled elsewhere)
             variable_check = 1
 
-        # elif variable_type == 2:  # NEEDS WORK
+        elif variable_type == 2:  # NEEDS WORK
             # Atomic coordinates
-            # atom_id = atom_refine_flag[j]
+            atom_id = v.atom_refine_flag[i]
 
-            # # Update position: r' = r - v*(r.v) + v*current_var
-            # dot_product = np.dot(basis_atom_position[atom_id, :], vector[j - 1, :])
-            # basis_atom_position[atom_id, :] = np.mod(
-            #     basis_atom_position[atom_id, :] - vector[j - 1, :] * dot_product + 
-            #     vector[jnd - 1, :] * current_var[i], 1
-            # )
-
-            # # Update uncertainty if iependent_delta is non-zero
+            # Update position: r' = r - v*(r.v) + v*current_var
+            r_dot_v = np.dot(v.basis_atom_position[v.atomic_sites[i]],
+                             v.atom_refine_vec[i])
+            v.basis_atom_position[atom_id, :] = np.mod(
+                v.basis_atom_position[atom_id, :] + v.atom_refine_vec[i] *
+                (v.refined_variable[i] - r_dot_v), 1)
+            with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
+                print(f"    Atom {atom_id}: {v.basis_atom_label[atom_id]} \
+                      {v.basis_atom_position[atom_id, :]}")
+            # error estimate - needs work
+            # Update uncertainty if independent_delta is non-zero
             # if abs(independent_delta[i]) > 1e-10:  # Tiny threshold
             #     basis_atom_delta[atom_id, :] += vector[j - 1, :] * independent_delta[i]
-            # j += 1
 
         elif variable_type == 3:
             # Occupancy
@@ -433,6 +435,9 @@ def update_variables(v):
 
 
 def print_LACBED(v):
+    '''
+    Plots all LACBED patterns in a montage
+    '''
     n = v.lacbed_sim.shape[3]# actual size, if felix.hkl's missing
     w = int(np.ceil(np.sqrt(n)))
     h = int(np.ceil(n/w))
@@ -468,6 +473,18 @@ def print_LACBED(v):
         plt.tight_layout()
         plt.show()
 
+
+def print_LACBED_pattern(i, j, v):
+    # Prints an individual LACBED pattern
+    # i = 0  # index of the pattern to plot
+    # j = 0  # index of the thickness to plot
+    fig, ax = plt.subplots(1, 1)
+    text_effect = withStroke(linewidth=3, foreground='black')
+    ax.imshow(v.lacbed_sim[j, :, :, i], cmap='pink')
+    ax.axis('off')
+    annotation = f"{v.hkl[v.g_output[i], 0]}{v.hkl[v.g_output[i], 1]}{v.hkl[v.g_output[i], 2]}"
+    ax.annotate(annotation, xy=(5, 5), xycoords='axes pixels',
+                     size=30, color='w', path_effects=[text_effect])
 
 def print_current_var(v, var):
     # prints the variable being refined

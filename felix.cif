@@ -1,123 +1,69 @@
-#(C) 2015 by Fachinformationszentrum Karlsruhe.  All rights reserved.
-data_107946-ICSD
-_database_code_ICSD 107946
-_audit_creation_date 2006-10-01
-_chemical_name_systematic 'Gallium arsenide'
-_chemical_formula_structural 'Ga As'
-_chemical_formula_sum 'Ga1 As1'
-_chemical_name_structure_type ZnS(cF8)
-_exptl_crystal_density_diffrn 5.32
-_cell_measurement_temperature 296.
+
+#(C) 2025 by FIZ Karlsruhe - Leibniz Institute for Information Infrastructure.  All rights reserved.
+data_84578-ICSD
+_database_code_ICSD 84578
+_audit_creation_date 1999-01-19
+_audit_update_record 2006-04-01
+_chemical_name_common 'Lithium niobate'
+_chemical_formula_structural 'Li (Nb O3)'
+_chemical_formula_sum 'Li1 Nb1 O3'
+_chemical_name_structure_type LiNbO3
+_exptl_crystal_density_diffrn 4.63
+_citation_title 'Synchrotron X-ray studies of Li Nb O3 and Li Ta O3'
 loop_
-_cell_length_a 5.65325
-_cell_length_b 5.65325
-_cell_length_c 5.65325
-_cell_angle_alpha 90.0
-_cell_angle_beta 90.0
-_cell_angle_gamma 90.0
-_cell_volume 180.55
-_cell_formula_units_Z 4
-_symmetry_space_group_name_H-M 'F -4 3 m'
-_symmetry_Int_Tables_number 216
+_citation_id
+_citation_journal_full
+_citation_year
+_citation_journal_volume
+_citation_page_first
+_citation_page_last
+_citation_journal_id_ASTM
+primary 'Acta Crystallographica, Section B: Structural Science' 1997 53 420 428
+ASBSDK
 loop_
-_symmetry_equiv_pos_site_id
-_symmetry_equiv_pos_as_xyz
-1 '-z, -y, x'
-2 '-y, -x, z'
-3 '-x, -z, y'
-4 '-z, -x, y'
-5 '-y, -z, x'
-6 '-x, -y, z'
-7 '-z, y, -x'
-8 '-y, x, -z'
-9 '-x, z, -y'
-10 '-z, x, -y'
-11 '-y, z, -x'
-12 '-x, y, -z'
-13 'z, -y, -x'
-14 'y, -x, -z'
-15 'x, -z, -y'
-16 'z, -x, -y'
-17 'y, -z, -x'
-18 'x, -y, -z'
-19 'z, y, x'
-20 'y, x, z'
-21 'x, z, y'
-22 'z, x, y'
-23 'y, z, x'
-24 'x, y, z'
-25 '-z, -y+1/2, x+1/2'
-26 '-y, -x+1/2, z+1/2'
-27 '-x, -z+1/2, y+1/2'
-28 '-z, -x+1/2, y+1/2'
-29 '-y, -z+1/2, x+1/2'
-30 '-x, -y+1/2, z+1/2'
-31 '-z, y+1/2, -x+1/2'
-32 '-y, x+1/2, -z+1/2'
-33 '-x, z+1/2, -y+1/2'
-34 '-z, x+1/2, -y+1/2'
-35 '-y, z+1/2, -x+1/2'
-36 '-x, y+1/2, -z+1/2'
-37 'z, -y+1/2, -x+1/2'
-38 'y, -x+1/2, -z+1/2'
-39 'x, -z+1/2, -y+1/2'
-40 'z, -x+1/2, -y+1/2'
-41 'y, -z+1/2, -x+1/2'
-42 'x, -y+1/2, -z+1/2'
-43 'z, y+1/2, x+1/2'
-44 'y, x+1/2, z+1/2'
-45 'x, z+1/2, y+1/2'
-46 'z, x+1/2, y+1/2'
-47 'y, z+1/2, x+1/2'
-48 'x, y+1/2, z+1/2'
-49 '-z+1/2, -y, x+1/2'
-50 '-y+1/2, -x, z+1/2'
-51 '-x+1/2, -z, y+1/2'
-52 '-z+1/2, -x, y+1/2'
-53 '-y+1/2, -z, x+1/2'
-54 '-x+1/2, -y, z+1/2'
-55 '-z+1/2, y, -x+1/2'
-56 '-y+1/2, x, -z+1/2'
-57 '-x+1/2, z, -y+1/2'
-58 '-z+1/2, x, -y+1/2'
-59 '-y+1/2, z, -x+1/2'
-60 '-x+1/2, y, -z+1/2'
-61 'z+1/2, -y, -x+1/2'
-62 'y+1/2, -x, -z+1/2'
-63 'x+1/2, -z, -y+1/2'
-64 'z+1/2, -x, -y+1/2'
-65 'y+1/2, -z, -x+1/2'
-66 'x+1/2, -y, -z+1/2'
-67 'z+1/2, y, x+1/2'
-68 'y+1/2, x, z+1/2'
-69 'x+1/2, z, y+1/2'
-70 'z+1/2, x, y+1/2'
-71 'y+1/2, z, x+1/2'
-72 'x+1/2, y, z+1/2'
-73 '-z+1/2, -y+1/2, x'
-74 '-y+1/2, -x+1/2, z'
-75 '-x+1/2, -z+1/2, y'
-76 '-z+1/2, -x+1/2, y'
-77 '-y+1/2, -z+1/2, x'
-78 '-x+1/2, -y+1/2, z'
-79 '-z+1/2, y+1/2, -x'
-80 '-y+1/2, x+1/2, -z'
-81 '-x+1/2, z+1/2, -y'
-82 '-z+1/2, x+1/2, -y'
-83 '-y+1/2, z+1/2, -x'
-84 '-x+1/2, y+1/2, -z'
-85 'z+1/2, -y+1/2, -x'
-86 'y+1/2, -x+1/2, -z'
-87 'x+1/2, -z+1/2, -y'
-88 'z+1/2, -x+1/2, -y'
-89 'y+1/2, -z+1/2, -x'
-90 'x+1/2, -y+1/2, -z'
-91 'z+1/2, y+1/2, x'
-92 'y+1/2, x+1/2, z'
-93 'x+1/2, z+1/2, y'
-94 'z+1/2, x+1/2, y'
-95 'y+1/2, z+1/2, x'
-96 'x+1/2, y+1/2, z'
+_citation_author_citation_id
+_citation_author_name
+primary 'Hsu, R.'
+primary 'Maslen, E.N.'
+primary 'du Boulay, D.'
+primary 'Ishizawa, N.'
+_cell_length_a 5.148(3)
+_cell_length_b 5.148(3)
+_cell_length_c 13.863(3)
+_cell_angle_alpha 90.
+_cell_angle_beta 90.
+_cell_angle_gamma 120.
+_cell_volume 318.17
+_cell_formula_units_Z 6
+_space_group_name_H-M_alt 'R 3 c'
+_space_group_IT_number 161
+loop_
+_space_group_symop_id
+_space_group_symop_operation_xyz
+1 '-x+y, y, z+1/2'
+2 'x, x-y, z+1/2'
+3 '-y, -x, z+1/2'
+4 '-x+y, -x, z'
+5 '-y, x-y, z'
+6 'x, y, z'
+7 '-x+y+2/3, y+1/3, z+5/6'
+8 'x+2/3, x-y+1/3, z+5/6'
+9 '-y+2/3, -x+1/3, z+5/6'
+10 '-x+y+2/3, -x+1/3, z+1/3'
+11 '-y+2/3, x-y+1/3, z+1/3'
+12 'x+2/3, y+1/3, z+1/3'
+13 '-x+y+1/3, y+2/3, z+1/6'
+14 'x+1/3, x-y+2/3, z+1/6'
+15 '-y+1/3, -x+2/3, z+1/6'
+16 '-x+y+1/3, -x+2/3, z+2/3'
+17 '-y+1/3, x-y+2/3, z+2/3'
+18 'x+1/3, y+2/3, z+2/3'
+loop_
+_atom_type_symbol
+_atom_type_oxidation_number
+Li1+ 1
+Nb5+ 5
+O2- -2
 loop_
 _atom_site_label
 _atom_site_type_symbol
@@ -128,6 +74,19 @@ _atom_site_fract_y
 _atom_site_fract_z
 _atom_site_B_iso_or_equiv
 _atom_site_occupancy
-Ga1 Ga 4 a  0.00  0.00  0.00  0.5854  1.0
-As1 As 4 c  0.25  0.25  0.25  0.3528  1.0
-#End of TTdata_107946-ICSD
+Li1 Li1+ 6 a 0 0 0.28063(44) 0.92 1.
+Nb1 Nb5+ 6 a 0 0 0.99899(22) 0.36 1.
+O1 O2- 18 b 0.04751(5) 0.34301(5) 0.06246(49) 0.56 1.
+loop_
+_atom_site_aniso_label
+_atom_site_aniso_type_symbol
+_atom_site_aniso_U_11
+_atom_site_aniso_U_22
+_atom_site_aniso_U_33
+_atom_site_aniso_U_12
+_atom_site_aniso_U_13
+_atom_site_aniso_U_23
+Li1 Li1+ 0.0117(11) 0.0117(11) 0.0173(24) 0.00584(54) 0 0
+Nb1 Nb5+ 0.00456(3) 0.00456(3) 0.00393(4) 0.00228(2) 0 0
+O1 O2- 0.00711(7) 0.00586(6) 0.00700(6) 0.00318(5) -0.00110(6) -0.00213(5)
+#End of TTdata_84578-ICSD

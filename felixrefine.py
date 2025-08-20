@@ -89,7 +89,7 @@ else:
 
 # extract the basis from the raw cif values
 # take basis atom labels as given
-v.basis_atom_label = v.atom_site_label
+v.basis_atom_label = v.atom_site_label.rstrip()  # removing any trailing blanks
 # atom symbols, stripping any charge etc.
 v.basis_atom_name = [''.join(filter(str.isalpha, name))
                      for name in v.atom_site_type_symbol]
@@ -224,40 +224,49 @@ v.n_out = len(v.input_hkls)+1  # we expect 000 NOT to be in the hkl list
 # 7 = unit cell angles *** NOT YET IMPLEMENTED ***
 # 8 = convergence angle
 # 9 = accelerating_voltage_kv *** NOT YET IMPLEMENTED ***
-v.refined_variable = ([])
-v.refined_variable_type = ([])
-v.atom_refine_flag = ([])
+v.refined_variable = ([])  # array of floats, values to be refined
+v.refined_variable_type = ([])  # array of integers corresponding to above
+v.atom_refine_flag = ([])  # the index of the atom in the .cif, -1 if none
+v.atom_refine_vec = ([])  # the direction of atom movement, [0,0,0] if none
+nullvec = np.array([0, 0, 0])  # null vector for above
 if 'S' not in v.refine_mode:
     v.n_variables = 0
     # count refinement variables
     if 'B' in v.refine_mode:  # Atom coordinate refinement
+        # the input v.atomic_sites gives the index of the atom in the cif
         for i in range(len(v.atomic_sites)):
             # the [3, 3] matrix 'moves' returned by atom_move gives the
             # allowed movements for an atom (depending on its Wyckoff
             # symbol and space group) as row vectors with magnitude 1.
             # ***NB NOT ALL SPACE GROUPS IMPLEMENTED ***
             moves = px.atom_move(v.space_group_number, v.basis_wyckoff[i])
-            degrees_of_freedom = int(np.sum(moves**2))
+            degrees_of_freedom = np.sum(np.any(moves, axis=1))
             if degrees_of_freedom == 0:
-                raise ValueError("Atom coord refinement not possible")
+                raise ValueError(f"Coordinate refinement of atom \
+                                 {v.atomic_sites[i]} not possible")
             for j in range(degrees_of_freedom):
+                v.atom_coord_vec = moves[j, :]  # the vector of movement
+                # we refine the coordinate along the appropriate vector
                 r_dot_v = np.dot(v.basis_atom_position[v.atomic_sites[i]],
                                  moves[j, :])
                 v.refined_variable.append(r_dot_v)
-                v.refined_variable_type.append(2)
-                v.atom_refine_flag.append(v.atomic_sites[i])
+                v.refined_variable_type.append(2)  # flag to say it's a coord
+                v.atom_refine_flag.append(v.atomic_sites[i])  # atom index
+                v.atom_refine_vec.append(moves[j, :])  # atom movement
 
     if 'C' in v.refine_mode:  # Occupancy
         for i in range(len(v.atomic_sites)):
             v.refined_variable.append(v.basis_occupancy[v.atomic_sites[i]])
             v.refined_variable_type.append(3)
             v.atom_refine_flag.append(v.atomic_sites[i])
+            v.atom_refine_vec.append(nullvec)  # no atom movement
 
     if 'D' in v.refine_mode:  # Isotropic DW
         for i in range(len(v.atomic_sites)):
             v.refined_variable.append(v.basis_B_iso[v.atomic_sites[i]])
             v.refined_variable_type.append(4)
             v.atom_refine_flag.append(v.atomic_sites[i])
+            v.atom_refine_vec.append(nullvec)  # no atom movement
 
     if 'E' in v.refine_mode:  # Anisotropic DW
         # Not yet implemented!!! variable_type 5
@@ -272,6 +281,7 @@ if 'S' not in v.refine_mode:
         v.refined_variable.append(v.cell_a)  # is in all lattice types
         v.refined_variable_type.append(61)
         v.atom_refine_flag.append(-1)  # -1 indicates not an atom
+        v.atom_refine_vec.append(nullvec)  # no atom movement
         if v.space_group_number < 75:  # Triclinic, monoclinic, orthorhombic
             v.refined_variable.append(v.cell_b)
             v.refined_variable_type.append(62)
@@ -279,6 +289,7 @@ if 'S' not in v.refine_mode:
             v.refined_variable.append(v.cell_c)
             v.refined_variable_type.append(63)
             v.atom_refine_flag.append(-1)
+            v.atom_refine_vec.append(nullvec)  # no atom movement
         elif 142 < v.space_group_number < 168:  # Rhombohedral
             # Need to work out R- vs H- settings!!!
             raise ValueError("Rhombohedral R- vs H- not yet implemented")
@@ -287,6 +298,7 @@ if 'S' not in v.refine_mode:
             v.refined_variable.append(v.cell_c)
             v.refined_variable_type.append(63)
             v.atom_refine_flag.append(-1)
+            v.atom_refine_vec.append(nullvec)  # no atom movement
 
     if 'G' in v.refine_mode:  # Unit cell angles
         # Not yet implemented!!! variable_type 7
@@ -296,12 +308,14 @@ if 'S' not in v.refine_mode:
         v.refined_variable.append(v.convergence_angle)
         v.refined_variable_type.append(8)
         v.atom_refine_flag.append(-1)
+        v.atom_refine_vec.append(nullvec)  # no atom movement
         print(f"Starting convergence angle {v.convergence_angle} Å^-1")
 
     if 'I' in v.refine_mode:  # accelerating_voltage_kv
         v.refined_variable.append(v.accelerating_voltage_kv)
         v.refined_variable_type.append(9)
         v.atom_refine_flag.append(-1)
+        v.atom_refine_vec.append(nullvec)  # no atom movement
 
     # Total number of independent variables
     v.n_variables = len(v.refined_variable)
@@ -532,7 +546,9 @@ if 'S' not in v.refine_mode:
                 dx = abs(v.refinement_scale)
     
             # Three-point gradient measurement, starting with plus
+            print(f"initial {v.refined_variable[i]}")  # ***#*
             v.refined_variable[i] += dx
+            print(f"now {v.refined_variable[i]}")  # ***#*
             # update variables
             sim.update_variables(v)
             sim.print_current_var(v, v.refined_variable[i])
