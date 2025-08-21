@@ -612,7 +612,16 @@ def refine_multi_variable(v, p):
     '''
     multidimensional refinement using the vector p
     '''
-    print(f"Multidimensional refinement, {np.sum(np.any(p))} variables")
+
+    print(f"Multidimensional refinement, {np.count_nonzero(p)} variables")
+
+    # Check the gradient vector magnitude and initialize vector descent
+    p_mag = np.linalg.norm(p)
+    if np.isinf(p_mag) or np.isnan(p_mag):
+        raise ValueError(f"Infinite or NaN gradient! Refinement vector = {p}")
+    p = p / p_mag   # Normalized direction of max gradient
+    print(f"Refinement vector {p}")
+
     j = np.argmax(abs(p))  # index of principal variable (largest gradient)
     v.current_variable_type = v.refined_variable_type[j]
     print(f"  Principal variable: {variable_message(v.current_variable_type)}")
@@ -622,6 +631,7 @@ def refine_multi_variable(v, p):
     v.refined_variable = np.copy(v.next_var)
     # simulate and get figure of merit
     fom = sim_fom(v, j)
+
     # is it actually any better
     if fom < last_fit:
         print("Point 1 of 3: extrapolated")  # yes, use it
@@ -634,15 +644,8 @@ def refine_multi_variable(v, p):
     r3_var = np.zeros(3)
     r3_fom = np.zeros(3)
     r3_var[0] = v.best_var[j]*1.0  # using principal variable
-    r3_fom[0] = fom*1.0
+    r3_fom[0] = v.best_fit*1.0
     print(f"-a----------------------------- {r3_var},{r3_fom}")
-
-    # Check the gradient vector magnitude and initialize vector descent
-    p_mag = np.linalg.norm(p)
-    if np.isinf(p_mag) or np.isnan(p_mag):
-        raise ValueError(f"Infinite or NaN gradient! Refinement vector = {p}")
-    p = p / p_mag   # Normalized direction of max gradient
-    print(f"Refinement vector {p}")
 
     # reset the refinement scale (last term reverses sign if we overshot)
     p_mag = -v.best_var[j] * v.refinement_scale  # * (2*(fom < v.best_fit)-1)

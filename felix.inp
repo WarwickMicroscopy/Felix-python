@@ -14,8 +14,8 @@ byte_size                 = 2
 image_radius              = 42
 
 # Beam selection criteria
-min_reflection_pool       = 100
-min_strong_beams          = 20
+min_reflection_pool       = 800
+min_strong_beams          = 60
 min_weak_beams            = 0
 g_limit                   = 0.0
 
@@ -45,7 +45,7 @@ correlation_type          = 2
 image_processing          = 1
 blur_radius               = 0.0
 no_of_ugs                 = 40
-atomic_sites              = [1,2]
+atomic_sites              = [1,2,0]
 print_flag                = 0
 refinement_scale          = 0.02
 exit_criteria             = 0.0001
