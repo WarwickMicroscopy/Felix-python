@@ -1711,7 +1711,7 @@ def convex(r3_x, r3_y):
         # point twice, exp(0.75)~=2.12
         next_x = r3_x[y_min] + np.exp(0.75) * last_dx
         minny = False
-        print("Convex, continuing")  # going to {next_x:.2f}")
+        print("Convex, will contine")  # going to {next_x:.2f}")
     else:
         next_x, next_y = parabo3(r3_x, r3_y)
         print(f"Concave, predict minimum at {next_x:.4f} with fit index {100*next_y:.2f}%")

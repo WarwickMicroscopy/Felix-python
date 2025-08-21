@@ -491,24 +491,25 @@ def print_current_var(v, i):
     # prints the variable being refined
     var = v.refined_variable[i]
     atom_id = v.atom_refine_flag[i]
-    if v.current_variable_type % 10 == 1:
-        print(f"  Current Ug {var:.3f}")
-    elif v.current_variable_type % 10 == 2:
+    t = v.current_variable_type % 10
+
+    # dictionary of format strings
+    formats = {
+        1: ("Current Ug", "{:.3f}"),
+        3: ("Current occupancy", "{:.2f}"),
+        4: ("Current Biso", "{:.2f}"),
+        5: ("Current U[ij]", "{:.2f}"),
+        6: ("Current lattice parameter", "{:.4f}"),
+        8: ("Current convergence angle", "{:.3f} Å^-1"),
+        9: ("Current accelerating voltage", "{:.1f} kV"),
+    }
+
+    if t == 2:  # coord output
         with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
             print(f"  Atom {atom_id}: {v.basis_atom_label[atom_id]} {v.basis_atom_position[atom_id, :]}")
-        # print(f"Current atomic coordinate {var:.4f}")
-    elif v.current_variable_type % 10 == 3:
-        print(f"  Current occupancy {var:.2f}")
-    elif v.current_variable_type % 10 == 4:
-        print(f"  Current Biso {var:.2f}")
-    elif v.current_variable_type % 10 == 5:
-        print(f"  Current U[ij] {var:.2f}")
-    elif v.current_variable_type % 10 == 6:
-        print(f"  Current lattice parameter {var:.4f}")
-    elif v.current_variable_type % 10 == 8:
-        print(f"  Current convergence angle {var:.3f} Å^-1")
-    elif v.current_variable_type % 10 == 9:
-        print(f"  Current accelerating voltage {var:.1f} kV")
+    elif t in formats:
+        label, fmt = formats[t]
+        print(f"  {label} {fmt.format(var)}")
 
 
 def variable_message(vtype):
@@ -526,7 +527,12 @@ def variable_message(vtype):
 
 
 def sim_fom(v, i):
-    ''' wraps multiple subroutines into a single line '''
+    '''
+    wraps multiple subroutine calls into a single line: update variables
+    simulate and figure of merit
+    input i = index of variable to be refined, for single variables
+    i = -1 for multiple variables
+    '''
     update_variables(v)
     print_current_var(v, i)
     simulate(v)
@@ -558,6 +564,7 @@ def refine_single_variable(v, i):
         r3_fom[1] = v.best_fit*1.0
         print(f"Finding gradient, variable {i+1} of {v.n_variables}")
         print(variable_message(v.current_variable_type))
+        print_current_var(v, i)
 
         # dx is a small change in the current variable
         # which is either refinement_scale for atomic coordinates and
@@ -586,6 +593,8 @@ def refine_single_variable(v, i):
         print("-2-----------------------------")
 
         # predict the next point as a minimum or a step onwards
+        # v.next_var gets passed on to the multidimensional refinement
+        # as a global variable
         v.next_var[i], exclude = px.convex(r3_var, r3_fom)
         if exclude:
             p = 0.0  # this variable doesn't get included in vector downhill
@@ -595,5 +604,89 @@ def refine_single_variable(v, i):
         # error estimate goes here
         # independent_delta[i] = delta_x(r3_var, r3_fom, precision, err)
         # uncert_brak(var_min, independent_delta[i])
+
+    return p
+
+
+def refine_multi_variable(v, p):
+    '''
+    multidimensional refinement using the vector p
+    '''
+    print(f"Multidimensional refinement, {np.sum(np.any(p))} variables")
+    j = np.argmax(abs(p))  # index of principal variable (largest gradient)
+    v.current_variable_type = v.refined_variable_type[j]
+    print(f"  Principal variable: {variable_message(v.current_variable_type)}")
+    print(f"    Extrapolation, should be better than {100*v.best_fit:.2f}%")
+    last_fit = v.best_fit*1.0
+    # initial simulation is the prediction after single variable refinement
+    v.refined_variable = np.copy(v.next_var)
+    # simulate and get figure of merit
+    fom = sim_fom(v, j)
+    # is it actually any better
+    if fom < last_fit:
+        print("Point 1 of 3: extrapolated")  # yes, use it
+    else:
+        print("Point 1 of 3: previous best")  # no, use the best
+        v.refined_variable = np.copy(v.best_var)
+    print_LACBED(v)
+
+    # First point: best simulation
+    r3_var = np.zeros(3)
+    r3_fom = np.zeros(3)
+    r3_var[0] = v.best_var[j]*1.0  # using principal variable
+    r3_fom[0] = fom*1.0
+    print(f"-a----------------------------- {r3_var},{r3_fom}")
+
+    # Check the gradient vector magnitude and initialize vector descent
+    p_mag = np.linalg.norm(p)
+    if np.isinf(p_mag) or np.isnan(p_mag):
+        raise ValueError(f"Infinite or NaN gradient! Refinement vector = {p}")
+    p = p / p_mag   # Normalized direction of max gradient
+    print(f"Refinement vector {p}")
+
+    # reset the refinement scale (last term reverses sign if we overshot)
+    p_mag = -v.best_var[j] * v.refinement_scale  # * (2*(fom < v.best_fit)-1)
+
+    # Second point
+    print("Refining, point 2 of 3")
+    # NB vectors here, not individual variables
+    v.refined_variable += p*p_mag  # point 2
+    fom = sim_fom(v, j)  # simulate
+    r3_var[1] = v.refined_variable[j]*1.0
+    r3_fom[1] = fom*1.0
+    print(f"-b----------------------------- {r3_var},{r3_fom}")
+
+    # Third point
+    print("Refining, point 3 of 3")
+    if r3_fom[1] > r3_fom[0]:  # if second point is worse
+        p_mag = -p_mag  # Go in the opposite direction
+        v.refined_variable += np.exp(0.6)*p*p_mag
+    else:  # keep going
+        v.refined_variable += p*p_mag
+    fom = sim_fom(v, j)
+    r3_var[2] = v.refined_variable[j]*1.0
+    r3_fom[2] = fom*1.0
+    print(f"-c----------------------------- {r3_var},{r3_fom}")
+
+    # We continue downhill until we get a predicted minnymum
+    minny = False
+    while minny is False:
+        last_x = v.refined_variable[j]*1.0
+        last_fit = v.best_fit
+        # predict the next point as a minimum or a step on
+        next_x, minny = px.convex(r3_var, r3_fom)
+        v.refined_variable += p * (next_x-last_x) / p[j]
+        fom = sim_fom(v, j)
+        if (fom < last_fit):  # it's better, keep going
+            # replace worst point with this one
+            i = np.argmax(r3_fom)
+            r3_var[i] = v.refined_variable[j]
+            r3_fom[i] = fom*1.0
+        # else:
+        #     minny = True
+        print(f"-.----------------------------- {r3_var},{r3_fom}")
+    # we have taken the principal variable to a minimum
+    p[j] = 0.0
+    print(f"Eliminated variable {j}")
 
     return p
