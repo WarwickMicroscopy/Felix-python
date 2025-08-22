@@ -376,7 +376,7 @@ def figure_of_merit(v):
     if v.plot and v.image_processing == 2:
         plt.show()
     # print best values
-    if v.image_processing != 0:
+    if v.image_processing == 2:
         print(f"  Best blur={v.blur_radius:.1f}")
     if v.n_thickness > 1:
         v.best_t = np.argmin(np.mean(fom_array, axis=1))
@@ -393,9 +393,11 @@ def figure_of_merit(v):
         w_f = 10
         fig.set_size_inches(1.5*w_f, w_f)
         plt.plot(v.thickness/10, np.mean(fom_array, axis=1), 'ro', linewidth=2)
+        colours = plt.cm.gnuplot(np.linspace(0, 1, n_out))
         for i in range(n_out):
             annotation = f"{v.hkl[v.g_output[i], 0]}{v.hkl[v.g_output[i], 1]}{v.hkl[v.g_output[i], 2]}"
-            plt.plot(v.thickness/10, fom_array[:, i], label=annotation)
+            plt.plot(v.thickness/10, fom_array[:, i], color=colours[i],
+                     label=annotation)
         ax.set_xlabel('Thickness (nm)', size=24)
         ax.set_ylabel('Figure of merit', size=24)
         ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
@@ -416,7 +418,7 @@ def update_variables(v):
     basis_atom_position is the position of an atom (in A, microscope frame???)
     basis_atom_delta is the uncertainty in position of an atom, forgotten
     how this works!
-    
+
     All updated variables are in the global class v so no specific return
     """
 
@@ -453,7 +455,10 @@ def update_variables(v):
 
         elif variable_type == 4:
             # Iso Debye-Waller factor
-            v.basis_B_iso[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
+            if 0 < v.refined_variable[i] < 4:  # must lie in a reasonable range
+                v.basis_B_iso[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
+            else:
+                v.basis_B_iso[v.atom_refine_flag[i]] = 0.0
 
         elif variable_type == 5:
             # Aniso Debye-Waller factor (not implemented)
@@ -762,11 +767,14 @@ def refine_multi_variable(v, p):
             i = np.argmax(r3_fom)
             r3_var[i] = v.refined_variable[j]
             r3_fom[i] = fom*1.0
-        # else:
+        else:
+            v.refined_variable[j] = last_x*1.0
+
         #     minny = True
         print("-.-----------------------------")  # {r3_var},{r3_fom}")
     # we have taken the principal variable to a minimum
     p[j] = 0.0
     print(f"    ====Eliminated variable {j}====")
+    print_LACBED(v)
 
     return p

@@ -513,6 +513,7 @@ if 'S' not in v.refine_mode:
         # if it's better, it will update v.best_fit and v.best_var accordingly
         if np.count_nonzero(p) == 0:
             print("Closing simulation for this cycle")
+            print(v.refined_variable)
             fom = sim.sim_fom(v, 0)
         else:
             # ===========vector descent

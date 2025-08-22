@@ -15,7 +15,7 @@ image_radius              = 42
 
 # Beam selection criteria
 min_reflection_pool       = 800
-min_strong_beams          = 40
+min_strong_beams          = 80
 min_weak_beams            = 0
 g_limit                   = 0.0
 
@@ -32,22 +32,22 @@ accelerating_voltage_kv   = 200.0
 acceptance_angle          = 0.0
 
 # Image output options
-initial_thickness         = 1100.0
-final_thickness           = 1261.0
-delta_thickness           = 40.0
+initial_thickness         = 1125.0
+final_thickness           = 1251.0
+delta_thickness           = 25.0
 precision                 = 0.00002
 
 # Refinement specific flags
-refine_mode               = 'D'
+refine_mode               = 'B'
 weighting_flag            = 0
 refine_method             = 3
 correlation_type          = 2
-image_processing          = 2
-blur_radius               = 0.0
+image_processing          = 1
+blur_radius               = 0.9
 no_of_ugs                 = 40
-atomic_sites              = [1,2,0]
+atomic_sites              = [0,1,2]
 print_flag                = 0
-refinement_scale          = 0.05
-exit_criteria             = 0.0001
+refinement_scale          = 0.002
+exit_criteria             = 0.0002
 debug                     = 0
 plot                      = 1
