@@ -74,9 +74,9 @@ _atom_site_fract_y
 _atom_site_fract_z
 _atom_site_B_iso_or_equiv
 _atom_site_occupancy
-Li1 Li1+ 6 a 0 0 0.28063(44) 0.92 1.
-Nb1 Nb5+ 6 a 0 0 0.99899(22) 0.36 1.
-O1 O2- 18 b 0.04751(5) 0.34301(5) 0.06246(49) 0.56 1.
+Li1 Li1+ 6 a 0 0 0.2750 0.92 1.
+Nb1 Nb5+ 6 a 0 0 0.9934 0.36 1.
+O1 O2- 18 b 0.04193 0.3374 0.0569 0.56 1.
 loop_
 _atom_site_aniso_label
 _atom_site_aniso_type_symbol

@@ -13,6 +13,9 @@ Returns the simulated LACBED patterns
 import numpy as np
 from scipy.constants import c, h, e, m_e, angstrom
 from scipy.ndimage import gaussian_filter
+from skimage.registration import phase_cross_correlation
+from scipy.ndimage import fourier_shift
+from scipy.fft import fftn, ifftn
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from matplotlib.patheffects import withStroke
@@ -292,6 +295,38 @@ def zncc(img1, img2):
     return cc
 
 
+def pcc(stack1, stack2):
+    """ input: stack1, stack2 sets of n images, both of size [pix_x, pix_y, n]
+    We correct for sub-pixel shits using fourier shifting
+    output is a numpy array of length n, giving pcc for each pair of images
+    pcc is -1 = perfect anticorrelation, +1 = perfect correlation
+    """
+    if stack1.ndim == 2:
+        stack1 = stack1[:, :, np.newaxis]
+        stack2 = stack2[:, :, np.newaxis]
+    n = stack1.shape[2]
+    pcc = np.zeros(n)
+    shifts = np.zeros((n, 2))
+
+    for i in range(n):
+        img1 = stack1[:, :, i]
+        img2 = stack2[:, :, i]
+
+        # Estimate sub-pixel shift
+        up = 10  # shifts are accurate to 1/upsample_factor
+        shift, error, diffphase = phase_cross_correlation(img1, img2,
+                                                          upsample_factor=up)
+        shifts[i] = shift
+
+        # Shift img2 in Fourier space
+        img2_shifted = np.real(ifftn(fourier_shift(fftn(img2), shift)))
+
+        # Compute correlation coefficient
+        pcc[i] = np.corrcoef(img1.ravel(), img2_shifted.ravel())[0, 1]
+
+    return pcc  # , shifts
+
+
 def figure_of_merit(v):
     """ needs fleshing out with image processing & correlation options
     takes as an input v.lacbed_sim, shape [v.n_thickness, pix_x, pix_y, n_out]
@@ -327,7 +362,8 @@ def figure_of_merit(v):
                 for j in range(n_out):
                     blacbed[:, :, j] = gaussian_filter(blacbed[:, :, j],
                                                        sigma=r)
-                b_fom.append(np.mean(1.0 - zncc(v.lacbed_expt, blacbed)))
+                # b_fom.append(np.mean(1.0 - zncc(v.lacbed_expt, blacbed)))
+                b_fom.append(np.mean(1.0 - pcc(v.lacbed_expt, blacbed)))
             if v.plot:
                 plt.plot(radii, b_fom)
             v.blur_radius = radii[np.argmin(b_fom)]
@@ -335,7 +371,8 @@ def figure_of_merit(v):
             for j in range(n_out):
                 v.lacbed_sim[i, :, :, j] = gaussian_filter(v.lacbed_sim[i, :, :, j],
                                                            sigma=v.blur_radius)
-        fom_array[i, :] = 1.0 - zncc(v.lacbed_expt, v.lacbed_sim[i, :, :, :])
+        # fom_array[i, :] = 1.0 - zncc(v.lacbed_expt, v.lacbed_sim[i, :, :, :])
+        fom_array[i, :] = 1.0 - pcc(v.lacbed_expt, v.lacbed_sim[i, :, :, :])
     if v.plot and v.image_processing == 2:
         plt.show()
     # print best values
@@ -354,14 +391,14 @@ def figure_of_merit(v):
     if v.plot and v.n_thickness > 1:
         fig, ax = plt.subplots(1, 1)
         w_f = 10
-        fig.set_size_inches(w_f, w_f)
+        fig.set_size_inches(1.5*w_f, w_f)
         plt.plot(v.thickness/10, np.mean(fom_array, axis=1), 'ro', linewidth=2)
         for i in range(n_out):
             annotation = f"{v.hkl[v.g_output[i], 0]}{v.hkl[v.g_output[i], 1]}{v.hkl[v.g_output[i], 2]}"
             plt.plot(v.thickness/10, fom_array[:, i], label=annotation)
         ax.set_xlabel('Thickness (nm)', size=24)
         ax.set_ylabel('Figure of merit', size=24)
-        ax.legend()
+        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
         plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1.0))
         plt.xticks(fontsize=22)
         plt.yticks(fontsize=22)
@@ -507,18 +544,20 @@ def print_LACBED_pattern(i, j, v):
 
 def save_LACBED(v):
     '''
-    Saves all LACBED patterns in .npy format
+    Saves all LACBED patterns in .npy and .png format
     '''
-    path = os.getcwd()
-    home = os.path.dirname(path)
+    j = v.best_t
+
     if not os.path.isdir(v.chemical_formula_sum):
         os.mkdir(v.chemical_formula_sum)
     os.chdir(v.chemical_formula_sum)
     for i in range(v.lacbed_sim.shape[3]):
         signed_str = "".join(f"{x:+d}" for x in v.hkl[v.g_output[i], :])
         fname = f"{v.chemical_formula_sum}_{signed_str}.bin"
-        v.lacbed_sim[2, :, :, i].tofile(fname)
-    os.chdir(home)
+        v.lacbed_sim[j, :, :, i].tofile(fname)
+        fname = f"{v.chemical_formula_sum}_{signed_str}.png"
+        plt.imsave(fname, v.lacbed_sim[2, :, :, i], cmap='gray')
+    os.chdir("..")
 
 
 def print_current_var(v, i):

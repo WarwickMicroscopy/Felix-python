@@ -452,8 +452,8 @@ if 'S' not in v.refine_mode:
 
 
 # %% output - *** needs work, apply blur/find best blur 
-# if v.image_processing == 1:
-    # print(f"  Blur radius {v.blur_radius} pixels")
+if v.image_processing == 1:
+    print(f"  Blur radius {v.blur_radius} pixels")
 if 'S' in v.refine_mode:
     #*** apply blur !!!
     # output simulated LACBED patterns
