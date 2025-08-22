@@ -18,6 +18,7 @@ import matplotlib.colors as mcolors
 from matplotlib.patheffects import withStroke
 from matplotlib.ticker import PercentFormatter
 import time
+import os
 from pylix_modules import pylix as px
 from pylix_modules import pylix_dicts as fu
 
@@ -60,23 +61,8 @@ def simulate(v):
     n_atoms = len(atom_label)
     if v.iter_count == 0:
         print("  There are "+str(n_atoms)+" atoms in the unit cell")
-    # plot
-    if v.iter_count == 0 and v.plot:
-        atom_cvals = mcolors.Normalize(vmin=1, vmax=103)
-        atom_cmap = plt.cm.viridis
-        atom_colours = atom_cmap(atom_cvals(atomic_number))
-        border_cvals = mcolors.Normalize(vmin=0, vmax=1)
-        border_cmap = plt.cm.plasma
-        border_colours = border_cmap(border_cvals(atom_position[:, 2]))
-        bb = 5
-        fig, ax = plt.subplots(figsize=(bb, bb))
-        plt.scatter(atom_position[:, 0], atom_position[:, 1],
-                    color=atom_colours, edgecolor=border_colours,
-                    linewidth=1, s=100)
-        plt.xlim(left=0.0, right=1.0)
-        plt.ylim(bottom=0.0, top=1.0)
-        ax.set_axis_off
-        plt.grid(True)
+
+    # output for debugging
     if v.debug:
         print("Symmetry operations:")
         for i in range(len(v.symmetry_matrix)):
@@ -84,6 +70,7 @@ def simulate(v):
         print("atomic coordinates")
         for i in range(n_atoms):
             print(f"{atom_label[i]} {atom_name[i]}: {atom_position[i]}")
+
     # mean inner potential as the sum of scattering factors at g=0
     # multiplied by h^2/(2pi*m0*e*CellVolume)
     mip = 0.0
@@ -121,6 +108,37 @@ def simulate(v):
                        atom_position[:, 1, np.newaxis] * b_vec_m +
                        atom_position[:, 2, np.newaxis] * c_vec_m)
 
+    # plot unit cell and save .xyz file
+    if v.iter_count == 0 and v.plot:
+        atom_cvals = mcolors.Normalize(vmin=1, vmax=103)
+        atom_cmap = plt.cm.prism
+        atom_colours = atom_cmap(atom_cvals(atomic_number))
+        border_cvals = mcolors.Normalize(vmin=0, vmax=1)
+        border_cmap = plt.cm.plasma
+        border_colours = border_cmap(border_cvals(atom_position[:, 2]))
+        bb = 5
+        fig, ax = plt.subplots(figsize=(bb, bb))
+        plt.scatter(atom_coordinate[:, 0], atom_coordinate[:, 1],
+                    color=atom_colours, edgecolor=border_colours,
+                    linewidth=1, s=100)
+        # plt.xlim(left=0.0, right=1.0)
+        # plt.ylim(bottom=0.0, top=1.0)
+        ax.set_axis_off
+        ax.set_aspect('equal')
+        plt.grid(True)
+
+        # # xyz file
+        # text = "\n"
+        # for i in range(n_atoms):
+        #     sas = str(atom_coordinate[i])
+        #     xyz = sas[1:len(sas)-1]
+        #     text = text + atom_name[i] + "  " + xyz + "\n"
+        # fnam = v.chemical_formula_sum+".xyz"
+        # f = open(fnam, "x")
+        # f.write(str(n_atoms)+"\n")
+        # f.write(text)
+        # f.close()
+
     # ===============================================
     # set up beam pool
     # currently we do this every iteration, but could be restricted to cases
@@ -145,7 +163,7 @@ def simulate(v):
         # for i in range(n_hkl):
         #     print(f"{i},  {v.hkl[i]}")
 
-    # plot
+    # plot beam pool
     if v.iter_count == 0 and v.plot:
         xm = np.ceil(np.max(g_pool_mag/(2*np.pi)))
         fig, ax = plt.subplots(1, 1)
@@ -487,6 +505,22 @@ def print_LACBED_pattern(i, j, v):
                      size=30, color='w', path_effects=[text_effect])
 
 
+def save_LACBED(v):
+    '''
+    Saves all LACBED patterns in .npy format
+    '''
+    path = os.getcwd()
+    home = os.path.dirname(path)
+    if not os.path.isdir(v.chemical_formula_sum):
+        os.mkdir(v.chemical_formula_sum)
+    os.chdir(v.chemical_formula_sum)
+    for i in range(v.lacbed_sim.shape[3]):
+        signed_str = "".join(f"{x:+d}" for x in v.hkl[v.g_output[i], :])
+        fname = f"{v.chemical_formula_sum}_{signed_str}.bin"
+        v.lacbed_sim[2, :, :, i].tofile(fname)
+    os.chdir(home)
+
+
 def print_current_var(v, i):
     # prints the variable being refined
     var = v.refined_variable[i]
@@ -612,15 +646,19 @@ def refine_multi_variable(v, p):
     '''
     multidimensional refinement using the vector p
     '''
-
-    print(f"Multidimensional refinement, {np.count_nonzero(p)} variables")
+    n_var = np.count_nonzero(p)
+    if n_var != 1:
+        print(f"Multidimensional refinement, {n_var} variables")
+    else:
+        print(f"Multidimensional refinement, {n_var} variable")
 
     # Check the gradient vector magnitude and initialize vector descent
     p_mag = np.linalg.norm(p)
     if np.isinf(p_mag) or np.isnan(p_mag):
         raise ValueError(f"Infinite or NaN gradient! Refinement vector = {p}")
     p = p / p_mag   # Normalized direction of max gradient
-    print(f"Refinement vector {p}")
+    with np.printoptions(formatter={'float': lambda x: f"{x:.2f}"}):
+        print(f"    Refinement vector {p}")
 
     j = np.argmax(abs(p))  # index of principal variable (largest gradient)
     v.current_variable_type = v.refined_variable_type[j]
@@ -645,7 +683,7 @@ def refine_multi_variable(v, p):
     r3_fom = np.zeros(3)
     r3_var[0] = v.best_var[j]*1.0  # using principal variable
     r3_fom[0] = v.best_fit*1.0
-    print(f"-a----------------------------- {r3_var},{r3_fom}")
+    print("-a-----------------------------")  # {r3_var},{r3_fom}")
 
     # reset the refinement scale (last term reverses sign if we overshot)
     p_mag = -v.best_var[j] * v.refinement_scale  # * (2*(fom < v.best_fit)-1)
@@ -657,7 +695,7 @@ def refine_multi_variable(v, p):
     fom = sim_fom(v, j)  # simulate
     r3_var[1] = v.refined_variable[j]*1.0
     r3_fom[1] = fom*1.0
-    print(f"-b----------------------------- {r3_var},{r3_fom}")
+    print("-b-----------------------------")  # {r3_var},{r3_fom}")
 
     # Third point
     print("Refining, point 3 of 3")
@@ -669,7 +707,7 @@ def refine_multi_variable(v, p):
     fom = sim_fom(v, j)
     r3_var[2] = v.refined_variable[j]*1.0
     r3_fom[2] = fom*1.0
-    print(f"-c----------------------------- {r3_var},{r3_fom}")
+    print("-c-----------------------------")  # {r3_var},{r3_fom}")
 
     # We continue downhill until we get a predicted minnymum
     minny = False
@@ -687,9 +725,9 @@ def refine_multi_variable(v, p):
             r3_fom[i] = fom*1.0
         # else:
         #     minny = True
-        print(f"-.----------------------------- {r3_var},{r3_fom}")
+        print("-.-----------------------------")  # {r3_var},{r3_fom}")
     # we have taken the principal variable to a minimum
     p[j] = 0.0
-    print(f"Eliminated variable {j}")
+    print(f"    ====Eliminated variable {j}====")
 
     return p

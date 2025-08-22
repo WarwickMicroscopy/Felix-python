@@ -1,5 +1,6 @@
 import ast
 import re
+import sympy as sp
 import subprocess
 import numpy as np
 from scipy.constants import c
@@ -250,34 +251,26 @@ def symop_convert(symop_xyz):
     symmetry_count = len(symop_xyz)
     mat = np.zeros((symmetry_count, 3, 3), dtype="float")
     vec = np.zeros((symmetry_count, 3), dtype="float")
-    coord_map = {'x': 0, 'y': 1, 'z': 2}
+    x, y, z = sp.symbols("x y z")
+    vars = [x, y, z]
     # we expect comma-delimited symmetry operations
     for i in range(symmetry_count):
         symop = symop_xyz[i]
         # Remove any numbers, extra spaces, and quotation marks
-        symop = re.sub(r'^[\s\'\"]*', '', symop).replace("'", "").replace('"', '').strip()
+        # remove leading number/label if present
+        tokens = symop.strip().split(maxsplit=1)
+        if tokens[0].replace("-", "").isdigit() and len(tokens) > 1:
+            symop = tokens[1]  # drop the leading number
         # split into 3 parts
-        parts = symop.split(',')
+        parts = [sp.sympify(e.strip()) for e in symop.split(",")]
         for j, pt in enumerate(parts):
-            pt = pt.strip()  # Remove extra spaces
-            # Regex to capture the k/l/m (x, y, z) and the fractional part
-            # match = re.match(r'([+-]?\d+/\d+)?([+-]?[xyz])?', pt)
-            match = re.match(r'(?:(?P<f0>[+-]?\d+/\d+)[+-]?)?(?P<v>[+-]?[xyz])?(?:(?P<f1>[+-]?\d+/\d+))?', pt)
-            if match:
-                # Extract the variable part (x, y, z)
-                var_part = match.group('v')
-                if var_part:
-                    pm1 = -1 if var_part.startswith('-') else 1
-                    axis = coord_map[var_part[-1]]
-                    mat[i, j, axis] = pm1
-            match = re.search(r'([+-]?\d+/\d+)', pt)
-            if match:
-                # Extract the fractional part
-                frac_part = match.group()
-                # frac_part = match.group('f0') or match.group('f1')
-                if frac_part:
-                    numerator, denominator = map(int, frac_part.split('/'))
-                    vec[i, j] = numerator / denominator
+            symop_expanded = sp.expand(pt)
+            # translation part
+            vec[i, j] = symop_expanded.subs({x:0, y:0, z:0})
+            # matrix part
+            for k, var in enumerate(vars):
+                # print(symop_expanded.coeff(var))
+                mat[i, j, k] = symop_expanded.coeff(var)
 
     return mat, vec
 

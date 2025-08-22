@@ -452,8 +452,8 @@ if 'S' not in v.refine_mode:
 
 
 # %% output - *** needs work, apply blur/find best blur 
-if v.image_processing == 1:
-    print(f"  Blur radius {v.blur_radius} pixels")
+# if v.image_processing == 1:
+    # print(f"  Blur radius {v.blur_radius} pixels")
 if 'S' in v.refine_mode:
     #*** apply blur !!!
     # output simulated LACBED patterns
@@ -509,11 +509,17 @@ if 'S' not in v.refine_mode:
                 continue
             p[i] = sim.refine_single_variable(v, i)
 
-        # ===========vector descent
-        # Downhill minimisation until we eliminate all variables
-        while np.sum(np.abs(p)) > 1e-10:
-            # the returned p will have an extra zero!
-            p = sim.refine_multi_variable(v, p)
+        # if all variables have predicted minima, do a final simulation
+        # if it's better, it will update v.best_fit and v.best_var accordingly
+        if np.count_nonzero(p) == 0:
+            print("Closing simulation for this cycle")
+            fom = sim.sim_fom(v, 0)
+        else:
+            # ===========vector descent
+            # Downhill minimisation until we eliminate all variables
+            while np.sum(np.abs(p)) > 1e-10:
+                # the returned p will have an extra zero!
+                p = sim.refine_multi_variable(v, p)
         # Update for next iteration
         df = last_fit - v.best_fit
         last_fit = v.best_fit*1.0
