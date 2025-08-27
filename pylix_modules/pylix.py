@@ -113,7 +113,10 @@ def extract_cif_parameter(item):
         # If no uncertainty is provided, return zero pm
         value_str = item
         pm_str = None
-    value = float(value_str)
+    if value_str == '.':
+        value = 0.0
+    else:
+        value = float(value_str)
 
     # uncertainty
     if pm_str:
