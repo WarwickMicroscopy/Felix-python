@@ -1,9 +1,22 @@
 # -*- coding: utf-8 -*-
 # %% modules and subroutines
 """
-Created August 2024
+Started August 2024
 
-@author: R Beanland
+@author: R.Beanland@warwick.ac.uk
+
+!  Felix is free software: you can redistribute it and/or modify
+!  it under the terms of the GNU General Public License as published by
+!  the Free Software Foundation, either version 3 of the License, or
+!  (at your option) any later version.
+!
+!  Felix is distributed in the hope that it will be useful,
+!  but WITHOUT ANY WARRANTY; without even the implied warranty of
+!  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+!  GNU General Public License for more details.
+!
+!  You should have received a copy of the GNU General Public License
+!  along with Felix.  If not, see <http://www.gnu.org/licenses/>
 
 """
 import os
@@ -513,7 +526,7 @@ if 'S' not in v.refine_mode:
         # if it's better, it will update v.best_fit and v.best_var accordingly
         if np.count_nonzero(p) == 0:
             print("Closing simulation for this cycle")
-            print(v.refined_variable)
+            v.refined_variable = np.copy(v.best_var)
             fom = sim.sim_fom(v, 0)
         else:
             # ===========vector descent
@@ -523,7 +536,7 @@ if 'S' not in v.refine_mode:
                 p = sim.refine_multi_variable(v, p)
         # Update for next iteration
         df = last_fit - v.best_fit
-        last_fit = v.best_fit*1.0
+        last_fit = np.copy(v.best_fit)
         v.refined_variable = np.copy(v.best_var)
         v.refinement_scale *= (1 - 1 / (2 * v.n_variables))
         print(f"Improvement in fit {100*df:.2f}%, will stop at {100*v.exit_criteria:.2f}%")
@@ -535,7 +548,7 @@ if 'S' not in v.refine_mode:
     print(f"Refinement complete after {v.iter_count} simulations.  Refined values: {v.best_var}")
 
 # %% final print
-# sim.print_LACBED(v)
+sim.print_LACBED(v)
 total_time = time.time() - start
 print("-----------------------------------------------------------------")
 # print(f"Beam pool calculation took {setup:.3f} seconds")
