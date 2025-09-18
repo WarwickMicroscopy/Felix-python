@@ -95,7 +95,7 @@ def read_hkl_file(filename):
     return input_hkls, i_obs, sigma_obs
 
 
-def read_refl_profiles():
+def read_refl_profiles(filename):
     """
     Process the reflection profiles to extract integrated intensities
     #  and frame IDs
@@ -103,8 +103,7 @@ def read_refl_profiles():
     # A lot of these parameters aren't used but they are read for completeness
     # and any future developments
     """
-    file_profiles = 'reflprofiles_strong.dat'
-    f = open(file_profiles, "r")
+    f = open(filename, "r")
     # number of reflection
     n = ([])
     h_list = ([])  # h
@@ -178,8 +177,9 @@ def read_refl_profiles():
     input_hkls = np.array([h_list, k_list, l_list]).T
     # i_obs_frame = np.array([Iobs_list])
     # sigma_obs_frame = np.array([sigma_list])
+    print("Reflection profiles loaded")
 
-    return input_hkls, Iobs_list, sigma_list
+    return input_hkls, frame_list, Iobs_list, sigma_list, s_list
 
 
 def extract_cif_parameter(item):

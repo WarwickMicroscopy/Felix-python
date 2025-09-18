@@ -219,7 +219,50 @@ v.n_out = len(v.input_hkls)+1  # we expect 000 NOT to be in the hkl list
 
 
 # %% read refl_profiles
-v.input_hkls, Iobs_list, sigma_list = px.read_refl_profiles()
+# input_hkls = Miller indices, size [n_refl, 3]
+# frame_list = frames where hkl is observed, size [n_refl, <variable>]
+# Iobs_list = frame by frame intensities, size [n_refl, <variable>]
+# s_list = frame by frame sg, size [n_refl, <variable>]
+# sigma_list = frame by frame sigma, size [n_refl, <variable>]
+
+v.input_hkls, frame_list, Iobs_list, sigma_list, s_list = \
+    px.read_refl_profiles("reflprofiles_strong.dat")
+n_refl = len(v.input_hkls)
+v.n_out = n_refl + 1  # we expect 000 NOT to be in the hkl list
+print(f"{n_refl} observed reflections")
+
+# Iobs is ordered according to deviation parameter s
+# reorder according to frame ID
+bragg_obs = np.zeros(n_refl)  # observed Bragg conditions (frame number)
+for i in range(n_refl):
+    # frame list for this reflection
+    frame_obs = np.array(sum(frame_list[i], []))
+    # Iobs for this reflection
+    i_obs_frame = np.array(sum(Iobs_list[i], []))
+    # s for this reflection
+    s_pets_frame = np.array(sum(s_list[i], []))
+    # sigma for this reflection
+    sigma_obs_frame = np.array(sum(sigma_list[i], []))
+    # re-order according to frame number
+    Iobs_list[i] = i_obs_frame[np.argsort(frame_obs)]
+    s_list[i] = s_pets_frame[np.argsort(frame_obs)]
+    sigma_list[i] = sigma_obs_frame[np.argsort(frame_obs)]
+    frame_list[i] = frame_obs[np.argsort(frame_obs)]
+    # get the centroid
+    mask = i_obs_frame > 0.05*np.max(i_obs_frame)  # remove bottom 5%
+    bragg_obs[i] = np.sum(frame_obs*i_obs_frame*mask)/np.sum(i_obs_frame*mask)
+if v.frame_output == 1:
+    for i in range(n_refl):
+        name = f"{i}: {v.input_hkls[i, :]}"
+        fig = plt.figure(figsize=(5, 3.5))
+        ax = fig.add_subplot(111)
+        plt.bar(frame_list[i], Iobs_list[i], color='g')
+        ax.set_xlabel('Frame')
+        ax.set_ylabel('Intensity')
+        plt.ylim(bottom=0.0)
+        plt.suptitle(name)
+        plt.show()
+
 
 # %% Setup kV and unit cell
 
@@ -344,6 +387,7 @@ big_k = big_k_mag * t_m2o[:, :, 2]
 # Deviation parameter sg for all frames and g-vectors, size [n_frames, n_g]
 sg = px.sg(big_k, g_pool)
 
+
 # frame position of zero sg
 
 # signs of sg, size [n_frames, n_g]
@@ -351,11 +395,11 @@ signs = np.sign(sg)
 # index of frame before zero or sign change
 g_zeros = np.argmax((signs[:-1, :] * signs[1:, :]) < 1, axis=0)
 # Frame index of Bragg condition, sub-frame precision
-sg_0 = np.zeros(n_g)
+bragg_calc = np.zeros(n_g)
 for i in range(n_g):
     if g_zeros[i] != 0:
-        sg_0[i] = (g_zeros[i] - 2*sg[g_zeros[i], i] /
-                   (sg[g_zeros[i]+2, i] - sg[g_zeros[i], i]))
+        bragg_calc[i] = (g_zeros[i] - 2*sg[g_zeros[i], i] /
+                         (sg[g_zeros[i]+2, i] - sg[g_zeros[i], i]))
 
 
 # %% kinematic simulation
