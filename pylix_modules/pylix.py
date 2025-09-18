@@ -95,6 +95,93 @@ def read_hkl_file(filename):
     return input_hkls, i_obs, sigma_obs
 
 
+def read_refl_profiles():
+    """
+    Process the reflection profiles to extract integrated intensities
+    #  and frame IDs
+    #
+    # A lot of these parameters aren't used but they are read for completeness
+    # and any future developments
+    """
+    file_profiles = 'reflprofiles_strong.dat'
+    f = open(file_profiles, "r")
+    # number of reflection
+    n = ([])
+    h_list = ([])  # h
+    k_list = ([])  # k
+    l_list = ([])  # l
+    dstar_list = ([])  # reciprocal d-spacing
+    s_list = ([])  # deviation parameter, A^-1
+    rsg_list = ([])  # the ratio between the excitation error of the reflection
+    # and the maximum excitation error spanned by the oscilation of the frame
+    # Thus, if |Rsg|=0, the reflection is in the diffraction condition exactly
+    # in the middle of the frame. If |Rsg|=1, the reflection is in exact Bragg
+    # condition at the edge of the wedge covered by the frame.
+    Iobs_list = ([])  # measured intensity
+    sigma_list = ([])  # SD, as in I/sigma
+    Ifit_list = ([])  # fitted intensity
+    frame_list = ([])  # frame number
+    frame_max = 0  # max frame number
+    omega_list = ([])  # rotation angle
+    while (True):
+        # read next line
+        line = f.readline()
+        # empty line is EOF
+        if not line:
+            break
+        if (line.find("#") >= 0):  # we have a new reflection
+            frame = ([])  # list of frames for this reflection
+            omega = ([])  # list of rotations for this reflection
+            s = ([])  # list of deviation parameters for this reflection
+            Iobs = ([])  # observed intensities for this reflection
+            Ifit = ([])  # fit intensities for this reflection
+            rsg = ([])  # rsg, see above
+            sigma = ([])  # dunno
+            n.append(int(line[line.find("#")+1:]))
+            # first line of data for this reflection- never empty, we hope
+            line = f.readline()
+            h_list.append(int(line[0:4]))
+            k_list.append(int(line[4:8]))
+            l_list.append(int(line[8:12]))
+            dstar_list.append(float(line[12:26]))
+            s.append(float(line[26:40]))
+            rsg.append(float(line[40:54]))
+            Iobs.append(float(line[54:70]))
+            sigma.append(float(line[70:84]))
+            Ifit.append(float(line[84:96]))
+            frame.append(int(line[96:100]))
+            omega.append(float(line[100:109]))
+            if (int(line[96:100]) > frame_max):
+                frame_max = int(line[96:100])
+            # second & subsequent lines of data for this reflection
+            line = f.readline()
+            while (line[0] != "\n"):
+                s.append(float(line[26:40]))
+                rsg.append(float(line[40:54]))
+                Iobs.append(float(line[54:70]))
+                sigma.append(float(line[70:84]))
+                Ifit.append(float(line[84:96]))
+                frame.append(int(line[96:100]))
+                omega.append(float(line[100:109]))
+                if (int(line[96:100]) > frame_max):
+                    frame_max = int(line[96:100])
+                line = f.readline()
+            # add each parameter to their arrays
+            frame_list.append([frame])
+            omega_list.append([omega])
+            s_list.append([s])
+            Iobs_list.append([Iobs])
+            Ifit_list.append([Ifit])
+            rsg_list.append([rsg])
+            sigma_list.append([sigma])
+    f.close
+    input_hkls = np.array([h_list, k_list, l_list]).T
+    # i_obs_frame = np.array([Iobs_list])
+    # sigma_obs_frame = np.array([sigma_list])
+
+    return input_hkls, Iobs_list, sigma_list
+
+
 def extract_cif_parameter(item):
     """
     Parses a value string with uncertainty, e.g., '8.6754(3)',
@@ -483,8 +570,6 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
     norm_dir_c : ndarray
         Normal direction in the crystal reference frame.
     """
-
-    tiny = 1e-10
 
     # Direct lattice vectors in an orthogonal reference frame, Angstrom units
     a_vec_o = np.array([cell_a, 0.0, 0.0])  # x_o is // to a
@@ -1286,9 +1371,13 @@ def sg(big_k, g_pool):
     p_norm = np.linalg.norm(p, axis=2)
     k0 = (np.sqrt(big_k_mag**2 - 0.25*g_mag**2)[np.newaxis, :, np.newaxis] *
           p/p_norm[..., np.newaxis]) - 0.5*g_pool[np.newaxis, ...]
+
+    # *** bug here in magnitude of k0? ***
+    k0_norm = np.linalg.norm(k0, axis=2)
     # The angle phi between big_k and k0
     # is how far we are from the Bragg condition
     k_dot_k0 = np.einsum('ij,ikj->ik', big_k, k0) / big_k_mag**2
+    # k_dot_k0 = np.einsum('ij,ikj->ik', big_k, k0) / big_k_mag*k0_norm
     k_dot_k0[k_dot_k0 > 1] = 1.0  # clean up overflows
     phi = np.arccos(k_dot_k0)
     # Sg is 2g sin(phi/2), with the sign of |K|-|K+g|, size [n_frames, n_g]

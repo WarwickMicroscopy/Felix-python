@@ -218,6 +218,9 @@ v.input_hkls, v.i_obs, v.sigma_obs = px.read_hkl_file("felix.hkl")
 v.n_out = len(v.input_hkls)+1  # we expect 000 NOT to be in the hkl list
 
 
+# %% read refl_profiles
+v.input_hkls, Iobs_list, sigma_list = px.read_refl_profiles()
+
 # %% Setup kV and unit cell
 
 # Electron velocity in metres per second
@@ -341,6 +344,19 @@ big_k = big_k_mag * t_m2o[:, :, 2]
 # Deviation parameter sg for all frames and g-vectors, size [n_frames, n_g]
 sg = px.sg(big_k, g_pool)
 
+# frame position of zero sg
+
+# signs of sg, size [n_frames, n_g]
+signs = np.sign(sg)
+# index of frame before zero or sign change
+g_zeros = np.argmax((signs[:-1, :] * signs[1:, :]) < 1, axis=0)
+# Frame index of Bragg condition, sub-frame precision
+sg_0 = np.zeros(n_g)
+for i in range(n_g):
+    if g_zeros[i] != 0:
+        sg_0[i] = (g_zeros[i] - 2*sg[g_zeros[i], i] /
+                   (sg[g_zeros[i]+2, i] - sg[g_zeros[i], i]))
+
 
 # %% kinematic simulation
 
@@ -353,7 +369,7 @@ cc = (rc_fwhm/(2**1.5 * np.log(2)))**2  # term in gaussian denominator
 # note that sg of 0.1 is a long way from the Bragg condition at 200kV
 # a value of 0.05 seems about right to match to experiment
 # could be an input or a multiple of rc_fwhm, but keep as a fixed value for now
-ds = 0.15
+ds = 0.10
 
 # find all reflexions in all frames in the sg limit
 mask = np.abs(sg) < ds  # boolean, size [n_frames, n_g]
@@ -392,30 +408,36 @@ if v.frame_output == 1:
 # We work on the surface of a sphere of radius K and plot each plane trace
 # as a straight line y = m*x + c_plane (ok for a small angular range)
 # The gradient m = -g[0]/g[1] in the microscope reference frame
+# NB the angle phi is between the plane trace and the y-axis
 # The constant is given by the tilt d_phi of the plane away from the beam
 # direction z, c_plane = K*tan(d_phi)*sqrt(g[0]**2+g[1]**2)/g[1]
 # We add the Bragg angle onto d_phi to get the traces of Bragg conditions
-# which are parllel to plane traces but have y = m*x + c_bragg
+# which are parallel to plane traces but have y = m*x + c_bragg
 
 # a for loop, since each frame can have a different number [n] of g-vectors
 # c_plane_list = []
 # c_bragg_list = []
 j = 0  # frame counter
+# g_frame_o = g-vectors in each frame, orthogonal reference frame
+# bragg_frame = corresponding bragg angle in radians
+# t_m2o = microscope->orthogonal transformation matrix for each frame
+# NB g @ t_m2o transforms g from orthogonal to microscope reference frame
 for g_f, bragg, t in zip(g_frame_o, bragg_frame, t_m2o):
     g_frame = g_f @ t  # g-vectors in microscope frame, size [n, 3]
     # The tilt of g out of the diffraction pattern plane is the angle
     # d_phi = arctan(g[2]/sqrt(g[0]**2+g[1]**2))
     g_frame_ip = np.sqrt(g_frame[:, 0]**2 + g_frame[:, 1]**2)  # in plane part
     d_phi = np.arctan(g_frame[:, 2] / g_frame_ip)
-    # plane trace
+    # plane trace constant, y at x=0, K*d_phi/sin(phi)
     c_plane = big_k_mag * np.tan(d_phi) * g_frame_ip / g_frame[:, 1]
     # Bragg
     d_theta = d_phi + bragg
     c_bragg = big_k_mag * np.tan(d_theta) * g_frame_ip / g_frame[:, 1]
+    x_bragg = big_k_mag * np.tan(d_theta) * g_frame_ip / g_frame[:, 0]
 
 #     c_plane_list.append(c_plane)
 #     c_bragg_list.append(c_bragg)
-    
+
     # set up the plot range - to + x
     k_range = 10.0
     x = np.arange(-k_range, k_range, 0.1)
@@ -430,7 +452,7 @@ for g_f, bragg, t in zip(g_frame_o, bragg_frame, t_m2o):
         y_p = x*(g_frame[i, 0]/g_frame[i, 1]) + c_plane[i]  # plane traces
         plt.plot(x, y_p, lw=0.5, color='grey')
         y_g = x*(g_frame[i, 0]/g_frame[i, 1]) + c_bragg[i]  # Bragg traces
-        plt.plot(x, y_g, lw=1.0, color='b')
+        plt.plot(x, y_g, lw=2.0, color='w')
         plt.plot(x, bp, lw=1.0, color='r')
     plt.ylim(bottom=-k_range, top=k_range)
     plt.show()
