@@ -334,7 +334,7 @@ def figure_of_merit(v):
     image processing = 0 -> no Gaussian blur (applied with radius 0)
     image processing = 1 -> Gaussian blur radius defined in felix.inp
     image processing = 2 -> find the best blur radius
-    uses zncc, which works on sets of images both of size [pix_x, pix_y, n]
+    uses zncc/pcc, which work on sets of images both of size [pix_x, pix_y, n]
     currently returns a single figure of merit fom that is mean of zncc's for
     the best thickness.  Could give a more sophisticated analysis..
     """
@@ -387,7 +387,7 @@ def figure_of_merit(v):
         v.best_t = 0
         fom = np.mean(fom_array[0])
 
-    # plot
+    # plot FoM vs thickness for all LACBED patterns
     if v.plot and v.n_thickness > 1:
         fig, ax = plt.subplots(1, 1)
         w_f = 10

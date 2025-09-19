@@ -51,9 +51,9 @@ _atom_site_Wyckoff_symbol
 _atom_site_fract_x
 _atom_site_fract_y
 _atom_site_fract_z
-_atom_site_U_iso_or_equiv
+_atom_site_B_iso_or_equiv
 _atom_site_occupancy
-Li1 Li1+ 6 a 0 0 0.2810(3) 0.00946(61) 1.
-Nb1 Nb5+ 6 a 0 0 0 . 1.
-O1 O2- 18 b 0.3805(3) 0.3753(3) 0.2295(1) . 1.
+Li1 Li1+ 6 a 0 0 0.2721 0.219 1.05
+Nb1 Nb5+ 6 a 0 0 0.9914 0.459 1.065
+O1 O2- 18 b 0.0455 0.3367 0.0555 0.541 0.949
 #End of TTdata

@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-# %% modules and subroutines
 """
 Started August 2024
 
@@ -19,6 +18,8 @@ Started August 2024
 !  along with Felix.  If not, see <http://www.gnu.org/licenses/>
 
 """
+# %% modules and subroutines
+
 import os
 import numpy as np
 import matplotlib.pyplot as plt
