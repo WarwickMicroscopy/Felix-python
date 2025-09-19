@@ -166,13 +166,13 @@ def read_refl_profiles(filename):
                     frame_max = int(line[96:100])
                 line = f.readline()
             # add each parameter to their arrays
-            frame_list.append([frame])
-            omega_list.append([omega])
-            s_list.append([s])
-            Iobs_list.append([Iobs])
-            Ifit_list.append([Ifit])
-            rsg_list.append([rsg])
-            sigma_list.append([sigma])
+            frame_list.append(frame)
+            omega_list.append(omega)
+            s_list.append(s)
+            Iobs_list.append(Iobs)
+            Ifit_list.append(Ifit)
+            rsg_list.append(rsg)
+            sigma_list.append(sigma)
     f.close
     input_hkls = np.array([h_list, k_list, l_list]).T
     # i_obs_frame = np.array([Iobs_list])
@@ -180,6 +180,17 @@ def read_refl_profiles(filename):
     print("Reflection profiles loaded")
 
     return input_hkls, frame_list, Iobs_list, sigma_list, s_list
+
+
+def rocking_plot(frames, Iobs, name):
+    fig = plt.figure(figsize=(5, 3.5))
+    ax = fig.add_subplot(111)
+    plt.bar(frames, Iobs, color='g')
+    ax.set_xlabel('Frame')
+    ax.set_ylabel('Intensity')
+    plt.ylim(bottom=0.0)
+    plt.suptitle(name)
+    plt.show()
 
 
 def extract_cif_parameter(item):

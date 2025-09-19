@@ -13,6 +13,8 @@ from matplotlib.patheffects import withStroke
 import matplotlib.colors as mcolors
 import time
 from scipy.constants import c, h, e, m_e, angstrom
+from PyQt5.QtWidgets import QMessageBox, QApplication
+import sys
 
 # felix modules
 from pylix_modules import pylix as px
@@ -231,18 +233,41 @@ n_refl = len(v.input_hkls)
 v.n_out = n_refl + 1  # we expect 000 NOT to be in the hkl list
 print(f"{n_refl} observed reflections")
 
+# look for double observations and exclude (split?) them - user interaction!
+# we don't delete the data, just flag it to be ignored in the refinement
+exclude_list = np.zeros(n_refl)
+# look at reflexions observed over some minimum number of frames
+frame_test = 100
+frame_length = [len(f) for f in frame_list]
+for i in range(n_refl):
+    # reflexions of interest - include/discard
+    if frame_length[i] > frame_test:
+        # plot the rocking curve
+        name = f"{i}: {v.input_hkls[i, :]}"
+        px.rocking_plot(frame_list[i], Iobs_list[i], name)
+        app = QApplication.instance()
+        if app is None:
+            app = QApplication(sys.argv)
+        reply = QMessageBox.question(None, 'Check rocking curve',
+                                     "Exclude?",
+                                     QMessageBox.Yes | QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            exclude_list[i] = 1
+            print(f"Reflexion {name} excluded from refinement")
+
+
 # Iobs is ordered according to deviation parameter s
 # reorder according to frame ID
 bragg_obs = np.zeros(n_refl)  # observed Bragg conditions (frame number)
 for i in range(n_refl):
     # frame list for this reflection
-    frame_obs = np.array(sum(frame_list[i], []))
+    frame_obs = np.array(frame_list[i])
     # Iobs for this reflection
-    i_obs_frame = np.array(sum(Iobs_list[i], []))
+    i_obs_frame = np.array(Iobs_list[i])
     # s for this reflection
-    s_pets_frame = np.array(sum(s_list[i], []))
+    s_pets_frame = np.array(s_list[i])
     # sigma for this reflection
-    sigma_obs_frame = np.array(sum(sigma_list[i], []))
+    sigma_obs_frame = np.array(sigma_list[i])
     # re-order according to frame number
     Iobs_list[i] = i_obs_frame[np.argsort(frame_obs)]
     s_list[i] = s_pets_frame[np.argsort(frame_obs)]
@@ -251,17 +276,12 @@ for i in range(n_refl):
     # get the centroid
     mask = i_obs_frame > 0.05*np.max(i_obs_frame)  # remove bottom 5%
     bragg_obs[i] = np.sum(frame_obs*i_obs_frame*mask)/np.sum(i_obs_frame*mask)
-if v.frame_output == 1:
-    for i in range(n_refl):
-        name = f"{i}: {v.input_hkls[i, :]}"
-        fig = plt.figure(figsize=(5, 3.5))
-        ax = fig.add_subplot(111)
-        plt.bar(frame_list[i], Iobs_list[i], color='g')
-        ax.set_xlabel('Frame')
-        ax.set_ylabel('Intensity')
-        plt.ylim(bottom=0.0)
-        plt.suptitle(name)
-        plt.show()
+
+# # plot if required
+# if v.frame_output == 1:
+#     for i in range(n_refl):
+#         name = f"{i}: {v.input_hkls[i, :]}"
+#         px.rocking_plot(frame_list[i], Iobs_list[i], name)
 
 
 # %% Setup kV and unit cell
