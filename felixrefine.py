@@ -257,6 +257,7 @@ if v.frame_output == 1:
         fig = plt.figure(figsize=(5, 3.5))
         ax = fig.add_subplot(111)
         plt.bar(frame_list[i], Iobs_list[i], color='g')
+        plt.axvline(x=bragg_obs[i], color='red', linestyle='--')
         ax.set_xlabel('Frame')
         ax.set_ylabel('Intensity')
         plt.ylim(bottom=0.0)
@@ -394,7 +395,7 @@ sg = px.sg(big_k, g_pool)
 signs = np.sign(sg)
 # index of frame before zero or sign change
 g_zeros = np.argmax((signs[:-1, :] * signs[1:, :]) < 1, axis=0)
-# Frame index of Bragg condition, sub-frame precision
+# Frame index of Bragg condition (sg=0), sub-frame precision
 bragg_calc = np.zeros(n_g)
 for i in range(n_g):
     if g_zeros[i] != 0:
