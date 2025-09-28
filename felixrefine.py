@@ -35,7 +35,7 @@ print("-----------------------------------------------------------------")
 v = pc.Var()  # working variables used in the simulation, see pylix_class
 # initialise iteration count
 v.iter_count = 0
-
+plt.style.use('default')
 
 # %% read felix.cif
 
@@ -411,21 +411,10 @@ I_kin = (F_g * np.conj(F_g)).real
 big_k = big_k_mag * t_m2o[:, :, 2]
 
 # Deviation parameter sg for all frames and g-vectors, size [n_frames, n_g]
-sg = px.sg(big_k, g_pool)
-
-
-# frame position of zero sg
-
-# signs of sg, size [n_frames, n_g]
-signs = np.sign(sg)
-# index of frame before zero or sign change
-g_zeros = np.argmax((signs[:-1, :] * signs[1:, :]) < 1, axis=0)
-# Frame index of Bragg condition (sg=0), sub-frame precision
-bragg_calc = np.zeros(n_g)
-for i in range(n_g):
-    if g_zeros[i] != 0:
-        bragg_calc[i] = (g_zeros[i] - 2*sg[g_zeros[i], i] /
-                         (sg[g_zeros[i]+2, i] - sg[g_zeros[i], i]))
+# s0 = frame position of zero sg (Bragg condition), size [2, n_g]
+# NB a reflection would appear twice in a 360 degree rotation
+# s0 = -1 if no crossing
+sg, s0 = px.sg(big_k, g_pool)
 
 
 # %% kinematic simulation
