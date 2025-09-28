@@ -1379,22 +1379,24 @@ def sg(big_k, g_pool):
     p = (big_k[:, np.newaxis, :] - (k_dot_g[..., np.newaxis] * g_pool) / g_sq)
     # and now make k0 by adding vectors parallel to g and p
     # i.e. k0 = (p/|p|)*(k^2-g^2/4)^0.5 - g/2, Shape [n_frames, n_g, 3]
-    p_norm = np.linalg.norm(p, axis=2)
-    k0 = (np.sqrt(big_k_mag**2 - 0.25*g_mag**2)[np.newaxis, :, np.newaxis] *
-          p/p_norm[..., np.newaxis]) - 0.5*g_pool[np.newaxis, ...]
-
-    # *** bug here in magnitude of k0? ***
-    k0_norm = np.linalg.norm(k0, axis=2)
-    # The angle phi between big_k and k0
-    # is how far we are from the Bragg condition
-    k_dot_k0 = np.einsum('ij,ikj->ik', big_k, k0) / big_k_mag**2
-    # k_dot_k0 = np.einsum('ij,ikj->ik', big_k, k0) / big_k_mag*k0_norm
-    k_dot_k0[k_dot_k0 > 1] = 1.0  # clean up overflows
-    phi = np.arccos(k_dot_k0)
-    # Sg is 2g sin(phi/2), with the sign of |K|-|K+g|, size [n_frames, n_g]
-    k_plus_g = big_k[:, np.newaxis, :] + g_pool
-    sg = 2*g_mag[np.newaxis, :]*np.sin(0.5*phi) \
-        * np.sign(big_k_mag - np.linalg.norm(k_plus_g, axis=2))
+    # p_norm = np.linalg.norm(p, axis=2)
+    # k0 = (np.sqrt(big_k_mag**2 - 0.25*g_mag**2)[np.newaxis, :, np.newaxis] *
+    #       p/p_norm[..., np.newaxis]) - 0.5*g_pool[np.newaxis, ...]
+    k0 = p - 0.5*g_pool[np.newaxis, ...]
+    # from similar triangles sg = |g|*|k0-K|/|K|
+    k_minus_k0 = k0 - big_k[:, None, :]
+    sign = np.sign(np.einsum('mni,ni->mn', k_minus_k0, g_pool))
+    # sg = np.linalg.norm(k_minus_k0, axis=2) * sign * g_mag / big_k_mag
+    # # The angle phi between big_k and k0
+    # # is how far we are from the Bragg condition
+    # k_dot_k0 = np.einsum('ij,ikj->ik', big_k, k0) / big_k_mag**2
+    # # k_dot_k0 = np.einsum('ij,ikj->ik', big_k, k0) / big_k_mag*k0_norm
+    # k_dot_k0[k_dot_k0 > 1] = 1.0  # clean up overflows
+    # phi = np.arccos(k_dot_k0)
+    # # Sg is 2g sin(phi/2), with the sign of |K|-|K+g|, size [n_frames, n_g]
+    # k_plus_g = big_k[:, np.newaxis, :] + g_pool
+    # sg = 2*g_mag[np.newaxis, :]*np.sin(0.5*phi) \
+    #     * np.sign(big_k_mag - np.linalg.norm(k_plus_g, axis=2))
 
     return sg
 
