@@ -40,7 +40,7 @@ precision                 = 0.00002
 frame_size_x			  = 1024
 frame_size_y			  = 1024
 frame_resolution          = 0.0064
-frame_g_limit             = 2.0
+frame_g_limit             = 2.5
 frame_output	          = 1
 
 # Refinement specific flags

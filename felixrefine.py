@@ -155,10 +155,10 @@ if v.absorption_method != 1:
     v.absorption_per = 0.0
 
 # crystallography exp(2*pi*i*g.r) to physics convention exp(i*g.r)
+v.g_limit *= 2 * np.pi
 v.frame_g_limit *= 2 * np.pi
 # *** temporary definition of frame resolution A^-1/pixel ***
 v.frame_resolution =  (v.frame_size_x//2) / v.frame_g_limit
-v.g_limit *= 2 * np.pi
 
 # output
 print(f"Initial orientation: {v.incident_beam_direction.astype(int)}")
@@ -218,76 +218,6 @@ if 'I' in v.refine_mode:
 # %% read felix.hkl
 v.input_hkls, v.i_obs, v.sigma_obs = px.read_hkl_file("felix.hkl")
 v.n_out = len(v.input_hkls)+1  # we expect 000 NOT to be in the hkl list
-
-
-# %% read refl_profiles
-# input_hkls = Miller indices, size [n_refl, 3]
-# frame_list = frames where hkl is observed, size [n_refl, <variable>]
-# Iobs_list = frame by frame intensities, size [n_refl, <variable>]
-# s_list = frame by frame sg, size [n_refl, <variable>]
-# sigma_list = frame by frame sigma, size [n_refl, <variable>]
-
-v.input_hkls, frame_list, Iobs_list, sigma_list, s_list = \
-    px.read_refl_profiles("reflprofiles_strong.dat")
-n_refl = len(v.input_hkls)
-v.n_out = n_refl + 1  # we expect 000 NOT to be in the hkl list
-print(f"{n_refl} observed reflections")
-
-# look for double observations and exclude (split?) them - user interaction!
-# we don't delete the data, just flag it to be ignored in the refinement
-exclude_list = np.zeros(n_refl)
-# look at reflexions observed over some minimum number of frames
-frame_test = 100
-frame_length = [len(f) for f in frame_list]
-for i in range(n_refl):
-    # reflexions of interest - include/discard
-    if frame_length[i] > frame_test:
-        # plot the rocking curve
-        name = f"{i}: {v.input_hkls[i, :]}"
-        px.rocking_plot(frame_list[i], Iobs_list[i], name)
-        app = QApplication.instance()
-        if app is None:
-            app = QApplication(sys.argv)
-        reply = QMessageBox.question(None, 'Check rocking curve',
-                                     "Exclude?",
-                                     QMessageBox.Yes | QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            exclude_list[i] = 1
-            print(f"Reflexion {name} excluded from refinement")
-
-
-# Iobs is ordered according to deviation parameter s
-# reorder according to frame ID
-bragg_obs = np.zeros(n_refl)  # observed Bragg conditions (frame number)
-for i in range(n_refl):
-    # frame list for this reflection
-    frame_obs = np.array(frame_list[i])
-    # Iobs for this reflection
-    i_obs_frame = np.array(Iobs_list[i])
-    # s for this reflection
-    s_pets_frame = np.array(s_list[i])
-    # sigma for this reflection
-    sigma_obs_frame = np.array(sigma_list[i])
-    # re-order according to frame number
-    Iobs_list[i] = i_obs_frame[np.argsort(frame_obs)]
-    s_list[i] = s_pets_frame[np.argsort(frame_obs)]
-    sigma_list[i] = sigma_obs_frame[np.argsort(frame_obs)]
-    frame_list[i] = frame_obs[np.argsort(frame_obs)]
-    # get the centroid
-    mask = i_obs_frame > 0.05*np.max(i_obs_frame)  # remove bottom 5%
-    bragg_obs[i] = np.sum(frame_obs*i_obs_frame*mask)/np.sum(i_obs_frame*mask)
-if v.frame_output == 1:
-    for i in range(n_refl):
-        name = f"{i}: {v.input_hkls[i, :]}"
-        fig = plt.figure(figsize=(5, 3.5))
-        ax = fig.add_subplot(111)
-        plt.bar(frame_list[i], Iobs_list[i], color='g')
-        plt.axvline(x=bragg_obs[i], color='red', linestyle='--')
-        ax.set_xlabel('Frame')
-        ax.set_ylabel('Intensity')
-        plt.ylim(bottom=0.0)
-        plt.suptitle(name)
-        plt.show()
 
 
 # %% Setup kV and unit cell
@@ -411,11 +341,128 @@ I_kin = (F_g * np.conj(F_g)).real
 big_k = big_k_mag * t_m2o[:, :, 2]
 
 # Deviation parameter sg for all frames and g-vectors, size [n_frames, n_g]
-# s0 = frame position of zero sg (Bragg condition), size [2, n_g]
+# bragg_calc = frame position of Bragg condition, size [2, n_g]
 # NB a reflection would appear twice in a 360 degree rotation
-# s0 = -1 if no crossing
-sg, s0 = px.sg(big_k, g_pool)
+# bragg_calc = -1 if no crossing
+sg, bragg_calc = px.sg(big_k, g_pool, g_mag)
 
+
+# %% read refl_profiles
+# input_hkls = Miller indices, size [n_refl, 3]
+# frame_list = frames where hkl is observed, size [n_refl, <variable>]
+# Iobs_list = frame by frame intensities, size [n_refl, <variable>]
+# s_list = frame by frame sg, size [n_refl, <variable>]
+# sigma_list = frame by frame sigma, size [n_refl, <variable>]
+
+v.input_hkls, frame_list, Iobs_list, sigma_list, s_list = \
+    px.read_refl_profiles("reflprofiles_strong.dat")
+n_refl = len(v.input_hkls)
+v.n_out = n_refl + 1  # we expect 000 NOT to be in the hkl list
+print(f"{n_refl} observed reflections")
+
+# look for double observations and exclude (split?) them - user interaction!
+# we don't delete the data, just flag it to be ignored in the refinement
+exclude_list = np.zeros(n_refl)
+# look at reflexions observed over some minimum number of frames
+frame_test = 100
+frame_length = [len(f) for f in frame_list]
+for i in range(n_refl):
+    # reflexions of interest - include/discard
+    if frame_length[i] > frame_test:
+        # plot the rocking curve
+        name = f"{i}: {v.input_hkls[i, :]}"
+        px.rocking_plot(frame_list[i], Iobs_list[i], name)
+        app = QApplication.instance()
+        if app is None:
+            app = QApplication(sys.argv)
+        reply = QMessageBox.question(None, 'Check rocking curve',
+                                     "Exclude?",
+                                     QMessageBox.Yes | QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            exclude_list[i] = 1
+            print(f"Reflexion {name} excluded from refinement")
+
+
+# Iobs is ordered according to deviation parameter s
+# indices of observed Bragg conditions (=-1 if not observed)
+# we have two rows as a reflection can be observed twice for 360 rotn
+# ***need to add in the splitting of the rocking curve in this case!
+bragg_obs = -np.ones([n_refl, 2])
+# reorder according to frame ID
+for i in range(n_refl):
+    # frame list for this reflection
+    frame_obs = np.array(frame_list[i])
+    # Iobs for this reflection
+    i_obs_frame = np.array(Iobs_list[i])
+    # s for this reflection
+    s_pets_frame = np.array(s_list[i])
+    # sigma for this reflection
+    sigma_obs_frame = np.array(sigma_list[i])
+    # re-order according to frame number
+    Iobs_list[i] = i_obs_frame[np.argsort(frame_obs)]
+    sigma_list[i] = sigma_obs_frame[np.argsort(frame_obs)]
+    s_list[i] = s_pets_frame[np.argsort(frame_obs)]
+    frame_list[i] = frame_obs[np.argsort(frame_obs)]
+    # get the centroid
+    mask = i_obs_frame > 0.05*np.max(i_obs_frame)  # remove bottom 5%
+    bragg_obs[i, 0] = np.sum(frame_obs
+                             *i_obs_frame*mask)/np.sum(i_obs_frame*mask)
+# sort by order of appearance
+sort_indices = np.argsort([arr[0] for arr in frame_list])
+Iobs_list = [Iobs_list[i] for i in sort_indices]
+sigma_list = [sigma_list[i] for i in sort_indices]
+s_list = [s_list[i] for i in sort_indices]
+frame_list = [frame_list[i] for i in sort_indices]
+hkl_list = v.input_hkls[sort_indices]
+bragg_obs = bragg_obs[sort_indices]
+# plots
+if v.frame_output == 1:
+    for i in range(n_refl):
+        name = f"{i}: {hkl_list[i, :]}"
+        fig = plt.figure(figsize=(5, 3.5))
+        ax = fig.add_subplot(111)
+        plt.bar(frame_list[i], Iobs_list[i], color='g')
+        plt.axvline(x=bragg_obs[i, 0], color='red', linestyle='--')
+        ax.set_xlabel('Frame')
+        ax.set_ylabel('Intensity')
+        plt.ylim(bottom=0.0)
+        plt.suptitle(name)
+        plt.show()
+# pool_i gives the map of observed to calculated reflections
+pool_dict = {tuple(row): i for i, row in enumerate(hkl_pool)}
+pool_i = np.array([pool_dict.get(tuple(row), -1)
+                    for row in v.input_hkls], dtype=int)
+n_obs = n_refl+np.sum(pool_i[pool_i<0])
+# needs check here to take out excluded reflexions
+print(f"{n_obs} found in beam pool")
+
+
+# %% difference between obs & calc Bragg conditions
+delta_bragg = np.full(bragg_obs.shape, np.nan)
+bragg_calc_reordered = bragg_calc[pool_i, :]
+for i in range(n_obs):
+    if bragg_calc[pool_i[i], 0] != -1:
+        delta_bragg[i, 0] = bragg_obs[i, 0] - bragg_calc[pool_i[i], 0]
+
+
+# %%
+valid_pool = pool_i != -1  # shape [n_refl]
+valid_obs = bragg_obs != -1  # shape [2, n_obs]
+valid_calc = np.take(bragg_calc, pool_i, axis=1) != -1  # shape [2, n_obs]
+valid_mask = valid_pool & np.all(valid_obs & valid_calc, axis=0)  # shape [m]
+
+# Step 4: Apply mask to reduce arrays
+bragg_obs_reduced  = bragg_obs[:, valid_mask]                    # shape [2, k]
+bragg_calc_reduced = bragg_calc[:, pool_i[valid_mask]]     # shape [2, k]
+
+
+
+delta_bragg = np.full(bragg_obs.shape, np.nan)  # start with NaNs
+mask = pool_indices != -1
+filtered_bragg_obs = bragg_obs[mask].reshape(2, -1)
+hkl_obs = pool_indices[mask]
+braggy = bragg_calc[hkl_obs]
+delta_bragg[mask] = bragg_obs[mask] - bragg_calc[pool_indices[mask]]
 
 # %% kinematic simulation
 

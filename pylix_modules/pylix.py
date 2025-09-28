@@ -1363,11 +1363,10 @@ def deviation_parameter(convergence_angle, image_radius, big_k_mag, g_pool,
     return s_g, tilted_k
 
 
-def sg(big_k, g_pool):
+def sg(big_k, g_pool, g_mag):
     """ Calculates deviation parameter sg for a set of incident wave vectors
     big_k and a set of g-vectors g_pool, both expressed in the same
     orthogonal reference frame"""
-    g_mag = np.linalg.norm(g_pool, axis=1)
     big_k_mag = np.linalg.norm(big_k[0])
     # k.g for all frames and g-vectors, size [n_frames, n_g]
     k_dot_g = np.einsum('ij,kj->ik', big_k, g_pool)
@@ -1394,13 +1393,13 @@ def sg(big_k, g_pool):
     # Linear interpolated fractional index
     s_vals = i + sg[i, j] / (sg[i, j] - sg[i+1, j])
     # up to 2 Bragg conditions per g
-    s0 = -np.ones((2, len(g_mag)), dtype=float)
+    s0 = -np.ones((len(g_mag), 2), dtype=float)
     for k in range(len(s_vals)):
         col = j[k]
         # Count how many already stored for this g-vector
-        used = (s0[:, col] != -1).sum()
+        used = (s0[col, :] != -1).sum()
         if used < 2:
-            s0[used, col] = s_vals[k]
+            s0[col, used] = s_vals[k]
     return sg, s0
 
 
