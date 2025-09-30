@@ -413,7 +413,7 @@ I_kin = (F_g * np.conj(F_g)).real
 # pool_i gives the map of observed to calculated reflections
 pool_dict = {tuple(row): i for i, row in enumerate(hkl_pool)}
 pool_i = np.array([pool_dict.get(tuple(row), -1)
-                    for row in v.input_hkls], dtype=int)
+                    for row in hkl_list], dtype=int)
 n_obs = n_refl+np.sum(pool_i[pool_i<0])
 # needs check here to take out excluded reflections
 print(f"{n_obs} of {n_refl} observed reflections found in beam pool")
@@ -423,10 +423,10 @@ print(f"{n_obs} of {n_refl} observed reflections found in beam pool")
 
 # assuming the initial beam direction is correct, adjust the x-direction
 # to minimise the difference between observed and calculated frames
-x0 = t_m2o[0,:,0]  # x-direction in frame 0
-y0 = t_m2o[0,:,1]  # x-direction in frame 0
-for i in range(0, 360, 10):  # set of angles about z
-    theta = 0.5*i/np.pi
+x0 = np.copy(t_m2o[0,:,0])  # x-direction in frame 0
+y0 = np.copy(t_m2o[0,:,1])  # y-direction in frame 0
+for j in range(-10, 10, 1):  # set of angles about z
+    theta = 0.5*j/np.pi
     x_direction = x0 * np.cos(theta) + y0 * np.sin(theta)
     t_m2o, t_c2o, t_cr2or = \
     px.reference_frames(v.debug, v.cell_a, v.cell_b, v.cell_c,
@@ -449,7 +449,7 @@ for i in range(0, 360, 10):  # set of angles about z
     delta_bragg = np.full(bragg_obs.shape, np.nan)
     bragg_calc_reordered = bragg_calc[pool_i, :]
     for i in range(n_obs):
-        if bragg_calc[pool_i[i], 0] != -1:
+        if pool_i[i] != -1 and bragg_calc[pool_i[i], 0] != -1:
             delta_bragg[i, 0] = bragg_obs[i, 0] - bragg_calc[pool_i[i], 0]
     delta_b = delta_bragg[~np.isnan(delta_bragg)]
     #plot
@@ -458,7 +458,15 @@ for i in range(0, 360, 10):  # set of angles about z
     plt.plot(delta_b)
     ax.set_xlabel('Frame')
     ax.set_ylabel('Delta Bragg (frames)')
+    plt.annotate(f"{j}", xy=(5, 5))
     plt.show()
+
+
+# %%
+i=29
+print(i)
+print(f'obs: {hkl_list[i]}, calc:{hkl_pool[pool_i[i]]}')
+print(f'Observed: {bragg_obs[i]}: calculated {bragg_calc[pool_i[i]]}')
 
 # %% difference between obs & calc Bragg conditions - parallel
 valid_pool = pool_i != -1  # shape [n_refl]
