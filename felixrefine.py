@@ -410,6 +410,17 @@ F_g = px.Fg(g_pool, g_mag, atom_position, atomic_number, occupancy,
 
 I_kin = (F_g * np.conj(F_g)).real
 
+# pool_i gives the map of observed to calculated reflections
+pool_dict = {tuple(row): i for i, row in enumerate(hkl_pool)}
+pool_i = np.array([pool_dict.get(tuple(row), -1)
+                    for row in v.input_hkls], dtype=int)
+n_obs = n_refl+np.sum(pool_i[pool_i<0])
+# needs check here to take out excluded reflections
+print(f"{n_obs} of {n_refl} observed reflections found in beam pool")
+
+
+# %% optimise initial reference frame
+
 # incident wave vector lies along Z in the microscope frame
 # so we can get it for all frames from the last column of the
 # transformation matrix t_m20. size [n_frames, 3]
@@ -420,14 +431,6 @@ big_k = big_k_mag * t_m2o[:, :, 2]
 # NB a reflection would appear twice in a 360 degree rotation
 # bragg_calc = -1 if no crossing
 sg, bragg_calc = px.sg(big_k, g_pool, g_mag)
-
-# pool_i gives the map of observed to calculated reflections
-pool_dict = {tuple(row): i for i, row in enumerate(hkl_pool)}
-pool_i = np.array([pool_dict.get(tuple(row), -1)
-                    for row in v.input_hkls], dtype=int)
-n_obs = n_refl+np.sum(pool_i[pool_i<0])
-# needs check here to take out excluded reflections
-print(f"{n_obs} of {n_refl} observed reflections found in beam pool")
 
 
 # %% difference between obs & calc Bragg conditions

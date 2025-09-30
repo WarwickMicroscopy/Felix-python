@@ -31,6 +31,7 @@ normal_direction          = [0, 1, -1]
 accelerating_voltage_kv   = 200.0
 frame_angle               = 0.1035
 n_frames                  = 250
+back_percent              = 5
 
 # Image output options
 initial_thickness         = 1850.0
@@ -41,7 +42,7 @@ frame_size_x			  = 1024
 frame_size_y			  = 1024
 frame_resolution          = 0.0064
 frame_g_limit             = 2.5
-frame_output	          = 1
+frame_output	          = 0
 
 # Refinement specific flags
 refine_mode               = 'S'
