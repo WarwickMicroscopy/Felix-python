@@ -653,6 +653,8 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
     t_m2o[:, :, 1] = y_dir_o  # Repeated for all frames
     t_m2o[:, :, 2] = z_dir_o * cos_angles + x_dir_o * sin_angles
 
+    # t_m2o = -t_m2o
+
     # Unit normal to the specimen in orthogonal frame
     norm_dir_o = t_c2o @ norm_dir_c
     norm_dir_o /= np.linalg.norm(norm_dir_o)

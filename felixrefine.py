@@ -264,16 +264,16 @@ for i in range(n_refl):
     frame_list[i] = frame_obs[np.argsort(frame_obs)]
     if len(frame_list[i]) > frame_test:
         name = f"{i}: {v.input_hkls[i, :]}"
-        px.rocking_plot(frame_list[i], Iobs_list[i], None, v.back_percent, name)
-        app = QApplication.instance()
-        if app is None:
-            app = QApplication(sys.argv)
-        reply = QMessageBox.question(None, 'Check rocking curve',
-                                     "Exclude?",
-                                     QMessageBox.Yes | QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            exclude_list[i] = 1
-            print(f"reflection {name} excluded from refinement")
+        # px.rocking_plot(frame_list[i], Iobs_list[i], None, v.back_percent, name)
+        # app = QApplication.instance()
+        # if app is None:
+        #     app = QApplication(sys.argv)
+        # reply = QMessageBox.question(None, 'Check rocking curve',
+        #                              "Exclude?",
+        #                              QMessageBox.Yes | QMessageBox.No)
+        # if reply == QMessageBox.Yes:
+        #     exclude_list[i] = 1
+        #     print(f"reflection {name} excluded from refinement")
     if exclude_list[i] != 1:
         # get the centroid
         mask = i_obs_frame > v.back_percent*np.max(i_obs_frame)  # remove %
@@ -372,7 +372,7 @@ print(f"  Mean inner potential = {mip:.1f} Volts")
 # K^2=k^2+U0
 big_k_mag = np.sqrt(electron_wave_vector_magnitude**2+mip)
 
-# %% set up reference frames
+# %% Initial reference frames
 # We work in a fixed orthogonal crystal frame _o
 # t_m2o = transformation microscope to orthogonal
 # t_c2o = transformation crystal to orthogonal
@@ -421,33 +421,44 @@ print(f"{n_obs} of {n_refl} observed reflections found in beam pool")
 
 # %% optimise initial reference frame
 
-# incident wave vector lies along Z in the microscope frame
-# so we can get it for all frames from the last column of the
-# transformation matrix t_m20. size [n_frames, 3]
-big_k = big_k_mag * t_m2o[:, :, 2]
+# assuming the initial beam direction is correct, adjust the x-direction
+# to minimise the difference between observed and calculated frames
+x0 = t_m2o[0,:,0]  # x-direction in frame 0
+y0 = t_m2o[0,:,1]  # x-direction in frame 0
+for i in range(0, 360, 10):  # set of angles about z
+    theta = 0.5*i/np.pi
+    x_direction = x0 * np.cos(theta) + y0 * np.sin(theta)
+    t_m2o, t_c2o, t_cr2or = \
+    px.reference_frames(v.debug, v.cell_a, v.cell_b, v.cell_c,
+                        v.cell_alpha, v.cell_beta, v.cell_gamma,
+                        v.space_group, x_direction,
+                        v.incident_beam_direction, v.normal_direction,
+                        v.n_frames, v.frame_angle)
 
-# Deviation parameter sg for all frames and g-vectors, size [n_frames, n_g]
-# bragg_calc = frame position of Bragg condition, size [2, n_g]
-# NB a reflection would appear twice in a 360 degree rotation
-# bragg_calc = -1 if no crossing
-sg, bragg_calc = px.sg(big_k, g_pool, g_mag)
-
-
-# %% difference between obs & calc Bragg conditions
-
-delta_bragg = np.full(bragg_obs.shape, np.nan)
-bragg_calc_reordered = bragg_calc[pool_i, :]
-for i in range(n_obs):
-    if bragg_calc[pool_i[i], 0] != -1:
-        delta_bragg[i, 0] = bragg_obs[i, 0] - bragg_calc[pool_i[i], 0]
-delta_b = delta_bragg[~np.isnan(delta_bragg)]
-#plot
-fig = plt.figure(figsize=(5, 3.5))
-ax = fig.add_subplot(111)
-plt.plot(delta_b)
-ax.set_xlabel('Frame')
-ax.set_ylabel('Delta Bragg (frames)')
-plt.show()
+    # incident wave vector lies along Z in the microscope frame
+    # so we can get it for all frames from the last column of the
+    # transformation matrix t_m20. size [n_frames, 3]
+    big_k = big_k_mag * t_m2o[:, :, 2]
+    
+    # Deviation parameter sg for all frames and g-vectors, size [n_frames, n_g]
+    # bragg_calc = frame position of Bragg condition, size [2, n_g]
+    # NB a reflection would appear twice in a 360 degree rotation
+    # bragg_calc = -1 if no crossing
+    sg, bragg_calc = px.sg(big_k, g_pool, g_mag)
+    
+    delta_bragg = np.full(bragg_obs.shape, np.nan)
+    bragg_calc_reordered = bragg_calc[pool_i, :]
+    for i in range(n_obs):
+        if bragg_calc[pool_i[i], 0] != -1:
+            delta_bragg[i, 0] = bragg_obs[i, 0] - bragg_calc[pool_i[i], 0]
+    delta_b = delta_bragg[~np.isnan(delta_bragg)]
+    #plot
+    fig = plt.figure(figsize=(5, 3.5))
+    ax = fig.add_subplot(111)
+    plt.plot(delta_b)
+    ax.set_xlabel('Frame')
+    ax.set_ylabel('Delta Bragg (frames)')
+    plt.show()
 
 # %% difference between obs & calc Bragg conditions - parallel
 valid_pool = pool_i != -1  # shape [n_refl]
