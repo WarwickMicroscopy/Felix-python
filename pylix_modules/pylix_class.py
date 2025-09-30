@@ -38,11 +38,12 @@ class Inp:
 # experimental data
         self.n_frames = None
         self.frame_angle = None
-        self.frame_size_x = None
+        self.frame_size_x = None  # pixel size of image for simulated frames
         self.frame_size_y = None
         self.frame_resolution = None  # reciprocal Angstroms/pixel
         self.frame_g_limit = None  # reciprocal Angstroms
-        self.frame_output = None  # flag to say if we output kinematical frames
+        self.frame_output = None  # flag to say if we output simulated frames
+        self.back_percent = None  # background to remove for peak centroid
 
 # refinement:
         self.refine_mode = None

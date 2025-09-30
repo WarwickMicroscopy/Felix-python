@@ -51,7 +51,7 @@ def read_inp_file(filename):
 
 def read_hkl_file(filename):
     """
-    Reads in the file felix.hkl and returns the list of reflexions to output
+    Reads in the file felix.hkl and returns the list of reflections to output
 
     Parameters:
     filename (str): The path to the input file.
@@ -182,10 +182,15 @@ def read_refl_profiles(filename):
     return input_hkls, frame_list, Iobs_list, sigma_list, s_list
 
 
-def rocking_plot(frames, Iobs, name):
+def rocking_plot(frames, Iobs, centroid, back_percent, name):
     fig = plt.figure(figsize=(5, 3.5))
     ax = fig.add_subplot(111)
     plt.bar(frames, Iobs, color='g')
+    if centroid is not None:
+        plt.axvline(x=centroid, color='red', linestyle='--')
+        bgl = np.full(len(Iobs), back_percent*np.max(Iobs), dtype=float)
+        plt.plot(frames, bgl, color='b')
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     ax.set_xlabel('Frame')
     ax.set_ylabel('Intensity')
     plt.ylim(bottom=0.0)
@@ -462,7 +467,7 @@ def frame_plot(t_m2o, g_frame_o, I_calc_frame, n_frames, frame_size_x,
                frame_size_y, frame_resolution, log_scale):
     """ makes set of frame images that should correspond to the experimental
     data.  """
-    # reflexion positions in all frames
+    # reflection positions in all frames
     x_y = [np.round((g_f @ t_m2o[i]) * frame_resolution).astype(int)
            for i, g_f in enumerate(g_frame_o)]
     # centre of plot, position of 000

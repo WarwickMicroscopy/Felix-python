@@ -1,4 +1,4 @@
-# Input file for Felix version :cRED: v0.0 :7-Mar-2025:
+# Input file for Felix version :cRED: a1286a1b :29-Sept-2025:
 # ------------------------------------
 
 # ------------------------------------
@@ -25,9 +25,9 @@ absorption_per            = 10.0
 
 # Microscope settings
 convergence_angle         = 0.1035
-incident_beam_direction   = [-23762, 100000, 38938]
-x_direction               = [5348, 40209, -100000]
-normal_direction          = [1, 0, -1]
+incident_beam_direction   = [-21787, 89518, 38881]
+x_direction               = [-97510, -18276, -12563]
+normal_direction          = [0, 1, -1]
 accelerating_voltage_kv   = 200.0
 frame_angle               = 0.1035
 n_frames                  = 250
