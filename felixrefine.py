@@ -425,12 +425,104 @@ n_obs = n_refl+np.sum(pool_i[pool_i<0])
 print(f"{n_obs} of {n_refl} observed reflections found in beam pool")
 
 
+# %% optimisation
+
+# incident wave vector lies along Z in the microscope frame
+# so we can get it for all frames from the last column of the
+# transformation matrix t_m20. size [n_frames, 3]
+# we need -z for the incident beam (not very nice!, but it works)
+big_k = -big_k_mag * t_m2o[:40, :, 2]
+
+# Deviation parameter sg for all frames and g-vectors, size [n_frames, n_g]
+# bragg_calc = frame position of Bragg condition, size [2, n_g]
+# NB a reflection would appear twice in a 360 degree rotation
+# bragg_calc = -1 if no crossing
+sg, bragg_calc = px.sg(big_k, g_pool, g_mag)
+
+
+def bragg_fom_sum_squares(bragg_obs, bragg_calc, pool_i,
+                          normalize=False, return_per_component=False):
+    """
+    Compute sum of squared differences between matching components of bragg_obs and bragg_calc.
+
+    - bragg_obs: shape [n_refl, 2]
+    - bragg_calc: shape [n_g, 2]
+    - pool_i: shape [n_refl], index into bragg_calc or -1 for no match
+
+    Rules:
+    - Consider only i with pool_i[i] != -1 and within range of bragg_calc.
+    - For each component c in {0,1} include (obs[i,c] - calc[pool_i[i],c])**2
+      only if both obs[i,c] != -1 and calc[pool_i[i],c] != -1.
+
+    Returns:
+      If return_per_component is False:
+        (fom, n_used)
+          - fom = sum of squared differences (or mean squared if normalize=True)
+          - n_used = total number of component-comparisons used (0..2*n_refl)
+
+      If return_per_component is True:
+        (fom, n_used, per_comp)
+          - per_comp is dict with 'sumsq' ndarray shape (2,) and 'count' ndarray shape (2,)
+    """
+    bragg_obs = np.asarray(bragg_obs)
+    bragg_calc = np.asarray(bragg_calc)
+    pool_i = np.asarray(pool_i, dtype=int)
+
+    # basic shape checks
+    if bragg_obs.ndim != 2 or bragg_obs.shape[1] != 2:
+        raise ValueError("bragg_obs must have shape [n_refl, 2]")
+    if bragg_calc.ndim != 2 or bragg_calc.shape[1] != 2:
+        raise ValueError("bragg_calc must have shape [n_g, 2]")
+    if pool_i.shape[0] != bragg_obs.shape[0]:
+        raise ValueError("pool_i must have same length as bragg_obs (n_refl)")
+
+    # 1) valid pool indices
+    valid_pool = (pool_i != -1) & (pool_i >= 0) & (pool_i < bragg_calc.shape[0])
+    if not np.any(valid_pool):
+        # nothing to compare
+        if normalize:
+            return (np.nan, 0) if not return_per_component else (np.nan, 0, {'sumsq': np.array([0.,0.]), 'count': np.array([0,0])})
+        else:
+            return (0.0, 0) if not return_per_component else (0.0, 0, {'sumsq': np.array([0.,0.]), 'count': np.array([0,0])})
+
+    # 2) gather rows that have a pool entry
+    obs = bragg_obs[valid_pool]                     # shape [k, 2]
+    calc = bragg_calc[pool_i[valid_pool]]           # shape [k, 2]
+
+    # 3) per-component masks where both obs and calc are present ( != -1 )
+    valid_comp_mask = (obs != -1) & (calc != -1)    # shape [k, 2]
+
+    # 4) squared differences (k,2) but zeroed where invalid
+    diffsq = (obs - calc) ** 2                      # shape [k,2]
+    diffsq_masked = diffsq * valid_comp_mask        # bool -> 0/1 multiply
+
+    # 5) per-component sums and counts
+    sumsqs_per_comp = np.sum(diffsq_masked, axis=0)    # shape (2,)
+    counts_per_comp = np.sum(valid_comp_mask, axis=0)  # shape (2,)
+
+    total_sumsq = float(sumsqs_per_comp.sum())
+    total_count = int(counts_per_comp.sum())
+
+    if normalize:
+        fom = (total_sumsq / total_count) if total_count > 0 else np.nan
+    else:
+        fom = total_sumsq
+
+    if return_per_component:
+        per_comp = {'sumsq': sumsqs_per_comp, 'count': counts_per_comp}
+        return fom, total_count, per_comp
+    else:
+        return fom, total_count
+
+
+
 # %% optimise initial reference frame
 
 # assuming the initial beam direction is correct, adjust the x-direction
 # to minimise the difference between observed and calculated frames
+std = []
 for j in range(-5, 5, 1):  # set of angles about z
-    theta = 0.005*j/np.pi
+    theta = 0.5*j/np.pi  # in degrees
     x_direction = x0 * np.cos(theta) + y0 * np.sin(theta)
     t_m2o, t_c2o, t_cr2or = \
     px.reference_frames(v.debug, v.cell_a, v.cell_b, v.cell_c,
@@ -456,6 +548,7 @@ for j in range(-5, 5, 1):  # set of angles about z
             delta_bragg[i, 0] = bragg_obs[i, 0] - bragg_calc[pool_i[i], 0]
     delta_b = delta_bragg[delta_bragg != 0] * v.frame_angle
     frame_ = bragg_obs[delta_bragg != 0]
+    std.append(np.std(delta_b))
     # plot
     fig = plt.figure(figsize=(5, 3.5))
     ax = fig.add_subplot(111)
@@ -464,7 +557,8 @@ for j in range(-5, 5, 1):  # set of angles about z
     ax.set_ylabel('Delta Bragg (degrees)')
     # plt.annotate(f"{j}", xy=(5, np.max(delta_b)))
     plt.show()
-
+plt.plot(std)
+plt.show()
 
 # %%
 i=15
