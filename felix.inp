@@ -25,12 +25,12 @@ absorption_per            = 10.0
 
 # Microscope settings
 convergence_angle         = 0.1035
-incident_beam_direction   = [-24737,100000,46528]
-x_direction               = [-1168,-14126,29739]
+incident_beam_direction   = [-0.21884, 0.884686, 0.411627]
+x_direction               = [-0.035454, -0.428786, 0.90271]
 normal_direction          = [0, 1, -1]
 accelerating_voltage_kv   = 200.0
 frame_angle               = 0.1035
-n_frames                  = 1000
+n_frames                  = 1389
 back_percent              = 5
 
 # Image output options

@@ -264,16 +264,17 @@ for i in range(n_refl):
     frame_list[i] = frame_obs[np.argsort(frame_obs)]
     if len(frame_list[i]) > frame_test:
         name = f"{i}: {v.input_hkls[i, :]}"
-        # px.rocking_plot(frame_list[i], Iobs_list[i], None, v.back_percent, name)
-        # app = QApplication.instance()
-        # if app is None:
-        #     app = QApplication(sys.argv)
-        # reply = QMessageBox.question(None, 'Check rocking curve',
-        #                              "Exclude?",
-        #                              QMessageBox.Yes | QMessageBox.No)
-        # if reply == QMessageBox.Yes:
-        #     exclude_list[i] = 1
-        #     print(f"reflection {name} excluded from refinement")
+        px.rocking_plot(frame_list[i], Iobs_list[i],
+                        None, v.back_percent, name)
+        app = QApplication.instance()
+        if app is None:
+            app = QApplication(sys.argv)
+        reply = QMessageBox.question(None, 'Check rocking curve',
+                                     "Exclude?",
+                                     QMessageBox.Yes | QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            exclude_list[i] = 1
+            print(f"reflection {name} excluded from refinement")
     if exclude_list[i] != 1:
         # get the centroid
         mask = i_obs_frame > v.back_percent*np.max(i_obs_frame)  # remove %
@@ -287,12 +288,14 @@ s_list = [s_list[i] for i in sort_indices]
 frame_list = [frame_list[i] for i in sort_indices]
 hkl_list = v.input_hkls[sort_indices]
 bragg_obs = bragg_obs[sort_indices]
+exclude_list = exclude_list[sort_indices]
 # plots
 if v.frame_output == 1:
     for i in range(n_refl):
-        name = f"{i}: {hkl_list[i, :]}"
-        px.rocking_plot(frame_list[i], Iobs_list[i], bragg_obs[i, 0],
-                        v.back_percent, name)
+        if exclude_list[i] != 1:
+            name = f"{i}: {hkl_list[i, :]}"
+            px.rocking_plot(frame_list[i], Iobs_list[i], bragg_obs[i, 0],
+                            v.back_percent, name)
 
 
 # %% Setup kV and unit cell
@@ -383,9 +386,11 @@ t_m2o, t_c2o, t_cr2or = \
                         v.space_group, v.x_direction,
                         v.incident_beam_direction, v.normal_direction,
                         v.n_frames, v.frame_angle)
+x0 = np.copy(t_m2o[0,:,0])  # x-direction in frame 0
+y0 = np.copy(t_m2o[0,:,1])  # y-direction in frame 0
 
 
-# %% Observable reflections, their structure factor and deviation parameter
+# %% Calculated reflections and their structure factor
 
 # kinematic beam pool
 print(f"Experimental resolution limit {0.5*v.frame_g_limit/np.pi:.3} reciprocal Angstroms")
@@ -411,9 +416,10 @@ F_g = px.Fg(g_pool, g_mag, atom_position, atomic_number, occupancy,
 I_kin = (F_g * np.conj(F_g)).real
 
 # pool_i gives the map of observed to calculated reflections
-pool_dict = {tuple(row): i for i, row in enumerate(hkl_pool)}
-pool_i = np.array([pool_dict.get(tuple(row), -1)
-                    for row in hkl_list], dtype=int)
+pool_dict = {tuple(hkl_pool[j]): j for j in range(n_g)}
+pool_i = np.array([pool_dict.get(tuple(i), -1)
+                    for i in hkl_list], dtype=int)
+# take out excluded reflections
 n_obs = n_refl+np.sum(pool_i[pool_i<0])
 # needs check here to take out excluded reflections
 print(f"{n_obs} of {n_refl} observed reflections found in beam pool")
@@ -423,10 +429,8 @@ print(f"{n_obs} of {n_refl} observed reflections found in beam pool")
 
 # assuming the initial beam direction is correct, adjust the x-direction
 # to minimise the difference between observed and calculated frames
-x0 = np.copy(t_m2o[0,:,0])  # x-direction in frame 0
-y0 = np.copy(t_m2o[0,:,1])  # y-direction in frame 0
-for j in range(-10, 10, 1):  # set of angles about z
-    theta = 0.5*j/np.pi
+for j in range(-5, 5, 1):  # set of angles about z
+    theta = 0.005*j/np.pi
     x_direction = x0 * np.cos(theta) + y0 * np.sin(theta)
     t_m2o, t_c2o, t_cr2or = \
     px.reference_frames(v.debug, v.cell_a, v.cell_b, v.cell_c,
@@ -438,35 +442,38 @@ for j in range(-10, 10, 1):  # set of angles about z
     # incident wave vector lies along Z in the microscope frame
     # so we can get it for all frames from the last column of the
     # transformation matrix t_m20. size [n_frames, 3]
-    big_k = big_k_mag * t_m2o[:, :, 2]
+    big_k = -big_k_mag * t_m2o[:, :, 2]
     
     # Deviation parameter sg for all frames and g-vectors, size [n_frames, n_g]
     # bragg_calc = frame position of Bragg condition, size [2, n_g]
     # NB a reflection would appear twice in a 360 degree rotation
     # bragg_calc = -1 if no crossing
     sg, bragg_calc = px.sg(big_k, g_pool, g_mag)
-    
-    delta_bragg = np.full(bragg_obs.shape, np.nan)
-    bragg_calc_reordered = bragg_calc[pool_i, :]
+
+    delta_bragg = np.full(bragg_obs.shape, 0.0)  # np.nan)
     for i in range(n_obs):
-        if pool_i[i] != -1 and bragg_calc[pool_i[i], 0] != -1:
+        if pool_i[i] != -1 and bragg_calc[pool_i[i], 0] != -1 and bragg_obs[i, 0] != -1:
             delta_bragg[i, 0] = bragg_obs[i, 0] - bragg_calc[pool_i[i], 0]
-    delta_b = delta_bragg[~np.isnan(delta_bragg)]
-    #plot
+    delta_b = delta_bragg[delta_bragg != 0] * v.frame_angle
+    frame_ = bragg_obs[delta_bragg != 0]
+    # plot
     fig = plt.figure(figsize=(5, 3.5))
     ax = fig.add_subplot(111)
-    plt.plot(delta_b)
+    plt.scatter(frame_, delta_b, s=3)
     ax.set_xlabel('Frame')
-    ax.set_ylabel('Delta Bragg (frames)')
-    plt.annotate(f"{j}", xy=(5, 5))
+    ax.set_ylabel('Delta Bragg (degrees)')
+    # plt.annotate(f"{j}", xy=(5, np.max(delta_b)))
     plt.show()
 
 
 # %%
-i=29
-print(i)
-print(f'obs: {hkl_list[i]}, calc:{hkl_pool[pool_i[i]]}')
-print(f'Observed: {bragg_obs[i]}: calculated {bragg_calc[pool_i[i]]}')
+i=15
+print(f'{i} _ {pool_i[i]}')
+if pool_i[i] != -1:
+    print(f'obs: {hkl_list[i, :]}, calc:{hkl_pool[pool_i[i], :]}')
+    print(f'Observed: {bragg_obs[i]}: calculated {bragg_calc[pool_i[i]]}')
+else:
+    print(f'{hkl_list[i, :]} not in beam pool')
 
 # %% difference between obs & calc Bragg conditions - parallel
 valid_pool = pool_i != -1  # shape [n_refl]

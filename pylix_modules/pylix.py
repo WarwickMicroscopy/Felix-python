@@ -649,11 +649,9 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
     cos_angles = np.cos(angles)[:, np.newaxis]  # Shape (n_frames, 1)
     sin_angles = np.sin(angles)[:, np.newaxis]
     t_m2o = np.zeros((n_frames, 3, 3), dtype=float)
-    t_m2o[:, :, 0] = x_dir_o * cos_angles - z_dir_o * sin_angles
+    t_m2o[:, :, 0] = x_dir_o * cos_angles + z_dir_o * sin_angles
     t_m2o[:, :, 1] = y_dir_o  # Repeated for all frames
-    t_m2o[:, :, 2] = z_dir_o * cos_angles + x_dir_o * sin_angles
-
-    # t_m2o = -t_m2o
+    t_m2o[:, :, 2] = z_dir_o * cos_angles - x_dir_o * sin_angles
 
     # Unit normal to the specimen in orthogonal frame
     norm_dir_o = t_c2o @ norm_dir_c
@@ -1374,6 +1372,7 @@ def sg(big_k, g_pool, g_mag):
     """ Calculates deviation parameter sg for a set of incident wave vectors
     big_k and a set of g-vectors g_pool, both expressed in the same
     orthogonal reference frame"""
+    # sign issue here corrected by a negative magnitude!
     big_k_mag = np.linalg.norm(big_k[0])
     # k.g for all frames and g-vectors, size [n_frames, n_g]
     k_dot_g = np.einsum('ij,kj->ik', big_k, g_pool)
