@@ -158,20 +158,21 @@ if v.absorption_method != 1:
 v.g_limit *= 2 * np.pi
 v.frame_g_limit *= 2 * np.pi
 # *** temporary definition of frame resolution A^-1/pixel ***
-v.frame_resolution =  (v.frame_size_x//2) / v.frame_g_limit
+v.frame_resolution = (v.frame_size_x//2) / v.frame_g_limit
 
 # background when calculating centroid, convert from %
 v.back_percent /= 100
 
 # output
-print(f"Initial orientation: {v.incident_beam_direction.astype(int)}")
+print(f"Initial orientation: {(1000*v.incident_beam_direction).astype(int)}")
 print(f"{v.n_frames} frames, each integrating over {v.frame_angle} degrees")
 if v.frame_output == 1:
     print("Will output kinematic frame simulation")
 if v.n_thickness == 1:
     print(f"Specimen thickness {v.initial_thickness/10} nm")
 else:
-    print(f"{v.n_thickness} thicknesses: {', '.join(map(str, v.thickness/10))} nm")
+    print(f"{v.n_thickness} thicknesses: {
+          ', '.join(map(str, v.thickness/10))} nm")
 
 if v.scatter_factor_method == 0:
     print("Using Kirkland scattering factors")
@@ -315,8 +316,9 @@ electron_wave_vector_magnitude = 2.0 * np.pi / electron_wavelength
 relativistic_correction = 1.0 / np.sqrt(1.0 - (electron_velocity / c)**2)
 # Conversion from scattering factor to volts
 cell_volume = v.cell_a*v.cell_b*v.cell_c*np.sqrt(1.0-np.cos(v.cell_alpha)**2
-              - np.cos(v.cell_beta)**2 - np.cos(v.cell_gamma)**2
-              +2.0*np.cos(v.cell_alpha)*np.cos(v.cell_beta)*np.cos(v.cell_gamma))
+                                                 - np.cos(v.cell_beta)**2 -
+                                                 np.cos(v.cell_gamma)**2
+                                                 + 2.0*np.cos(v.cell_alpha)*np.cos(v.cell_beta)*np.cos(v.cell_gamma))
 scatt_fac_to_volts = ((h**2) /
                       (2.0*np.pi * m_e * e * cell_volume * (angstrom**2)))
 
@@ -386,14 +388,15 @@ t_m2o, t_c2o, t_cr2or = \
                         v.space_group, v.x_direction,
                         v.incident_beam_direction, v.normal_direction,
                         v.n_frames, v.frame_angle)
-x0 = np.copy(t_m2o[0,:,0])  # x-direction in frame 0
-y0 = np.copy(t_m2o[0,:,1])  # y-direction in frame 0
+x0 = np.copy(t_m2o[0, :, 0])  # x-direction in frame 0
+y0 = np.copy(t_m2o[0, :, 1])  # y-direction in frame 0
 
 
 # %% Calculated reflections and their structure factor
 
 # kinematic beam pool
-print(f"Experimental resolution limit {0.5*v.frame_g_limit/np.pi:.3} reciprocal Angstroms")
+print(f"Experimental resolution limit {
+      0.5*v.frame_g_limit/np.pi:.3} reciprocal Angstroms")
 
 # Observable reflections are found within frame_g_limit
 # NB sine divisor is an attempt to expand range for non-rectilinear cells
@@ -418,9 +421,9 @@ I_kin = (F_g * np.conj(F_g)).real
 # pool_i gives the map of observed to calculated reflections
 pool_dict = {tuple(hkl_pool[j]): j for j in range(n_g)}
 pool_i = np.array([pool_dict.get(tuple(i), -1)
-                    for i in hkl_list], dtype=int)
+                   for i in hkl_list], dtype=int)
 # take out excluded reflections
-n_obs = n_refl+np.sum(pool_i[pool_i<0])
+n_obs = n_refl+np.sum(pool_i[pool_i < 0])
 # needs check here to take out excluded reflections
 print(f"{n_obs} of {n_refl} observed reflections found in beam pool")
 
@@ -440,11 +443,10 @@ big_k = -big_k_mag * t_m2o[:40, :, 2]
 sg, bragg_calc = px.sg(big_k, g_pool, g_mag)
 
 
-def bragg_fom_sum_squares(bragg_obs, bragg_calc, pool_i,
-                          normalize=False, return_per_component=False):
+def bragg_fom(bragg_obs, bragg_calc, pool_i, return_per_component=False):
     """
-    Compute sum of squared differences between matching components of bragg_obs and bragg_calc.
-
+    Figure of merit:
+        mean squared difference between matching bragg_obs and bragg_calc.
     - bragg_obs: shape [n_refl, 2]
     - bragg_calc: shape [n_g, 2]
     - pool_i: shape [n_refl], index into bragg_calc or -1 for no match
@@ -457,43 +459,30 @@ def bragg_fom_sum_squares(bragg_obs, bragg_calc, pool_i,
     Returns:
       If return_per_component is False:
         (fom, n_used)
-          - fom = sum of squared differences (or mean squared if normalize=True)
+          - fom = mean squared differences
           - n_used = total number of component-comparisons used (0..2*n_refl)
 
       If return_per_component is True:
         (fom, n_used, per_comp)
           - per_comp is dict with 'sumsq' ndarray shape (2,) and 'count' ndarray shape (2,)
     """
-    bragg_obs = np.asarray(bragg_obs)
-    bragg_calc = np.asarray(bragg_calc)
-    pool_i = np.asarray(pool_i, dtype=int)
 
-    # basic shape checks
-    if bragg_obs.ndim != 2 or bragg_obs.shape[1] != 2:
-        raise ValueError("bragg_obs must have shape [n_refl, 2]")
-    if bragg_calc.ndim != 2 or bragg_calc.shape[1] != 2:
-        raise ValueError("bragg_calc must have shape [n_g, 2]")
-    if pool_i.shape[0] != bragg_obs.shape[0]:
-        raise ValueError("pool_i must have same length as bragg_obs (n_refl)")
-
-    # 1) valid pool indices
-    valid_pool = (pool_i != -1) & (pool_i >= 0) & (pool_i < bragg_calc.shape[0])
+    # 1) valid reflections are where pool_i, shape [n_refl]
+    valid_pool = (pool_i != -1) & (pool_i >=
+                                   0) & (pool_i < bragg_calc.shape[0])
     if not np.any(valid_pool):
         # nothing to compare
-        if normalize:
-            return (np.nan, 0) if not return_per_component else (np.nan, 0, {'sumsq': np.array([0.,0.]), 'count': np.array([0,0])})
-        else:
-            return (0.0, 0) if not return_per_component else (0.0, 0, {'sumsq': np.array([0.,0.]), 'count': np.array([0,0])})
+        return (np.nan, 0) if not return_per_component else (np.nan, 0, {'sumsq': np.array([0., 0.]), 'count': np.array([0, 0])})
 
     # 2) gather rows that have a pool entry
-    obs = bragg_obs[valid_pool]                     # shape [k, 2]
-    calc = bragg_calc[pool_i[valid_pool]]           # shape [k, 2]
+    obs = bragg_obs[valid_pool]  # shape [n_refl, 2]
+    calc = bragg_calc[pool_i[valid_pool]]           # shape [n_refl, 2]
 
     # 3) per-component masks where both obs and calc are present ( != -1 )
-    valid_comp_mask = (obs != -1) & (calc != -1)    # shape [k, 2]
+    valid_comp_mask = (obs != -1) & (calc != -1)    # shape [n_refl, 2]
 
-    # 4) squared differences (k,2) but zeroed where invalid
-    diffsq = (obs - calc) ** 2                      # shape [k,2]
+    # 4) squared differences (n_refl,2) but zeroed where invalid
+    diffsq = (obs - calc) ** 2                      # shape [n_refl,2]
     diffsq_masked = diffsq * valid_comp_mask        # bool -> 0/1 multiply
 
     # 5) per-component sums and counts
@@ -503,10 +492,7 @@ def bragg_fom_sum_squares(bragg_obs, bragg_calc, pool_i,
     total_sumsq = float(sumsqs_per_comp.sum())
     total_count = int(counts_per_comp.sum())
 
-    if normalize:
-        fom = (total_sumsq / total_count) if total_count > 0 else np.nan
-    else:
-        fom = total_sumsq
+    fom = (total_sumsq / total_count) if total_count > 0 else np.nan
 
     if return_per_component:
         per_comp = {'sumsq': sumsqs_per_comp, 'count': counts_per_comp}
@@ -515,53 +501,58 @@ def bragg_fom_sum_squares(bragg_obs, bragg_calc, pool_i,
         return fom, total_count
 
 
-
 # %% optimise initial reference frame
 
 # assuming the initial beam direction is correct, adjust the x-direction
 # to minimise the difference between observed and calculated frames
 std = []
+fomm = []
 for j in range(-5, 5, 1):  # set of angles about z
-    theta = 0.5*j/np.pi  # in degrees
+    theta = 0.1 * np.pi*j/180  # in radians
     x_direction = x0 * np.cos(theta) + y0 * np.sin(theta)
     t_m2o, t_c2o, t_cr2or = \
-    px.reference_frames(v.debug, v.cell_a, v.cell_b, v.cell_c,
-                        v.cell_alpha, v.cell_beta, v.cell_gamma,
-                        v.space_group, x_direction,
-                        v.incident_beam_direction, v.normal_direction,
-                        v.n_frames, v.frame_angle)
+        px.reference_frames(v.debug, v.cell_a, v.cell_b, v.cell_c,
+                            v.cell_alpha, v.cell_beta, v.cell_gamma,
+                            v.space_group, x_direction,
+                            v.incident_beam_direction, v.normal_direction,
+                            v.n_frames, v.frame_angle)
 
     # incident wave vector lies along Z in the microscope frame
     # so we can get it for all frames from the last column of the
     # transformation matrix t_m20. size [n_frames, 3]
     big_k = -big_k_mag * t_m2o[:, :, 2]
-    
+
     # Deviation parameter sg for all frames and g-vectors, size [n_frames, n_g]
     # bragg_calc = frame position of Bragg condition, size [2, n_g]
     # NB a reflection would appear twice in a 360 degree rotation
     # bragg_calc = -1 if no crossing
     sg, bragg_calc = px.sg(big_k, g_pool, g_mag)
 
-    delta_bragg = np.full(bragg_obs.shape, 0.0)  # np.nan)
-    for i in range(n_obs):
-        if pool_i[i] != -1 and bragg_calc[pool_i[i], 0] != -1 and bragg_obs[i, 0] != -1:
-            delta_bragg[i, 0] = bragg_obs[i, 0] - bragg_calc[pool_i[i], 0]
-    delta_b = delta_bragg[delta_bragg != 0] * v.frame_angle
-    frame_ = bragg_obs[delta_bragg != 0]
-    std.append(np.std(delta_b))
+    # delta_bragg = np.full(bragg_obs.shape, 0.0)  # np.nan)
+    # for i in range(n_obs):
+    #     if pool_i[i] != -1 and bragg_calc[pool_i[i], 0] != -1 and bragg_obs[i, 0] != -1:
+    #         delta_bragg[i, 0] = bragg_obs[i, 0] - bragg_calc[pool_i[i], 0]
+    # delta_b = delta_bragg[delta_bragg != 0] * v.frame_angle
+    # frame_ = bragg_obs[delta_bragg != 0]
+    # std.append(np.std(delta_b))
+    fomo, nnn = bragg_fom(bragg_obs, bragg_calc[:40], pool_i)
+    fomm.append(fomo)
+    std.append(nnn)
     # plot
-    fig = plt.figure(figsize=(5, 3.5))
-    ax = fig.add_subplot(111)
-    plt.scatter(frame_, delta_b, s=3)
-    ax.set_xlabel('Frame')
-    ax.set_ylabel('Delta Bragg (degrees)')
-    # plt.annotate(f"{j}", xy=(5, np.max(delta_b)))
-    plt.show()
+#     # fig = plt.figure(figsize=(5, 3.5))
+#     # ax = fig.add_subplot(111)
+#     # plt.scatter(frame_, delta_b, s=3)
+#     # ax.set_xlabel('Frame')
+#     # ax.set_ylabel('Delta Bragg (degrees)')
+#     # # plt.annotate(f"{j}", xy=(5, np.max(delta_b)))
+#     # plt.show()
 plt.plot(std)
+plt.show()
+plt.plot(fomm)
 plt.show()
 
 # %%
-i=15
+i = 15
 print(f'{i} _ {pool_i[i]}')
 if pool_i[i] != -1:
     print(f'obs: {hkl_list[i, :]}, calc:{hkl_pool[pool_i[i], :]}')
@@ -576,7 +567,7 @@ valid_calc = np.take(bragg_calc, pool_i, axis=1) != -1  # shape [2, n_obs]
 valid_mask = valid_pool & np.all(valid_obs & valid_calc, axis=0)  # shape [m]
 
 # Step 4: Apply mask to reduce arrays
-bragg_obs_reduced  = bragg_obs[:, valid_mask]                    # shape [2, k]
+bragg_obs_reduced = bragg_obs[:, valid_mask]                    # shape [2, k]
 bragg_calc_reduced = bragg_calc[:, pool_i[valid_mask]]     # shape [2, k]
 
 
@@ -695,7 +686,8 @@ for i in range(v.n_frames):
     # g pool for this frame, reshaped as a list of g's to go into px.Fg
     g_pool_f = g_pool_dyn[i].reshape(-1, 3)
     g_mag_f = np.linalg.norm(g_pool_f, axis=1) + 1.0e-12  # their magnitudes
-    sg_f = np.concatenate(([0], sg_frame[i]))  # sg's for first column of F_g matrix
+    # sg's for first column of F_g matrix
+    sg_f = np.concatenate(([0], sg_frame[i]))
     ng_f = len(sg_f)  # F_g matrix is size [ng_f, ng_f]
 
     # if v.plot:
@@ -960,8 +952,8 @@ if 'S' not in v.refine_mode:
                 if g_string in file_name:
                     file_path = os.path.join(dm3_folder, file_name)
                     v.lacbed_expt[:, :, i] = px.read_dm3(file_path,
-                                                       2*v.image_radius,
-                                                       v.debug)
+                                                         2*v.image_radius,
+                                                         v.debug)
                     found = True
             if not found:
                 n_expt -= 1
@@ -976,7 +968,8 @@ if 'S' not in v.refine_mode:
         for i in range(v.n_out):
             axes[i].imshow(v.lacbed_expt[:, :, i], cmap='gist_earth')
             axes[i].axis('off')
-            annotation = f"{v.hkl[v.g_output[i], 0]}{v.hkl[v.g_output[i], 1]}{v.hkl[v.g_output[i], 2]}"
+            annotation = f"{v.hkl[v.g_output[i], 0]}{
+                v.hkl[v.g_output[i], 1]}{v.hkl[v.g_output[i], 2]}"
             axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
                              size=30, color='w', path_effects=[text_effect])
         for i in range(v.n_out, len(axes)):
@@ -987,11 +980,11 @@ if 'S' not in v.refine_mode:
         best_corr = np.ones(v.n_out)
 
 
-# %% output - *** needs work, apply blur/find best blur 
+# %% output - *** needs work, apply blur/find best blur
 if v.image_processing == 1:
     print(f"  Blur radius {v.blur_radius} pixels")
 if 'S' in v.refine_mode:
-    #*** apply blur !!!
+    # *** apply blur !!!
     # output simulated LACBED patterns
     sim.print_LACBED(v)
 else:
@@ -1015,11 +1008,11 @@ if 'S' not in v.refine_mode:
     r3_fom = np.zeros(3)
     # dunno what this is
     independent_delta = 0.0
-    
+
     # for a plot
     var_pl = ([])
     fit_pl = ([])
-    
+
     # Refinement loop
     while df >= v.exit_criteria:
         # v.refined_variable is the working set of variables going into a sim
@@ -1030,7 +1023,7 @@ if 'S' not in v.refine_mode:
         # if all parameters have been refined and we're still in the loop, reset
         if np.sum(np.abs(last_p)) < 1e-10:
             last_p = np.ones(v.n_variables)
-    
+
         # ===========individual variable minimisation
         # we go through the variables - if there's an easy minimisation
         # we take it and remove it from the list of variables to refine in
@@ -1047,18 +1040,17 @@ if 'S' not in v.refine_mode:
             if v.current_variable_type == 4 and v.refined_variable[i] <= 1e-10:
                 p[i] = 0.0
                 continue
-    
+
             # middle point is the previous best simulation
             r3_var[1] = v.refined_variable[i]*1.0
             r3_fom[1] = last_fit*1.0
             var_pl.append(v.refined_variable[i])
             fit_pl.append(last_fit)
-    
+
             # Update iteration
-            
-    
+
             print(f"Finding gradient, variable {i+1} of {v.n_variables}")
-    
+
             # Display messages based on variable type (last digit)
             if v.current_variable_type % 10 == 1:
                 print("Changing Ug")
@@ -1074,14 +1066,14 @@ if 'S' not in v.refine_mode:
                 print("Changing lattice parameter")
             elif v.current_variable_type % 10 == 8:
                 print("Changing convergence angle")
-    
+
             # dx is a small change in the current variable determined by RScale
             # which is either refinement_scale for atomic coordinates and
             # refinement_scale*variable for everything else
             dx = abs(v.refinement_scale * v.refined_variable[i])
             if v.refined_variable_type[i] == 2:
                 dx = abs(v.refinement_scale)
-    
+
             # Three-point gradient measurement, starting with plus
             v.refined_variable[i] += dx
             # update variables
@@ -1096,18 +1088,19 @@ if 'S' not in v.refine_mode:
                 best_var = np.copy(v.refined_variable)
             r3_var[2] = v.refined_variable[i]*1.0
             r3_fom[2] = fom*1.0
-            print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
+            print(f"  Figure of merit {
+                  100*fom:.2f}% (best {100*best_fit:.2f}%)")
             print(f"-1-----------------------------")  # {r3_var},{r3_fom}")
             var_pl.append(v.refined_variable[i])
             fit_pl.append(fom)
-    
+
             # keep going or turn round?
             if r3_fom[2] < r3_fom[1]:  # keep going
                 v.refined_variable[i] += np.exp(0.5) * dx
             else:  # turn round
                 dx = - dx
                 v.refined_variable[i] += np.exp(0.75) * dx
-    
+
             # update variables
             sim.update_variables(v)
             sim.print_current_var(v, v.refined_variable[i])
@@ -1120,11 +1113,12 @@ if 'S' not in v.refine_mode:
                 best_var = np.copy(v.refined_variable)
             r3_var[0] = v.refined_variable[i]*1.0
             r3_fom[0] = fom*1.0
-            print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
+            print(f"  Figure of merit {
+                  100*fom:.2f}% (best {100*best_fit:.2f}%)")
             print(f"-2-----------------------------")  # {r3_var},{r3_fom}")
             var_pl.append(v.refined_variable[i])
             fit_pl.append(fom)
-    
+
             # predict the next point as a minimum or a step on
             next_var[i], exclude = px.convex(r3_var, r3_fom)
             if exclude:
@@ -1135,7 +1129,7 @@ if 'S' not in v.refine_mode:
                 # error estimate goes here
                 # independent_delta[i] = delta_x(r3_var, r3_fom, precision, err)
                 # uncert_brak(var_min, independent_delta[i])
-    
+
         # ===========vector descent
         # either: point 1 of 3, or final simulation using the prediction next_var
         v.refined_variable = np.copy(next_var)
@@ -1149,11 +1143,12 @@ if 'S' not in v.refine_mode:
         print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
         fit_pl.append(fom)
         sim.print_LACBED(v)
-    
+
         # Reset the gradient vector magnitude and initialize vector descent
         p_mag = np.linalg.norm(p)
         if np.isinf(p_mag) or np.isnan(p_mag):
-            raise ValueError(f"Infinite or NaN gradient! Refinement vector = {p}")
+            raise ValueError(
+                f"Infinite or NaN gradient! Refinement vector = {p}")
         if abs(p_mag) > 1e-10:  # There are gradients, do the vector descent
             p = p / p_mag   # Normalized direction of max/min gradient
             j = np.where(np.abs(p) >= 1e-10)[0][0]
@@ -1162,12 +1157,13 @@ if 'S' not in v.refine_mode:
             print(f"Refining, refinement vector {p}")
             # Find index of the first non-zero element in the gradient vector
             # reset the refinement scale (last term reverses sign if we overshot)
-            p_mag = -best_var[j] * v.refinement_scale  #* (2*(fom < best_fit)-1)
+            # * (2*(fom < best_fit)-1)
+            p_mag = -best_var[j] * v.refinement_scale
             # First of three points for concavity test is the best simulation
             r3_var[0] = best_var[j]*1.0
             r3_fom[0] = fom*1.0
             print(f"-a-----------------------------")  # {r3_var},{r3_fom}")
-    
+
             # Second point
             print("Refining, point 2 of 3")
             # NB vectors here, not individual variables
@@ -1182,19 +1178,21 @@ if 'S' not in v.refine_mode:
                 best_var = np.copy(v.refined_variable[j])
             r3_var[1] = v.refined_variable[j]*1.0
             r3_fom[1] = fom*1.0
-            print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
+            print(f"  Figure of merit {
+                  100*fom:.2f}% (best {100*best_fit:.2f}%)")
             print(f"-b-----------------------------")  # {r3_var},{r3_fom}")
             var_pl.append(v.refined_variable[j])
             fit_pl.append(fom)
-    
+
             # Third point
             print("Refining, point 3 of 3")
             if r3_fom[1] > r3_fom[0]:  # if second point is worse
                 p_mag = -p_mag
-                v.refined_variable += np.exp(0.6)*p*p_mag  # Go in the opposite direction
+                # Go in the opposite direction
+                v.refined_variable += np.exp(0.6)*p*p_mag
             else:  # keep going
                 v.refined_variable += p*p_mag
-    
+
             # simulation
             sim.print_current_var(v, v.refined_variable[j])
             sim.update_variables(v)
@@ -1205,11 +1203,12 @@ if 'S' not in v.refine_mode:
                 best_var = np.copy(v.refined_variable)
             r3_var[2] = v.refined_variable[j]*1.0
             r3_fom[2] = fom*1.0
-            print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
+            print(f"  Figure of merit {
+                  100*fom:.2f}% (best {100*best_fit:.2f}%)")
             print(f"-c-----------------------------")  # {r3_var},{r3_fom}")
             var_pl.append(v.refined_variable[j])
             fit_pl.append(fom)
-    
+
             # we continue until we get a predicted minnymum
             minny = False
             while minny is False:
@@ -1231,11 +1230,13 @@ if 'S' not in v.refine_mode:
                     r3_fom[i] = fom*1.0
                 else:
                     minny = True
-                print(f"  Figure of merit {100*fom:.2f}% (best {100*best_fit:.2f}%)")
-                print(f"-.-----------------------------")  # {r3_var},{r3_fom}")
+                print(f"  Figure of merit {
+                      100*fom:.2f}% (best {100*best_fit:.2f}%)")
+                # {r3_var},{r3_fom}")
+                print(f"-.-----------------------------")
                 var_pl.append(v.refined_variable[j])
                 fit_pl.append(fom)
-    
+
             # End of this cycle
             print("Refinement cycle complete")
             p[j] = 0.0
@@ -1246,26 +1247,29 @@ if 'S' not in v.refine_mode:
         last_fit = best_fit*1.0
         v.refined_variable = np.copy(best_var)
         v.refinement_scale *= (1 - 1 / (2 * v.n_variables))
-        print(f"Improvement in fit {100*df:.2f}%, will stop at {100*v.exit_criteria:.2f}%")
+        print(f"Improvement in fit {
+              100*df:.2f}%, will stop at {100*v.exit_criteria:.2f}%")
         print("-------------------------------")
         plt.plot(fit_pl)
         # plt.scatter(var_pl, fit_pl)
         plt.show()
-    
-    print(f"Refinement complete after {v.iter_count} simulations.  Refined values: {best_var}")
+
+    print(f"Refinement complete after {
+          v.iter_count} simulations.  Refined values: {best_var}")
 
 # %% final print
 # sim.print_LACBED(v)
 total_time = time.time() - start
 print("-----------------------------------------------------------------")
 print(f"Beam pool calculation took {setup:.3f} seconds")
-print(f"Bloch wave calculation in {bwc:.1f} s ({1000*(bwc)/(4*v.image_radius**2):.2f} ms/pixel)")
+print(f"Bloch wave calculation in {bwc:.1f} s ({
+      1000*(bwc)/(4*v.image_radius**2):.2f} ms/pixel)")
 print(f"Total time {total_time:.1f} s")
 print("-----------------------------------------------------------------")
 print("|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||")
 
 
-###|||JUNK ZONE|||###
+### |||JUNK ZONE|||###
 
 # attempt at an animated set of frames
 # # Initialize figure
@@ -1287,7 +1291,7 @@ print("|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||")
 #                   y0 + xy[1] - dw:y0 + xy[1] + dw] = I_kin_frame[frame_idx][j]
 #     frame_img.set_array(frame)
 #     return [frame_img]
-    
+
 # ani = animation.FuncAnimation(fig, update, frames=v.n_frames, interval=38.46, blit=False)
 # plt.show()
 # ani.save("animation.gif", writer="pillow", fps=26)
