@@ -13,6 +13,7 @@ from matplotlib.patheffects import withStroke
 import matplotlib.colors as mcolors
 import time
 from scipy.constants import c, h, e, m_e, angstrom
+from scipy.optimize import minimize
 from PyQt5.QtWidgets import QMessageBox, QApplication
 import sys
 
@@ -239,7 +240,7 @@ print(f"{n_refl} observed reflections")
 
 # look for double observations and exclude (split?) them - user interaction!
 # we don't delete the data, just flag it to be ignored in the refinement
-exclude_list = np.zeros(n_refl)
+xclude = np.zeros(n_refl).astype(int)
 # look at reflections observed over some minimum number of frames
 frame_test = 100
 
@@ -254,15 +255,15 @@ for i in range(n_refl):
     frame_obs = np.array(frame_list[i])
     # Iobs for this reflection
     i_obs_frame = np.array(Iobs_list[i])
-    # s for this reflection
-    s_pets_frame = np.array(s_list[i])
+    # s_g for this reflection
+    # s_pets_frame = np.array(s_list[i])  # ignore for now
     # sigma for this reflection
     sigma_obs_frame = np.array(sigma_list[i])
     # re-order according to frame number
     Iobs_list[i] = i_obs_frame[np.argsort(frame_obs)]
     sigma_list[i] = sigma_obs_frame[np.argsort(frame_obs)]
-    s_list[i] = s_pets_frame[np.argsort(frame_obs)]
     frame_list[i] = frame_obs[np.argsort(frame_obs)]
+    # s_list[i] = s_pets_frame[np.argsort(frame_obs)]  # ignore for now
     if len(frame_list[i]) > frame_test:
         name = f"{i}: {v.input_hkls[i, :]}"
         px.rocking_plot(frame_list[i], Iobs_list[i],
@@ -274,29 +275,40 @@ for i in range(n_refl):
                                      "Exclude?",
                                      QMessageBox.Yes | QMessageBox.No)
         if reply == QMessageBox.Yes:
-            exclude_list[i] = 1
+            xclude[i] = 1
             print(f"reflection {name} excluded from refinement")
-    if exclude_list[i] != 1:
+    if xclude[i] != 1:
         # get the centroid
         mask = i_obs_frame > v.back_percent*np.max(i_obs_frame)  # remove %
         bragg_obs[i, 0] = np.sum(frame_obs *
                                  i_obs_frame*mask)/np.sum(i_obs_frame*mask)
+# exclude
+Iobs_list = [i for i, j in zip(Iobs_list, xclude) if j == 0]
+sigma_list = [i for i, j in zip(sigma_list, xclude) if j == 0]
+frame_list = [i for i, j in zip(frame_list, xclude) if j == 0]
+hkl_list = [i for i, j in zip(v.input_hkls, xclude) if j == 0]
+bragg_obs = [i for i, j in zip(bragg_obs, xclude) if j == 0]
+# s_list = [i for i, j in zip(s_list, xclude) if j == 0]  # ignore for now
+
 # sort by order of appearance
 sort_indices = np.argsort([arr[0] for arr in frame_list])
 Iobs_list = [Iobs_list[i] for i in sort_indices]
 sigma_list = [sigma_list[i] for i in sort_indices]
-s_list = [s_list[i] for i in sort_indices]
 frame_list = [frame_list[i] for i in sort_indices]
-hkl_list = v.input_hkls[sort_indices]
-bragg_obs = bragg_obs[sort_indices]
-exclude_list = exclude_list[sort_indices]
+hkl_list = [hkl_list[i] for i in sort_indices]
+bragg_obs = [bragg_obs[i] for i in sort_indices]
+# s_list = [s_list[i] for i in sort_indices]  # ignore for now
+
+# update number of reflections
+n_refl = len(bragg_obs)
+print(f"leaving {n_refl} reflections included in refinement")
+
 # plots
 if v.frame_output == 1:
     for i in range(n_refl):
-        if exclude_list[i] != 1:
-            name = f"{i}: {hkl_list[i, :]}"
-            px.rocking_plot(frame_list[i], Iobs_list[i], bragg_obs[i, 0],
-                            v.back_percent, name)
+        name = f"{i}: {hkl_list[i, :]}"
+        px.rocking_plot(frame_list[i], Iobs_list[i], bragg_obs[i, 0],
+                        v.back_percent, name)
 
 
 # %% Setup kV and unit cell
@@ -379,36 +391,53 @@ big_k_mag = np.sqrt(electron_wave_vector_magnitude**2+mip)
 
 # %% Initial reference frames
 # We work in a fixed orthogonal crystal frame _o
-# t_m2o = transformation microscope to orthogonal
 # t_c2o = transformation crystal to orthogonal
 # t_cr2o = transformation crystal to orthogonal, reciprocal space
-t_m2o, t_c2o, t_cr2or = \
-    px.reference_frames(v.debug, v.cell_a, v.cell_b, v.cell_c,
-                        v.cell_alpha, v.cell_beta, v.cell_gamma,
-                        v.space_group, v.x_direction,
-                        v.incident_beam_direction, v.normal_direction,
-                        v.n_frames, v.frame_angle)
-x0 = np.copy(t_m2o[0, :, 0])  # x-direction in frame 0
-y0 = np.copy(t_m2o[0, :, 1])  # y-direction in frame 0
+t_c2o, t_cr2or = px.omega(v.debug, v.cell_a, v.cell_b, v.cell_c,
+                          v.cell_alpha, v.cell_beta, v.cell_gamma,
+                          v.space_group)
 
+
+# %% optimise geometry
+
+# g-vectors in the orthogonal frame
+g_obs = hkl_list @ t_cr2or.T
+g_mag = np.linalg.norm(g_obs, axis=1) + 1.0e-12
+# Bragg angles
+bragg = np.arcsin(0.5*g_mag/big_k_mag)
+
+# t_m2o = transformation microscope to orthogonal, all frames
+t_m2o = px.reference_frames(v.debug, t_c2o, t_cr2or, v.x_direction,
+                            v.incident_beam_direction, v.n_frames,
+                            v.frame_angle)
+# K for all frames
+big_k = -big_k_mag * t_m2o[:, :, 2]
+sg, bragg_calc = px.sg(big_k, g_obs, g_mag)
 
 # %% Calculated reflections and their structure factor
 
-# kinematic beam pool
-print(f"Experimental resolution limit {
-      0.5*v.frame_g_limit/np.pi:.3} reciprocal Angstroms")
-
+# Beam pool
 # Observable reflections are found within frame_g_limit
 # NB sine divisor is an attempt to expand range for non-rectilinear cells
+print(f"Experimental resolution limit {
+      0.5*v.frame_g_limit/np.pi:.3} reciprocal Angstroms")
 expand = np.min([np.sin(v.cell_alpha),
                  np.sin(v.cell_beta), np.sin(v.cell_gamma)])
 g_limit = int(v.frame_g_limit/expand)
+# hkl_pool = [h, k, l] of reflections in calculated beam pool
+# g_pool = corresponding [g1, g2, g3] (reciprocal A, in orthogonal ref frame)
 hkl_pool, g_pool, g_mag = px.hkl_make(t_cr2or, g_limit, v.lattice_type)
 n_g = len(g_mag)
+print(f"giving {len(g_mag)} reflections")  # n_g
+
+# pool_i gives the map to the observed reflections [h, k, l] in hkl_list
+pool_dict = {tuple(hkl_pool[j]): j for j in range(n_g)}
+pool_i = np.array([pool_dict.get(tuple(i), -1)
+                   for i in hkl_list], dtype=int)
+
 
 # Bragg angles
 bragg = np.arcsin(0.5*g_mag/big_k_mag)
-print(f"giving {len(g_mag)} reflections")  # n_g
 px.pool_plot(g_pool, g_mag)
 
 # structure factor Fg for all reflections in g_pool
@@ -418,10 +447,6 @@ F_g = px.Fg(g_pool, g_mag, atom_position, atomic_number, occupancy,
 
 I_kin = (F_g * np.conj(F_g)).real
 
-# pool_i gives the map of observed to calculated reflections
-pool_dict = {tuple(hkl_pool[j]): j for j in range(n_g)}
-pool_i = np.array([pool_dict.get(tuple(i), -1)
-                   for i in hkl_list], dtype=int)
 # take out excluded reflections
 n_obs = n_refl+np.sum(pool_i[pool_i < 0])
 # needs check here to take out excluded reflections
@@ -430,76 +455,22 @@ print(f"{n_obs} of {n_refl} observed reflections found in beam pool")
 
 # %% optimisation
 
-# incident wave vector lies along Z in the microscope frame
-# so we can get it for all frames from the last column of the
-# transformation matrix t_m20. size [n_frames, 3]
-# we need -z for the incident beam (not very nice!, but it works)
-big_k = -big_k_mag * t_m2o[:40, :, 2]
-
-# Deviation parameter sg for all frames and g-vectors, size [n_frames, n_g]
-# bragg_calc = frame position of Bragg condition, size [2, n_g]
-# NB a reflection would appear twice in a 360 degree rotation
-# bragg_calc = -1 if no crossing
-sg, bragg_calc = px.sg(big_k, g_pool, g_mag)
-
-
-def bragg_fom(bragg_obs, bragg_calc, pool_i, return_per_component=False):
-    """
-    Figure of merit:
-        mean squared difference between matching bragg_obs and bragg_calc.
-    - bragg_obs: shape [n_refl, 2]
-    - bragg_calc: shape [n_g, 2]
-    - pool_i: shape [n_refl], index into bragg_calc or -1 for no match
-
-    Rules:
-    - Consider only i with pool_i[i] != -1 and within range of bragg_calc.
-    - For each component c in {0,1} include (obs[i,c] - calc[pool_i[i],c])**2
-      only if both obs[i,c] != -1 and calc[pool_i[i],c] != -1.
-
-    Returns:
-      If return_per_component is False:
-        (fom, n_used)
-          - fom = mean squared differences
-          - n_used = total number of component-comparisons used (0..2*n_refl)
-
-      If return_per_component is True:
-        (fom, n_used, per_comp)
-          - per_comp is dict with 'sumsq' ndarray shape (2,) and 'count' ndarray shape (2,)
-    """
-
-    # 1) valid reflections are where pool_i, shape [n_refl]
-    valid_pool = (pool_i != -1) & (pool_i >=
-                                   0) & (pool_i < bragg_calc.shape[0])
-    if not np.any(valid_pool):
-        # nothing to compare
-        return (np.nan, 0) if not return_per_component else (np.nan, 0, {'sumsq': np.array([0., 0.]), 'count': np.array([0, 0])})
-
-    # 2) gather rows that have a pool entry
-    obs = bragg_obs[valid_pool]  # shape [n_refl, 2]
-    calc = bragg_calc[pool_i[valid_pool]]           # shape [n_refl, 2]
-
-    # 3) per-component masks where both obs and calc are present ( != -1 )
-    valid_comp_mask = (obs != -1) & (calc != -1)    # shape [n_refl, 2]
-
-    # 4) squared differences (n_refl,2) but zeroed where invalid
-    diffsq = (obs - calc) ** 2                      # shape [n_refl,2]
-    diffsq_masked = diffsq * valid_comp_mask        # bool -> 0/1 multiply
-
-    # 5) per-component sums and counts
-    sumsqs_per_comp = np.sum(diffsq_masked, axis=0)    # shape (2,)
-    counts_per_comp = np.sum(valid_comp_mask, axis=0)  # shape (2,)
-
-    total_sumsq = float(sumsqs_per_comp.sum())
-    total_count = int(counts_per_comp.sum())
-
-    fom = (total_sumsq / total_count) if total_count > 0 else np.nan
-
-    if return_per_component:
-        per_comp = {'sumsq': sumsqs_per_comp, 'count': counts_per_comp}
-        return fom, total_count, per_comp
-    else:
-        return fom, total_count
-
+theta = 0.0
+def fom_theta(theta):
+    x_direction = x0 * np.cos(theta) + y0 * np.sin(theta)
+    t_m2o, t_c2o, t_cr2or = \
+        px.reference_frames(v.debug, v.cell_a, v.cell_b, v.cell_c,
+                            v.cell_alpha, v.cell_beta, v.cell_gamma,
+                            v.space_group, x_direction,
+                            v.incident_beam_direction, v.normal_direction,
+                            v.n_frames, v.frame_angle)
+    # calculate K for all frames
+    big_k = -big_k_mag * t_m2o[:, :, 2]
+    # Deviation parameter sg for all frames and g-vectors
+    # bragg_calc = -1 if no crossing
+    sg, bragg_calc = px.sg(big_k, g_pool, g_mag)
+    fom, nnn = px.bragg_fom(bragg_obs, bragg_calc[:40], pool_i)
+    return fom
 
 # %% optimise initial reference frame
 
@@ -526,16 +497,11 @@ for j in range(-5, 5, 1):  # set of angles about z
     # bragg_calc = frame position of Bragg condition, size [2, n_g]
     # NB a reflection would appear twice in a 360 degree rotation
     # bragg_calc = -1 if no crossing
+    time1 = time.time()
     sg, bragg_calc = px.sg(big_k, g_pool, g_mag)
+    print(f"{(time.time() - time1)}")
 
-    # delta_bragg = np.full(bragg_obs.shape, 0.0)  # np.nan)
-    # for i in range(n_obs):
-    #     if pool_i[i] != -1 and bragg_calc[pool_i[i], 0] != -1 and bragg_obs[i, 0] != -1:
-    #         delta_bragg[i, 0] = bragg_obs[i, 0] - bragg_calc[pool_i[i], 0]
-    # delta_b = delta_bragg[delta_bragg != 0] * v.frame_angle
-    # frame_ = bragg_obs[delta_bragg != 0]
-    # std.append(np.std(delta_b))
-    fomo, nnn = bragg_fom(bragg_obs, bragg_calc[:40], pool_i)
+    fomo, nnn = px.bragg_fom(bragg_obs, bragg_calc[:40], pool_i)
     fomm.append(fomo)
     std.append(nnn)
     # plot
@@ -551,7 +517,7 @@ plt.show()
 plt.plot(fomm)
 plt.show()
 
-# %%
+# %%  checking reflections
 i = 15
 print(f'{i} _ {pool_i[i]}')
 if pool_i[i] != -1:
@@ -560,22 +526,6 @@ if pool_i[i] != -1:
 else:
     print(f'{hkl_list[i, :]} not in beam pool')
 
-# %% difference between obs & calc Bragg conditions - parallel
-valid_pool = pool_i != -1  # shape [n_refl]
-valid_obs = bragg_obs != -1  # shape [2, n_obs]
-valid_calc = np.take(bragg_calc, pool_i, axis=1) != -1  # shape [2, n_obs]
-valid_mask = valid_pool & np.all(valid_obs & valid_calc, axis=0)  # shape [m]
-
-# Step 4: Apply mask to reduce arrays
-bragg_obs_reduced = bragg_obs[:, valid_mask]                    # shape [2, k]
-bragg_calc_reduced = bragg_calc[:, pool_i[valid_mask]]     # shape [2, k]
-
-
-mask = pool_indices != -1
-filtered_bragg_obs = bragg_obs[mask].reshape(2, -1)
-hkl_obs = pool_indices[mask]
-braggy = bragg_calc[hkl_obs]
-delta_bragg[mask] = bragg_obs[mask] - bragg_calc[pool_indices[mask]]
 
 # %% kinematic simulation
 

@@ -198,6 +198,63 @@ def rocking_plot(frames, Iobs, centroid, back_percent, name):
     plt.show()
 
 
+def bragg_fom(bragg_obs, bragg_calc, pool_i, return_reflection=False):
+    """
+    Figure of merit:
+        mean squared difference between matching bragg_obs and bragg_calc.
+    - bragg_obs: frame of observed Bragg condition, shape [n_refl, 2]
+    - pool_i: shape [n_refl], index into bragg_calc or -1 for no match
+    - bragg_calc: frame of calculated Bragg condition, shape [n_g, 2]
+
+    Rules:
+    - Consider only i with pool_i[i] != -1 and within range of bragg_calc.
+    - For each reflection c in {0,1} include (obs[i,c] - calc[pool_i[i],c])**2
+      only if both obs[i,c] != -1 and calc[pool_i[i],c] != -1.
+
+    Returns:
+      If return_reflection is False:
+        (fom, count)
+          - fom = mean squared differences
+          - count = number of reflection-comparisons
+      If return_reflection is True:
+        (fom, count, per_refl)
+          - per_refl is dict with 'sumsq' ndarray shape (2,)
+            and 'count' ndarray shape (2,)
+    """
+
+    # Valid reflections, pool_i !=-1, shape [n_refl]
+    valid = (pool_i != -1) & (pool_i >=
+                              0) & (pool_i < bragg_calc.shape[0])
+    if not np.any(valid):
+        # nothing to compare
+        return (np.nan, 0) if not return_reflection else \
+            (np.nan, 0, {'sumsq': np.array([0., 0.]),
+                         'count': np.array([0, 0])})
+
+    # Valid observed and calculated reflections
+    obs = bragg_obs[valid]  # shape [n_refl, 2]
+    calc = bragg_calc[pool_i[valid]]           # shape [n_refl, 2]
+    # must both be present
+    valid_refl_mask = (obs != -1) & (calc != -1)    # shape [n_refl, 2]
+    # squared differences, zero where invalid
+    diffsq = (obs - calc) ** 2                      # shape [n_refl,2]
+    diffsq_masked = diffsq * valid_refl_mask        # bool -> 0/1 multiply
+    #  per-reflection sums and counts
+    sumsqs_refl = np.sum(diffsq_masked, axis=0)    # shape (2,)
+    counts_refl = np.sum(valid_refl_mask, axis=0)  # shape (2,)
+
+    total_sumsq = float(sumsqs_refl.sum())
+    count = int(counts_refl.sum())
+
+    fom = (total_sumsq / count) if count > 0 else np.nan
+
+    if return_reflection:
+        per_refl = {'sumsq': sumsqs_refl, 'count': counts_refl}
+        return fom, count, per_refl
+    else:
+        return fom, count
+
+
 def extract_cif_parameter(item):
     """
     Parses a value string with uncertainty, e.g., '8.6754(3)',
@@ -565,12 +622,11 @@ def pool_plot(g_pool, g_pool_mag):
     plt.show()
 
 
-def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
-                     cell_gamma, space_group, x_dir_c, z_dir_c, norm_dir_c,
-                     n_frames, frame_angle):
+def omega(debug, cell_a, cell_b, cell_c,
+          cell_alpha, cell_beta, cell_gamma, space_group):
     """
-    Produces reciprocal lattice vectors and related parameters
-
+    The omega frame is an orthogonal reference frame with units of Angstroms
+    
     Parameters:
     space_group : str
         Space group name (will be modified in some cases).
@@ -578,15 +634,12 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
         Lattice angles in radians.
     cell_a, cell_b, cell_c : float
         Lattice lengths in Angstroms.
-    z_dir_c : ndarray
-        Direct lattice vector that defines the beam direction.
-    x_dir_c : ndarray
-        Reciprocal lattice vector that defines the x-axis of the diffraction
-        pattern.
-    norm_dir_c : ndarray
-        Normal direction in the crystal reference frame.
+        
+    Returns transformation matrices that convert Miller indices to the omega
+    frame
+    direct space : t_c2o
+    reciprocal space : t_cr2or
     """
-
     # Direct lattice vectors in an orthogonal reference frame, Angstrom units
     a_vec_o = np.array([cell_a, 0.0, 0.0])  # x_o is // to a
     b_vec_o = np.array([cell_b * np.cos(cell_gamma),
@@ -600,7 +653,6 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
                          2.0 * np.cos(cell_alpha) *
                          np.cos(cell_beta) * np.cos(cell_gamma)) /
         np.sin(cell_gamma)])
-
     # Some checks for rhombohedral cells
     # if diffraction_flag == 0:
     #     r_test = (
@@ -632,6 +684,38 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
     # And the same for reciprocal frames
     t_cr2or = np.column_stack((ar_vec_o, br_vec_o, cr_vec_o))
 
+    if debug:
+        print(" ")
+        np.set_printoptions(precision=3, suppress=True)
+        print(f"a = {cell_a}, b = {cell_b}, c = {cell_c}")
+        print(f"alpha = {cell_alpha*180.0/np.pi}, beta = {cell_beta*180.0/np.pi}, gamma = {cell_gamma*180.0/np.pi}")
+        print(" ")
+        print("Transformation crystal to orthogonal (O) frame:")
+        print(t_c2o)
+        print("Transformation crystal to orthogonal (O) frame, reciprocal space:")
+        print(t_cr2or)
+        print(f"O frame: a = {a_vec_o}, b = {b_vec_o}, c = {c_vec_o}")
+        print(f"a* = {ar_vec_o}, b* = {br_vec_o}, c* = {cr_vec_o}")
+
+    return t_c2o, t_cr2or
+    
+    
+def reference_frames(debug, t_c2o, t_cr2or, x_dir_c, z_dir_c,
+                     n_frames, frame_angle):
+    """
+    Produces array of transformation matrices, microscope to orthogonal,
+    for each frame in the input data
+
+    Parameters:
+    z_dir_c : ndarray
+        Direct lattice vector that defines the beam direction.
+    x_dir_c : ndarray
+        Reciprocal lattice vector that defines the x-axis of the diffraction
+        pattern.
+    norm_dir_c : ndarray
+        Normal direction in the crystal reference frame.
+    """
+
     # Initial unit X and Z vectors in orthogonal frame
     x_dir_o = t_cr2or @ x_dir_c
     x_dir_o /= np.linalg.norm(x_dir_o)
@@ -650,19 +734,13 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
     sin_angles = np.sin(angles)[:, np.newaxis]
     t_m2o = np.zeros((n_frames, 3, 3), dtype=float)
     t_m2o[:, :, 0] = x_dir_o * cos_angles + z_dir_o * sin_angles
-    t_m2o[:, :, 1] = y_dir_o  # Repeated for all frames
+    t_m2o[:, :, 1] = y_dir_o  # same in all frames
     t_m2o[:, :, 2] = z_dir_o * cos_angles - x_dir_o * sin_angles
-
-    # Unit normal to the specimen in orthogonal frame
-    norm_dir_o = t_c2o @ norm_dir_c
-    norm_dir_o /= np.linalg.norm(norm_dir_o)
 
     # Output to check
     if debug:
         print(" ")
         np.set_printoptions(precision=3, suppress=True)
-        print(f"a = {cell_a}, b = {cell_b}, c = {cell_c}")
-        print(f"alpha = {cell_alpha*180.0/np.pi}, beta = {cell_beta*180.0/np.pi}, gamma = {cell_gamma*180.0/np.pi}")
         print(f"X = {x_dir_c} (reciprocal space)")
         print(f"Z = {z_dir_c} (direct space)")
         print(" ")
@@ -670,14 +748,12 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
         print(t_c2o)
         print("Transformation crystal to orthogonal (O) frame, reciprocal space:")
         print(t_cr2or)
-        print(f"O frame: a = {a_vec_o}, b = {b_vec_o}, c = {c_vec_o}")
-        print(f"a* = {ar_vec_o}, b* = {br_vec_o}, c* = {cr_vec_o}")
         print(f"X = {x_dir_o}, y = {y_dir_o}, Z = {z_dir_o}")
         print(" ")
         print("Transformation microscope to orthogonal frame:")
         print(t_m2o)
 
-    return t_m2o, t_c2o, t_cr2or
+    return t_m2o
 
 
 def change_origin(space_group, basis_atom_position, basis_wyckoff):
@@ -1372,7 +1448,7 @@ def sg(big_k, g_pool, g_mag):
     """ Calculates deviation parameter sg for a set of incident wave vectors
     big_k and a set of g-vectors g_pool, both expressed in the same
     orthogonal reference frame"""
-    # sign issue here corrected by a negative magnitude!
+
     big_k_mag = np.linalg.norm(big_k[0])
     # k.g for all frames and g-vectors, size [n_frames, n_g]
     k_dot_g = np.einsum('ij,kj->ik', big_k, g_pool)
