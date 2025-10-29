@@ -13,7 +13,7 @@ from matplotlib.patheffects import withStroke
 import matplotlib.colors as mcolors
 import time
 from scipy.constants import c, h, e, m_e, angstrom
-from scipy.optimize import minimize
+from scipy.optimize import newton
 from PyQt5.QtWidgets import QMessageBox, QApplication
 import sys
 
@@ -172,8 +172,7 @@ if v.frame_output == 1:
 if v.n_thickness == 1:
     print(f"Specimen thickness {v.initial_thickness/10} nm")
 else:
-    print(f"{v.n_thickness} thicknesses: {
-          ', '.join(map(str, v.thickness/10))} nm")
+    print(f"{v.n_thickness} thicknesses: {', '.join(map(str, v.thickness/10))} nm")
 
 if v.scatter_factor_method == 0:
     print("Using Kirkland scattering factors")
@@ -296,7 +295,7 @@ Iobs_list = [Iobs_list[i] for i in sort_indices]
 sigma_list = [sigma_list[i] for i in sort_indices]
 frame_list = [frame_list[i] for i in sort_indices]
 hkl_list = [hkl_list[i] for i in sort_indices]
-bragg_obs = [bragg_obs[i] for i in sort_indices]
+bragg_obs = np.array([bragg_obs[i] for i in sort_indices])
 # s_list = [s_list[i] for i in sort_indices]  # ignore for now
 
 # update number of reflections
@@ -327,10 +326,10 @@ electron_wave_vector_magnitude = 2.0 * np.pi / electron_wavelength
 # Relativistic correction
 relativistic_correction = 1.0 / np.sqrt(1.0 - (electron_velocity / c)**2)
 # Conversion from scattering factor to volts
-cell_volume = v.cell_a*v.cell_b*v.cell_c*np.sqrt(1.0-np.cos(v.cell_alpha)**2
-                                                 - np.cos(v.cell_beta)**2 -
-                                                 np.cos(v.cell_gamma)**2
-                                                 + 2.0*np.cos(v.cell_alpha)*np.cos(v.cell_beta)*np.cos(v.cell_gamma))
+cell_volume = v.cell_a * v.cell_b * v.cell_c * \
+    np.sqrt(1.0-np.cos(v.cell_alpha)**2 - np.cos(v.cell_beta)**2 -
+            np.cos(v.cell_gamma)**2 + 2.0*np.cos(v.cell_alpha) *
+            np.cos(v.cell_beta)*np.cos(v.cell_gamma))
 scatt_fac_to_volts = ((h**2) /
                       (2.0*np.pi * m_e * e * cell_volume * (angstrom**2)))
 
@@ -396,31 +395,64 @@ big_k_mag = np.sqrt(electron_wave_vector_magnitude**2+mip)
 t_c2o, t_cr2or = px.omega(v.debug, v.cell_a, v.cell_b, v.cell_c,
                           v.cell_alpha, v.cell_beta, v.cell_gamma,
                           v.space_group)
-
-
-# %% optimise geometry
-
-# g-vectors in the orthogonal frame
-g_obs = hkl_list @ t_cr2or.T
-g_mag = np.linalg.norm(g_obs, axis=1) + 1.0e-12
-# Bragg angles
-bragg = np.arcsin(0.5*g_mag/big_k_mag)
-
 # t_m2o = transformation microscope to orthogonal, all frames
 t_m2o = px.reference_frames(v.debug, t_c2o, t_cr2or, v.x_direction,
                             v.incident_beam_direction, v.n_frames,
                             v.frame_angle)
-# K for all frames
+# initial x y and z
+t0 = np.copy(t_m2o[0, :, :])
+
+
+# %% optimise geometry, comparing bragg_obs and bragg_calc
+
+# observed g-vectors in the orthogonal frame
+g_obs = hkl_list @ t_cr2or.T
+
+start = 0  # start reflection
+end = 40  # end reflection
+def z_fom(angle, start, end):
+    bragg_calc = px.z_rot(angle, t0, t_c2o, t_cr2or, g_obs, v.n_frames,
+                          v.frame_angle, big_k_mag)
+    return px.bragg_fom(bragg_obs, bragg_calc, start, end)
+
+fomo = []
+for start in range(0, 100, 10):
+    end = start + 40
+    print(f"{start}-{end}")
+    best_a = newton(lambda a: z_fom(a, start, end), 0, tol=1.e-4)
+    print(f"{start}: {best_a}")
+    fomo.append(best_a)
+a=0
+# result = minimize_scalar(lambda x: z_fom(x[0]), angle, method='BFGS',
+#     options={'eps': 1e-5})
+# print(result)
+# delta = z_fom(angle)
+plt.plot(fomo)
+
+# %%
+# Bragg angles
+# bragg = np.arcsin(0.5*g_mag/big_k_mag)
+
+# K for all frames (NB minus sign!!!)
 big_k = -big_k_mag * t_m2o[:, :, 2]
-sg, bragg_calc = px.sg(big_k, g_obs, g_mag)
+sg, bragg_calc = px.sg(big_k, g_obs)
+
+# optimise 
+# t_m2o = transformation microscope to orthogonal, all frames
+t_m2o = px.reference_frames(v.debug, t_c2o, t_cr2or, x, z, v.n_frames,
+                            v.frame_angle)
+angle, t0, t_c2o, t_cr2or, n_frames, frame_angle
+
+
+# %%
+
 
 # %% Calculated reflections and their structure factor
 
 # Beam pool
 # Observable reflections are found within frame_g_limit
 # NB sine divisor is an attempt to expand range for non-rectilinear cells
-print(f"Experimental resolution limit {
-      0.5*v.frame_g_limit/np.pi:.3} reciprocal Angstroms")
+print(f"Experimental resolution limit {0.5*v.frame_g_limit/np.pi:.3} reciprocal Angstroms")
 expand = np.min([np.sin(v.cell_alpha),
                  np.sin(v.cell_beta), np.sin(v.cell_gamma)])
 g_limit = int(v.frame_g_limit/expand)

@@ -198,61 +198,101 @@ def rocking_plot(frames, Iobs, centroid, back_percent, name):
     plt.show()
 
 
-def bragg_fom(bragg_obs, bragg_calc, pool_i, return_reflection=False):
+def sg(big_k, g_pool):
+    """
+    1) Calculates deviation parameter sg for a set of incident wave vectors
+    big_k and a set of g-vectors g_pool, both expressed in the same
+    orthogonal reference frame, returned as sg.
+    2) Calculates Bragg conditions for all g-vectors, sub-frame accuracy,
+    returned as s0.
+    g_mag input to save recalculation.
+    """
+    g_mag = np.linalg.norm(g_pool, axis=1) + 1.0e-12
+    big_k_mag = np.linalg.norm(big_k[0])
+    # k.g for all frames and g-vectors, size [n_frames, n_g]
+    k_dot_g = np.einsum('ij,kj->ik', big_k, g_pool)
+    # Calculate Sg by getting the vector k0, which is coplanar with k and g and
+    # corresponds to an incident beam at the Bragg condition
+    g_sq = (g_mag**2)[np.newaxis, :, np.newaxis]
+    # First we need the component of k perpendicular to g, which we call p
+    # Shape [n_frames, n_g, 3], using where to avoid /0 for 000
+    p = (big_k[:, np.newaxis, :] - (k_dot_g[..., np.newaxis] * g_pool) / g_sq)
+    # and now make k0 by adding vectors parallel to g and p
+    # i.e. k0 = (p/|p|)*(k^2-g^2/4)^0.5 - g/2, Shape [n_frames, n_g, 3]
+    # p_norm = np.linalg.norm(p, axis=2)
+    # k0 = (np.sqrt(big_k_mag**2 - 0.25*g_mag**2)[np.newaxis, :, np.newaxis] *
+    #       p/p_norm[..., np.newaxis]) - 0.5*g_pool[np.newaxis, ...]
+    k0 = p - 0.5*g_pool[np.newaxis, ...]
+    # from similar triangles sg = |g|*|k0-K|/|K|
+    k_minus_k0 = k0 - big_k[:, None, :]
+    sign = np.sign(np.einsum('mni,ni->mn', k_minus_k0, g_pool))
+    sg = np.linalg.norm(k_minus_k0, axis=2) * sign * g_mag / big_k_mag
+
+    # the Bragg condtions, sg=0
+    # where does sg change sign
+    i, j = np.nonzero(sign[:-1] * sign[1:] < 0)  # i frame, j = g-vector
+    # Linear interpolated fractional index
+    s_vals = i + sg[i, j] / (sg[i, j] - sg[i+1, j])
+    # up to 2 Bragg conditions per g
+    s0 = -np.ones((len(g_mag), 2), dtype=float)
+    for k in range(len(s_vals)):
+        col = j[k]
+        # Count how many already stored for this g-vector
+        used = (s0[col, :] != -1).sum()
+        if used < 2:
+            s0[col, used] = s_vals[k]
+    return sg, s0
+
+
+def bragg_fom(bragg_obs, bragg_calc, start, end, return_reflection=False):
     """
     Figure of merit:
         mean squared difference between matching bragg_obs and bragg_calc.
     - bragg_obs: frame of observed Bragg condition, shape [n_refl, 2]
-    - pool_i: shape [n_refl], index into bragg_calc or -1 for no match
     - bragg_calc: frame of calculated Bragg condition, shape [n_g, 2]
-
-    Rules:
-    - Consider only i with pool_i[i] != -1 and within range of bragg_calc.
-    - For each reflection c in {0,1} include (obs[i,c] - calc[pool_i[i],c])**2
-      only if both obs[i,c] != -1 and calc[pool_i[i],c] != -1.
+    - start, end: number of reflections being considered
 
     Returns:
       If return_reflection is False:
-        (fom, count)
           - fom = mean squared differences
-          - count = number of reflection-comparisons
       If return_reflection is True:
-        (fom, count, per_refl)
-          - per_refl is dict with 'sumsq' ndarray shape (2,)
-            and 'count' ndarray shape (2,)
+          - sumsqs_refl gives per-reflection sumsq
     """
 
-    # Valid reflections, pool_i !=-1, shape [n_refl]
-    valid = (pool_i != -1) & (pool_i >=
-                              0) & (pool_i < bragg_calc.shape[0])
-    if not np.any(valid):
-        # nothing to compare
-        return (np.nan, 0) if not return_reflection else \
-            (np.nan, 0, {'sumsq': np.array([0., 0.]),
-                         'count': np.array([0, 0])})
-
     # Valid observed and calculated reflections
-    obs = bragg_obs[valid]  # shape [n_refl, 2]
-    calc = bragg_calc[pool_i[valid]]           # shape [n_refl, 2]
-    # must both be present
-    valid_refl_mask = (obs != -1) & (calc != -1)    # shape [n_refl, 2]
-    # squared differences, zero where invalid
-    diffsq = (obs - calc) ** 2                      # shape [n_refl,2]
-    diffsq_masked = diffsq * valid_refl_mask        # bool -> 0/1 multiply
-    #  per-reflection sums and counts
-    sumsqs_refl = np.sum(diffsq_masked, axis=0)    # shape (2,)
-    counts_refl = np.sum(valid_refl_mask, axis=0)  # shape (2,)
-
-    total_sumsq = float(sumsqs_refl.sum())
-    count = int(counts_refl.sum())
-
-    fom = (total_sumsq / count) if count > 0 else np.nan
+    obs = bragg_obs[start:end, :]  # shape [n_refl, 2]
+    calc = bragg_calc[start:end, :]           # shape [n_refl, 2]
+    sumsqs_refl = (obs - calc) ** 2
+    fom = np.sum(sumsqs_refl)
 
     if return_reflection:
-        per_refl = {'sumsq': sumsqs_refl, 'count': counts_refl}
-        return fom, count, per_refl
+        return fom,  sumsqs_refl
     else:
-        return fom, count
+        return fom
+
+
+def z_rot(angle, t0, t_c2o, t_cr2or, g_obs, n_frames, frame_angle, big_k_mag):
+    """
+    produces Bragg conditions for a rotation about z0
+    Parameters:
+        t0 : initial x, y and z axes
+        angle : rotation about z-axis
+        t_c2o, t_cr2or : crystal to orthogonal transformations
+        g_obs : observed g-vectors (A)
+        n_frames, frame_angle : no of frames, angular step  in the input data
+        big_k_mag : |K| 
+    Returns:
+        bragg_calc, calculated Bragg conditions
+    """
+    debug = False
+    x = t0[:, 0] * np.cos(angle) + t0[:, 1] * np.sin(angle)
+    z = t0[:, 2]
+    t_m2o = reference_frames(debug, t_c2o, t_cr2or, x, z, n_frames,
+                             frame_angle)
+    big_k = -big_k_mag * t_m2o[:, :, 2]
+    s_g, bragg_calc = sg(big_k, g_obs)
+    
+    return bragg_calc
 
 
 def extract_cif_parameter(item):
@@ -1442,47 +1482,6 @@ def deviation_parameter(convergence_angle, image_radius, big_k_mag, g_pool,
     s_g = np.concatenate([s_0, s_g], axis=-1)  # add 000
 
     return s_g, tilted_k
-
-
-def sg(big_k, g_pool, g_mag):
-    """ Calculates deviation parameter sg for a set of incident wave vectors
-    big_k and a set of g-vectors g_pool, both expressed in the same
-    orthogonal reference frame"""
-
-    big_k_mag = np.linalg.norm(big_k[0])
-    # k.g for all frames and g-vectors, size [n_frames, n_g]
-    k_dot_g = np.einsum('ij,kj->ik', big_k, g_pool)
-    # Calculate Sg by getting the vector k0, which is coplanar with k and g and
-    # corresponds to an incident beam at the Bragg condition
-    g_sq = (g_mag**2)[np.newaxis, :, np.newaxis]
-    # First we need the component of k perpendicular to g, which we call p
-    # Shape [n_frames, n_g, 3], using where to avoid /0 for 000
-    p = (big_k[:, np.newaxis, :] - (k_dot_g[..., np.newaxis] * g_pool) / g_sq)
-    # and now make k0 by adding vectors parallel to g and p
-    # i.e. k0 = (p/|p|)*(k^2-g^2/4)^0.5 - g/2, Shape [n_frames, n_g, 3]
-    # p_norm = np.linalg.norm(p, axis=2)
-    # k0 = (np.sqrt(big_k_mag**2 - 0.25*g_mag**2)[np.newaxis, :, np.newaxis] *
-    #       p/p_norm[..., np.newaxis]) - 0.5*g_pool[np.newaxis, ...]
-    k0 = p - 0.5*g_pool[np.newaxis, ...]
-    # from similar triangles sg = |g|*|k0-K|/|K|
-    k_minus_k0 = k0 - big_k[:, None, :]
-    sign = np.sign(np.einsum('mni,ni->mn', k_minus_k0, g_pool))
-    sg = np.linalg.norm(k_minus_k0, axis=2) * sign * g_mag / big_k_mag
-
-    # the Bragg condtions, sg=0
-    # where does sg change sign
-    i, j = np.nonzero(sign[:-1] * sign[1:] < 0)  # i frame, j = g-vector
-    # Linear interpolated fractional index
-    s_vals = i + sg[i, j] / (sg[i, j] - sg[i+1, j])
-    # up to 2 Bragg conditions per g
-    s0 = -np.ones((len(g_mag), 2), dtype=float)
-    for k in range(len(s_vals)):
-        col = j[k]
-        # Count how many already stored for this g-vector
-        used = (s0[col, :] != -1).sum()
-        if used < 2:
-            s0[col, used] = s_vals[k]
-    return sg, s0
 
 
 def strong_beams(s_g_frame, ug_matrix, min_strong_beams):
