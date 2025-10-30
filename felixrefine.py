@@ -386,27 +386,28 @@ print(f"  Mean inner potential = {mip:.1f} Volts")
 # Wave vector magnitude in crystal, in reciprocal Angstroms
 # high-energy approximation (not HOLZ compatible)
 # K^2=k^2+U0
-big_k_mag = np.sqrt(electron_wave_vector_magnitude**2+mip)
+v.big_k_mag = np.sqrt(electron_wave_vector_magnitude**2+mip)
 
 # %% Initial reference frames
 # We work in a fixed orthogonal crystal frame _o
 # t_c2o = transformation crystal to orthogonal
 # t_cr2o = transformation crystal to orthogonal, reciprocal space
-t_c2o, t_cr2or = px.omega(v.debug, v.cell_a, v.cell_b, v.cell_c,
-                          v.cell_alpha, v.cell_beta, v.cell_gamma,
-                          v.space_group)
+# all added to the v class
+v.t_c2o, v.t_cr2or = px.omega(v.debug, v.cell_a, v.cell_b, v.cell_c,
+                              v.cell_alpha, v.cell_beta, v.cell_gamma,
+                              v.space_group)
 # t_m2o = transformation microscope to orthogonal, all frames
-t_m2o = px.reference_frames(v.debug, t_c2o, t_cr2or, v.x_direction,
-                            v.incident_beam_direction, v.n_frames,
-                            v.frame_angle)
+v.t_m2o = px.reference_frames(v.debug, v.t_c2o, v.t_cr2or, v.x_direction,
+                              v.incident_beam_direction, v.n_frames,
+                              v.frame_angle)
 # initial x y and z
-t0 = np.copy(t_m2o[0, :, :])
+v.t0 = np.copy(v.t_m2o[0, :, :])
 
 
 # %% optimise geometry, comparing bragg_obs and bragg_calc
 
 # observed g-vectors in the orthogonal frame
-g_obs = hkl_list @ t_cr2or.T
+v.g_obs = hkl_list @ v.t_cr2or.T
 
 start = 0  # start reflection
 end = 40  # end reflection
@@ -488,7 +489,7 @@ print(f"{n_obs} of {n_refl} observed reflections found in beam pool")
 # %% optimisation
 
 theta = 0.0
-def fom_theta(theta):
+def fom_theta(x0, y0, theta):
     x_direction = x0 * np.cos(theta) + y0 * np.sin(theta)
     t_m2o, t_c2o, t_cr2or = \
         px.reference_frames(v.debug, v.cell_a, v.cell_b, v.cell_c,
