@@ -397,9 +397,9 @@ v.t_c2o, v.t_cr2or = px.omega(v.debug, v.cell_a, v.cell_b, v.cell_c,
                               v.cell_alpha, v.cell_beta, v.cell_gamma,
                               v.space_group)
 # t_m2o = transformation microscope to orthogonal, all frames
-v.t_m2o = px.reference_frames(v.debug, v.t_c2o, v.t_cr2or, v.x_direction,
+v.t_m2o = px.reference_frames(v.t_c2o, v.t_cr2or, v.x_direction,
                               v.incident_beam_direction, v.n_frames,
-                              v.frame_angle)
+                              v.frame_angle, v.debug)
 # initial x y and z
 v.t0 = np.copy(v.t_m2o[0, :, :])
 
@@ -411,24 +411,8 @@ v.g_obs = hkl_list @ v.t_cr2or.T
 
 start = 0  # start reflection
 end = 40  # end reflection
-def z_fom(angle, start, end):
-    bragg_calc = px.z_rot(angle, v.t0, v.t_c2o, v.t_cr2or, v.g_obs, v.n_frames,
-                          v.frame_angle, v.big_k_mag)
-    return px.bragg_fom(v.bragg_obs, bragg_calc, start, end)
 
-fomo = []
-for start in range(0, 100, 10):
-    end = start + 40
-    print(f"{start}-{end}")
-    best_a = newton(lambda a: z_fom(a, start, end), 0, tol=1.e-4)
-    print(f"{start}: {best_a}")
-    fomo.append(best_a)
-a=0
-# result = minimize_scalar(lambda x: z_fom(x[0]), angle, method='BFGS',
-#     options={'eps': 1e-5})
-# print(result)
-# delta = z_fom(angle)
-plt.plot(fomo)
+xm, ym  = px.minimi(v, 0, 0.1, 0.001)
 
 # %%
 # Bragg angles
@@ -498,7 +482,7 @@ def fom_theta(x0, y0, theta):
                             v.incident_beam_direction, v.normal_direction,
                             v.n_frames, v.frame_angle)
     # calculate K for all frames
-    big_k = -big_k_mag * t_m2o[:, :, 2]
+    big_k = -v.big_k_mag * t_m2o[:, :, 2]
     # Deviation parameter sg for all frames and g-vectors
     # bragg_calc = -1 if no crossing
     sg, bragg_calc = px.sg(big_k, g_pool, g_mag)

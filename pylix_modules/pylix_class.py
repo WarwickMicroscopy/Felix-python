@@ -139,13 +139,13 @@ class Global:
         self.sigma_obs = None
 # cRED
         self.n_out = None
-        self.bragg_obs = None
+        self.bragg_obs = None  # Bragg conditions
+        self.g_obs = None  # g-vectors in orthogonal frame, in A
         self.big_k_mag = None
-        self.t_m2o = None
-        self.t_c2o = None
-        self.t_cr2or = None
-        self.t0 = None
-        self.g_obs = None
+        self.t_m2o = None  # array of transformation matrices, microscope to orthogonal
+        self.t_c2o = None  # array of transformation matrices, crystal to orthogonal
+        self.t_cr2or = None  # array of transformation matrices, crystal to orthogonal, reciprocal space
+        self.t0 = None  # first transformation matrix in t_m2o
 # refinement
         # self.refined_variable = None
         # self.refined_variable_type = None

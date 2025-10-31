@@ -12,9 +12,6 @@ import struct
 from pylix_modules import pylix_dicts as fu
 from pylix_modules import pylix_class as pc
 
-# initialise class objects
-v = pc.Var()  # working variables used in the simulation, see pylix_class
-
 
 def read_inp_file(filename):
     """
@@ -2007,7 +2004,7 @@ def parabo3(x, y):
     return x_v, y_v
 
 
-def convex(r3_x, r3_y):
+def convex(r3_x, r3_y, debug=False):
     # Checks the three points coming in to see if a parabolic fit for a
     # minimum is possible.  If so, returns the predicted minimum (minny=True).
     # If not, returns the next point to check (minny=False).
@@ -2038,16 +2035,18 @@ def convex(r3_x, r3_y):
         # point twice, exp(0.75)~=2.12
         next_x = r3_x[y_min] + np.exp(0.75) * last_dx
         minny = False
-        print("Convex, continuing")  # going to {next_x:.2f}")
+        if debug:
+            print("Convex, continuing")  # going to {next_x:.2f}")
     else:
         next_x, next_y = parabo3(r3_x, r3_y)
-        print(f"Concave, predict minimum at {next_x:.3f} with fit index {100*next_y:.2f}%")
+        if debug:
+            print(f"Concave, predict minimum at {next_x:.3f} with fit index {100*next_y:.2f}%")
         minny = True
 
     return next_x, minny
 
 
-def z_rot(angle):
+def z_rot(v, angle):
     """
     produces Bragg conditions for a rotation about z0
     Parameters:
@@ -2063,7 +2062,6 @@ def z_rot(angle):
     """
     debug = False
     t = np.copy(v.t0)
-    print(t)
     x = t[:, 0] * np.cos(angle) + t[:, 1] * np.sin(angle)
     z = t[:, 2]
     tt_m2o = reference_frames(debug, v.t_c2o, v.t_cr2or, x, z, v.n_frames,
@@ -2074,21 +2072,21 @@ def z_rot(angle):
     return bragg_calc
 
 
-def fom(param_type, val):
+def fom(v, param_type, val):
     """
     Parameters
         param_type : the thing being optimised
         val : value being input
     """
     if param_type == 1:  # orientation refinement, z_rotation
-        v.bragg_calc = z_rot(val)
+        v.bragg_calc = z_rot(v, val)
         # fom = bragg_fom(v.bragg_obs, v.bragg_calc, start, end)
         fom = bragg_fom(v.bragg_obs, v.bragg_calc, 0, 40)
 
     return fom
 
 
-def minimi(x0, dx, tol, param_type=1):
+def minimi(v, x0, dx, tol, param_type=1):
     """
     Evaluate the function px.fom (Figure of Merit) for varying input x to find
     a minimum.
@@ -2101,24 +2099,25 @@ def minimi(x0, dx, tol, param_type=1):
     Returns
         xm, ym : refined values of x and y
     """
+    print(f"t0 = {v.t0}")
     # Three-point gradient measurement
     x = np.zeros(3)  # input values
     y = np.zeros(3)  # evaluated foms
     delta_y = 1e+10  # improvement each cycle to test against tol
     plot_y = []  # to plot if desired
     x[0] = x0
-    y[0] = fom(param_type, x[0])
+    y[0] = fom(v, param_type, x[0])
     best_y = y[0]*1.0
     plot_y.append(y[0])
     while delta_y > tol:
         x[1] = x[0] + dx
-        y[1] = fom(param_type, x[1])
+        y[1] = fom(v, param_type, x[1])
         if y[1] < y[0]:  # keep going
             dx = np.exp(0.5) * dx
         else:  # turn around
             dx = -2 * dx
         x[2] = x[1] + dx
-        y[2] = fom(param_type, x[2])
+        y[2] = fom(v, param_type, x[2])
         # fin = True: xm = predicted minimum
         # fin = False: xm = next value to try
         xm, fin = convex(x, y)
@@ -2126,10 +2125,10 @@ def minimi(x0, dx, tol, param_type=1):
             # replace the worst point
             i = np.argmax[y]
             x[i] = xm
-            y[i] = fom(param_type, xm)
+            y[i] = fom(v, param_type, xm)
             xm, fin = convex(x, y)
         # we have a predicted minimum
-        ym = fom(param_type, xm)
+        ym = fom(v, param_type, xm)
         plot_y.append(ym)
         delta_y = best_y - ym  # improvement in y
         dx *= 0.5  # reduce the step size
