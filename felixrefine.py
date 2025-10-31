@@ -247,7 +247,7 @@ frame_test = 100
 # indices of observed Bragg conditions (=-1 if not observed)
 # we have two rows as a reflection can be observed twice for 360 rotn
 # ***need to add in the splitting of the rocking curve in this case!
-bragg_obs = -np.ones([n_refl, 2])
+v.bragg_obs = -np.ones([n_refl, 2])
 # reorder according to frame ID
 for i in range(n_refl):
     # frame list for this reflection
@@ -279,14 +279,14 @@ for i in range(n_refl):
     if xclude[i] != 1:
         # get the centroid
         mask = i_obs_frame > v.back_percent*np.max(i_obs_frame)  # remove %
-        bragg_obs[i, 0] = np.sum(frame_obs *
-                                 i_obs_frame*mask)/np.sum(i_obs_frame*mask)
+        v.bragg_obs[i, 0] = np.sum(frame_obs *
+                                   i_obs_frame*mask)/np.sum(i_obs_frame*mask)
 # exclude
 Iobs_list = [i for i, j in zip(Iobs_list, xclude) if j == 0]
 sigma_list = [i for i, j in zip(sigma_list, xclude) if j == 0]
 frame_list = [i for i, j in zip(frame_list, xclude) if j == 0]
 hkl_list = [i for i, j in zip(v.input_hkls, xclude) if j == 0]
-bragg_obs = [i for i, j in zip(bragg_obs, xclude) if j == 0]
+v.bragg_obs = [i for i, j in zip(v.bragg_obs, xclude) if j == 0]
 # s_list = [i for i, j in zip(s_list, xclude) if j == 0]  # ignore for now
 
 # sort by order of appearance
@@ -295,18 +295,18 @@ Iobs_list = [Iobs_list[i] for i in sort_indices]
 sigma_list = [sigma_list[i] for i in sort_indices]
 frame_list = [frame_list[i] for i in sort_indices]
 hkl_list = [hkl_list[i] for i in sort_indices]
-bragg_obs = np.array([bragg_obs[i] for i in sort_indices])
+v.bragg_obs = np.array([v.bragg_obs[i] for i in sort_indices])
 # s_list = [s_list[i] for i in sort_indices]  # ignore for now
 
 # update number of reflections
-n_refl = len(bragg_obs)
+n_refl = len(v.bragg_obs)
 print(f"leaving {n_refl} reflections included in refinement")
 
 # plots
 if v.frame_output == 1:
     for i in range(n_refl):
         name = f"{i}: {hkl_list[i, :]}"
-        px.rocking_plot(frame_list[i], Iobs_list[i], bragg_obs[i, 0],
+        px.rocking_plot(frame_list[i], Iobs_list[i], v.bragg_obs[i, 0],
                         v.back_percent, name)
 
 
@@ -412,9 +412,9 @@ v.g_obs = hkl_list @ v.t_cr2or.T
 start = 0  # start reflection
 end = 40  # end reflection
 def z_fom(angle, start, end):
-    bragg_calc = px.z_rot(angle, t0, t_c2o, t_cr2or, g_obs, v.n_frames,
-                          v.frame_angle, big_k_mag)
-    return px.bragg_fom(bragg_obs, bragg_calc, start, end)
+    bragg_calc = px.z_rot(angle, v.t0, v.t_c2o, v.t_cr2or, v.g_obs, v.n_frames,
+                          v.frame_angle, v.big_k_mag)
+    return px.bragg_fom(v.bragg_obs, bragg_calc, start, end)
 
 fomo = []
 for start in range(0, 100, 10):
@@ -435,12 +435,12 @@ plt.plot(fomo)
 # bragg = np.arcsin(0.5*g_mag/big_k_mag)
 
 # K for all frames (NB minus sign!!!)
-big_k = -big_k_mag * t_m2o[:, :, 2]
-sg, bragg_calc = px.sg(big_k, g_obs)
+big_k = -v.big_k_mag * v.t_m2o[:, :, 2]
+sg, bragg_calc = px.sg(big_k, v.g_obs)
 
 # optimise 
 # t_m2o = transformation microscope to orthogonal, all frames
-t_m2o = px.reference_frames(v.debug, t_c2o, t_cr2or, x, z, v.n_frames,
+v.t_m2o = px.reference_frames(v.debug, v.t_c2o, v.t_cr2or, x, z, v.n_frames,
                             v.frame_angle)
 angle, t0, t_c2o, t_cr2or, n_frames, frame_angle
 

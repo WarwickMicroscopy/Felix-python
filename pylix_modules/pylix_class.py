@@ -5,13 +5,13 @@ Created on Thu Nov  7 08:54:05 2024
 @author: Richard
 """
 # ----------------------------------------------------------------------------
-# variables to get from felix.inp
-# class microscope:
+# variables from felix.inp
 class Inp:
     def __init__(self):
+# microscope:
         self.accelerating_voltage_kv = None
         self.convergence_angle = None
-    
+
 # simulation:
         self.image_radius = None
         self.min_reflection_pool = None
@@ -59,23 +59,16 @@ class Inp:
         self.blur_radius = None
         self.print_flag = None
 
-# class inp:
-#     def __init__(self, microscope, simulation, sample, refinement):
-#         self.microscope = microscope
-#         self.simulation = simulation
-#         self.sample = sample
-#         self.refinement = refinement
-
     def update_from_dict(self, data):
         for key, value in data.items():
             if hasattr(self, key):
                 setattr(self, key, value)
 
 # ----------------------------------------------------------------------------
-# variables to get from felix.cif
-# class basis:
+# variables from felix.cif
 class Cif:
     def __init__(self):
+# basis:
         self.atom_site_b_iso_or_equiv = None
         self.atom_site_label = None
         self.atom_site_type_symbol = None
@@ -86,8 +79,7 @@ class Cif:
         self.atom_site_u_iso_or_equiv = None
         self.atom_site_wyckoff_symbol = None
 
-# class cell:
-#     def __init__(self):
+# cell:
         self.cell_angle_alpha = None
         self.cell_angle_beta = None
         self.cell_angle_gamma = None
@@ -96,27 +88,18 @@ class Cif:
         self.cell_length_c = None
         self.cell_volume = None
 
-# class chemical:
-#     def __init__(self):
+# chemical:
         self.chemical_formula_iupac = None
         self. chemical_formula_structural = None
         self.chemical_formula_sum = None
 
-# class symmetry:
-#     def __init__(self):
+# symmetry:
         self.space_group_it_number = None
         self.space_group_name_h_m_alt = None
         self.space_group_symbol = None
         self.space_group_symop_operation_xyz = None
         self.symmetry_equiv_pos_as_xyz = None
         self.symmetry_space_group_name_h_m = None
-
-# class cif:
-#     def __init__(self, basis, cell, chemical, symmetry):
-#         self.basis = basis
-#         self.cell = cell
-#         self.chemical = chemical
-#         self.symmetry = symmetry
         
     def update_from_dict(self, data):
         for key, value in data.items():
@@ -124,56 +107,54 @@ class Cif:
                 setattr(self, key, value)
 
 # ----------------------------------------------------------------------------
-# working variables for simulation
+# working (global) variables for simulation
+class Global:
+    def __init__(self):
+# derived from cif
+        self.chemical_formula = None
+        self.space_group = None
+        self.space_group_number = None
+        self.lattice_type = None
+        self.cell_a = None
+        self.cell_b = None
+        self.cell_c = None
+        self.cell_alpha = None
+        self.cell_beta = None
+        self.cell_gamma = None
+        # self.n_basis = None
+        self.symmetry_matrix = None
+        self.symmetry_vector = None
+        self.basis_atom_label = None
+        self.basis_atom_name = None
+        self.basis_wyckoff = None
+        self.basis_atom_position = None
+        self.basis_occupancy = None
+        self.basis_B_iso = None
+# derived from inp
+        self.thickness = None
+        self.n_thickness = None
+# from felix.hkl
+        self.input_hkls = None
+        self.i_obs = None
+        self.sigma_obs = None
+# cRED
+        self.n_out = None
+        self.bragg_obs = None
+        self.big_k_mag = None
+        self.t_m2o = None
+        self.t_c2o = None
+        self.t_cr2or = None
+        self.t0 = None
+        self.g_obs = None
+# refinement
+        # self.refined_variable = None
+        # self.refined_variable_type = None
+        # self.atom_refine_flag = None
+        # self.refined_variable_atom = None
+
+
 class Var(Inp, Cif):
     def __init__(self):
         Inp.__init__(self)
         Cif.__init__(self)
-    # self.chemical_formula = None
-    # self.space_group = None
-    # self.space_group_number = None
-    # self.lattice_type = None
-    # self.cell_a = None
-    # self.cell_b = None
-    # self.cell_c = None
-    # self.cell_alpha = None
-    # self.cell_beta = None
-    # self.cell_gamma = None
-    # self.n_basis = None
-    # self.symmetry_matrix = None
-    # self.symmetry_vector = None
-    # self.basis_atom_label = None
-    # self.basis_atom_name = None
-    # self.basis_wyckoff = None
-    # self.basis_atom_position = None
-    # self.basis_occupancy = None
-    # self.basis_B_iso = None
-    # self.thickness = None
-    # self.n_thickness = None
-    # self.incident_beam_direction = None
-    # self.normal_direction = None
-    # self.x_direction = None
-    # self.convergence_angle = None
-    # self.accelerating_voltage_kv = None
-    # self.atomic_sites = None
-    # self.g_limit = None
-    # self.refine_mode = None
-    # self.scatter_factor_method = None
-    # self.plot = None
-    # self.debug = None
-    # self.input_hkls = None
-    # self.i_obs = None
-    # self.sigma_obs = None
-    # self.refined_variable = None
-    # self.refined_variable_type = None
-    # self.atom_refine_flag = None
-    # self.refined_variable_atom = None
-    # self.thickness = None
-    # self.thickness = None
-    # self.thickness = None
-    # self.thickness = None
-    # self.thickness = None
-    # self.thickness = None
-    # self.thickness = None
-    # self.thickness = None
-        
+        Global.__init__(self)

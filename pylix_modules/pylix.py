@@ -275,30 +275,6 @@ def bragg_fom(bragg_obs, bragg_calc, start, end, return_reflection=False):
         return fom
 
 
-def z_rot(angle, t0, t_c2o, t_cr2or, g_obs, n_frames, frame_angle, big_k_mag):
-    """
-    produces Bragg conditions for a rotation about z0
-    Parameters:
-        t0 : initial x, y and z axes
-        angle : rotation about z-axis
-        t_c2o, t_cr2or : crystal to orthogonal transformations
-        g_obs : observed g-vectors (A)
-        n_frames, frame_angle : no of frames, angular step  in the input data
-        big_k_mag : |K| 
-    Returns:
-        bragg_calc, calculated Bragg conditions
-    """
-    debug = False
-    x = t0[:, 0] * np.cos(angle) + t0[:, 1] * np.sin(angle)
-    z = t0[:, 2]
-    t_m2o = reference_frames(debug, t_c2o, t_cr2or, x, z, n_frames,
-                             frame_angle)
-    big_k = -big_k_mag * t_m2o[:, :, 2]
-    s_g, bragg_calc = sg(big_k, g_obs)
-    
-    return bragg_calc
-
-
 def extract_cif_parameter(item):
     """
     Parses a value string with uncertainty, e.g., '8.6754(3)',
@@ -2071,6 +2047,33 @@ def convex(r3_x, r3_y):
     return next_x, minny
 
 
+def z_rot(angle):
+    """
+    produces Bragg conditions for a rotation about z0
+    Parameters:
+        angle : rotation about z-axis
+        uses globals:
+        t_c2o, t_cr2or : crystal to orthogonal transformations
+        t0 : initial x, y and z axes
+        g_obs : observed g-vectors (A)
+        n_frames, frame_angle : no of frames, angular step in the input data
+        big_k_mag : |K|
+    Returns:
+        bragg_calc, calculated Bragg conditions
+    """
+    debug = False
+    t = np.copy(v.t0)
+    print(t)
+    x = t[:, 0] * np.cos(angle) + t[:, 1] * np.sin(angle)
+    z = t[:, 2]
+    tt_m2o = reference_frames(debug, v.t_c2o, v.t_cr2or, x, z, v.n_frames,
+                              v.frame_angle)
+    big_k = -v.big_k_mag * tt_m2o[:, :, 2]
+    s_g, bragg_calc = sg(big_k, v.g_obs)
+
+    return bragg_calc
+
+
 def fom(param_type, val):
     """
     Parameters
@@ -2078,15 +2081,17 @@ def fom(param_type, val):
         val : value being input
     """
     if param_type == 1:  # orientation refinement, z_rotation
-        v.bragg_calc = z_rot(val, v.t0, v.t_c2o, v.t_cr2or, v.g_obs, v.n_frames,
-                           v.frame_angle, v.big_k_mag)
-        fom = bragg_fom(v.bragg_obs, v.bragg_calc, start, end)
+        v.bragg_calc = z_rot(val)
+        # fom = bragg_fom(v.bragg_obs, v.bragg_calc, start, end)
+        fom = bragg_fom(v.bragg_obs, v.bragg_calc, 0, 40)
 
     return fom
 
-def minimi(x0, param_type, dx, tol):
+
+def minimi(x0, dx, tol, param_type=1):
     """
-    Evaluate the function fom for varying input x until we get a minimum.
+    Evaluate the function px.fom (Figure of Merit) for varying input x to find
+    a minimum.
     Uses a parabolic fit to predict the minimum
     Parameters
         x0 : initial value
