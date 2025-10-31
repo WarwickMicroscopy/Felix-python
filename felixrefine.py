@@ -24,7 +24,7 @@ from pylix_modules import pylix_dicts as fu
 from pylix_modules import pylix_class as pc
 
 path = os.getcwd()
-start = time.time()
+start_time = time.time()
 latest_commit_id = px.get_git()
 # outputs
 print("-----------------------------------------------------------------")
@@ -409,27 +409,18 @@ v.t0 = np.copy(v.t_m2o[0, :, :])
 # observed g-vectors in the orthogonal frame
 v.g_obs = hkl_list @ v.t_cr2or.T
 
-start = 0  # start reflection
-end = 40  # end reflection
-
-xm, ym  = px.minimi(v, 0, 0.1, 0.001)
-
-# %%
-# Bragg angles
-# bragg = np.arcsin(0.5*g_mag/big_k_mag)
-
-# K for all frames (NB minus sign!!!)
-big_k = -v.big_k_mag * v.t_m2o[:, :, 2]
-sg, bragg_calc = px.sg(big_k, v.g_obs)
-
-# optimise 
-# t_m2o = transformation microscope to orthogonal, all frames
-v.t_m2o = px.reference_frames(v.debug, v.t_c2o, v.t_cr2or, x, z, v.n_frames,
-                            v.frame_angle)
-angle, t0, t_c2o, t_cr2or, n_frames, frame_angle
-
-
-# %%
+x_angle = []
+for i in range(0, 500, 50):
+    # print("\r"+str(i), end="")
+    v.start = i  # start reflection
+    v.end = v.start + 40  # end reflection
+    x0 = 0.0  # initial angle
+    dx = 0.1 * np.pi/180.0  # initial angular step
+    tol = 0.005 * np.pi/180.0  # angular tolerance
+    xm, ym = px.minimi(v, x0, dx, tol)
+    x_angle.append(xm*180/np.pi)
+plt.plot(x_angle)
+plt.show()
 
 
 # %% Calculated reflections and their structure factor
@@ -443,7 +434,7 @@ expand = np.min([np.sin(v.cell_alpha),
 g_limit = int(v.frame_g_limit/expand)
 # hkl_pool = [h, k, l] of reflections in calculated beam pool
 # g_pool = corresponding [g1, g2, g3] (reciprocal A, in orthogonal ref frame)
-hkl_pool, g_pool, g_mag = px.hkl_make(t_cr2or, g_limit, v.lattice_type)
+hkl_pool, g_pool, g_mag = px.hkl_make(v.t_cr2or, g_limit, v.lattice_type)
 n_g = len(g_mag)
 print(f"giving {len(g_mag)} reflections")  # n_g
 
@@ -454,7 +445,7 @@ pool_i = np.array([pool_dict.get(tuple(i), -1)
 
 
 # Bragg angles
-bragg = np.arcsin(0.5*g_mag/big_k_mag)
+bragg = np.arcsin(0.5*g_mag/v.big_k_mag)
 px.pool_plot(g_pool, g_mag)
 
 # structure factor Fg for all reflections in g_pool
@@ -1226,7 +1217,7 @@ if 'S' not in v.refine_mode:
 
 # %% final print
 # sim.print_LACBED(v)
-total_time = time.time() - start
+total_time = time.time() - start_time
 print("-----------------------------------------------------------------")
 print(f"Beam pool calculation took {setup:.3f} seconds")
 print(f"Bloch wave calculation in {bwc:.1f} s ({

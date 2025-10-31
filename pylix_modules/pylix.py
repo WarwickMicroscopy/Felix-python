@@ -1,6 +1,7 @@
 import ast
 import re
 import subprocess
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
@@ -243,33 +244,6 @@ def sg(big_k, g_pool):
         if used < 2:
             s0[col, used] = s_vals[k]
     return sg, s0
-
-
-def bragg_fom(bragg_obs, bragg_calc, start, end, return_reflection=False):
-    """
-    Figure of merit:
-        mean squared difference between matching bragg_obs and bragg_calc.
-    - bragg_obs: frame of observed Bragg condition, shape [n_refl, 2]
-    - bragg_calc: frame of calculated Bragg condition, shape [n_g, 2]
-    - start, end: number of reflections being considered
-
-    Returns:
-      If return_reflection is False:
-          - fom = mean squared differences
-      If return_reflection is True:
-          - sumsqs_refl gives per-reflection sumsq
-    """
-
-    # Valid observed and calculated reflections
-    obs = bragg_obs[start:end, :]  # shape [n_refl, 2]
-    calc = bragg_calc[start:end, :]           # shape [n_refl, 2]
-    sumsqs_refl = (obs - calc) ** 2
-    fom = np.sum(sumsqs_refl)
-
-    if return_reflection:
-        return fom,  sumsqs_refl
-    else:
-        return fom
 
 
 def extract_cif_parameter(item):
@@ -717,8 +691,8 @@ def omega(debug, cell_a, cell_b, cell_c,
     return t_c2o, t_cr2or
     
     
-def reference_frames(debug, t_c2o, t_cr2or, x_dir_c, z_dir_c,
-                     n_frames, frame_angle):
+def reference_frames(t_c2o, t_cr2or, x_dir_c, z_dir_c,
+                     n_frames, frame_angle, debug=False):
     """
     Produces array of transformation matrices, microscope to orthogonal,
     for each frame in the input data
@@ -2046,6 +2020,33 @@ def convex(r3_x, r3_y, debug=False):
     return next_x, minny
 
 
+def bragg_fom(bragg_obs, bragg_calc, start, end, return_reflection=False):
+    """
+    Figure of merit:
+        mean squared difference between matching bragg_obs and bragg_calc.
+    - bragg_obs: frame of observed Bragg condition, shape [n_refl, 2]
+    - bragg_calc: frame of calculated Bragg condition, shape [n_g, 2]
+    - start, end: number of reflections being considered
+
+    Returns:
+      If return_reflection is False:
+          - fom = mean squared differences
+      If return_reflection is True:
+          - sumsqs_refl gives per-reflection sumsq
+    """
+
+    # Valid observed and calculated reflections
+    obs = bragg_obs[start:end, :]  # shape [n_refl, 2]
+    calc = bragg_calc[start:end, :]           # shape [n_refl, 2]
+    sumsqs_refl = (obs - calc) ** 2
+    fom = np.sum(sumsqs_refl)
+
+    if return_reflection:
+        return fom,  sumsqs_refl
+    else:
+        return fom
+
+
 def z_rot(v, angle):
     """
     produces Bragg conditions for a rotation about z0
@@ -2060,83 +2061,88 @@ def z_rot(v, angle):
     Returns:
         bragg_calc, calculated Bragg conditions
     """
-    debug = False
     t = np.copy(v.t0)
     x = t[:, 0] * np.cos(angle) + t[:, 1] * np.sin(angle)
     z = t[:, 2]
-    tt_m2o = reference_frames(debug, v.t_c2o, v.t_cr2or, x, z, v.n_frames,
+    tim = time.time()
+    tt_m2o = reference_frames(v.t_c2o, v.t_cr2or, x, z, v.n_frames,
                               v.frame_angle)
+    print(time.time()-tim)
     big_k = -v.big_k_mag * tt_m2o[:, :, 2]
+    print(time.time()-tim)
     s_g, bragg_calc = sg(big_k, v.g_obs)
+    print(time.time()-tim)
 
     return bragg_calc
 
 
-def fom(v, param_type, val):
+def fom(v, val, param_type=1):
     """
     Parameters
         param_type : the thing being optimised
         val : value being input
     """
     if param_type == 1:  # orientation refinement, z_rotation
-        v.bragg_calc = z_rot(v, val)
+        bragg_calc = z_rot(v, val)
         # fom = bragg_fom(v.bragg_obs, v.bragg_calc, start, end)
-        fom = bragg_fom(v.bragg_obs, v.bragg_calc, 0, 40)
+        fom = bragg_fom(v.bragg_obs, bragg_calc, v.start, v.finish)
 
     return fom
 
 
-def minimi(v, x0, dx, tol, param_type=1):
+def minimi(v, x0, dx, tol, param_type=1, plot=False):
     """
     Evaluate the function px.fom (Figure of Merit) for varying input x to find
     a minimum.
     Uses a parabolic fit to predict the minimum
     Parameters
         x0 : initial value
-        param_type : the thing being optimised
+        param_type : the thing being optimised, optional when calling fom
         dx : initial step size
         tol : tolerance in y, determines when we stop
     Returns
         xm, ym : refined values of x and y
     """
-    print(f"t0 = {v.t0}")
     # Three-point gradient measurement
     x = np.zeros(3)  # input values
     y = np.zeros(3)  # evaluated foms
     delta_y = 1e+10  # improvement each cycle to test against tol
     plot_y = []  # to plot if desired
     x[0] = x0
-    y[0] = fom(v, param_type, x[0])
+    y[0] = fom(v, x[0])
     best_y = y[0]*1.0
     plot_y.append(y[0])
     while delta_y > tol:
         x[1] = x[0] + dx
-        y[1] = fom(v, param_type, x[1])
+        y[1] = fom(v, x[1])
         if y[1] < y[0]:  # keep going
             dx = np.exp(0.5) * dx
         else:  # turn around
             dx = -2 * dx
         x[2] = x[1] + dx
-        y[2] = fom(v, param_type, x[2])
+        y[2] = fom(v, x[2])
         # fin = True: xm = predicted minimum
         # fin = False: xm = next value to try
         xm, fin = convex(x, y)
         while fin is False:  # we don't have a minimum, keep going
             # replace the worst point
-            i = np.argmax[y]
+            i = np.argmax(y)
             x[i] = xm
-            y[i] = fom(v, param_type, xm)
+            y[i] = fom(v, xm)
             xm, fin = convex(x, y)
         # we have a predicted minimum
-        ym = fom(v, param_type, xm)
+        ym = fom(v, xm)
         plot_y.append(ym)
         delta_y = best_y - ym  # improvement in y
-        dx *= 0.5  # reduce the step size
+        best_y = ym
+        # print(f"x={xm*180/np.pi}, y={ym}")
+        dx *= 0.25  # reduce the step size
         x[0] = xm  # reinitialise ready to go again
         y[0] = ym
 
-    plt.plot(plot_y)
-    plt.show()
+    if plot:
+        plt.plot(plot_y)
+        plt.show()
 
     return xm, ym
 

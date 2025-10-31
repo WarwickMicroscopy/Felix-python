@@ -147,6 +147,8 @@ class Global:
         self.t_cr2or = None  # array of transformation matrices, crystal to orthogonal, reciprocal space
         self.t0 = None  # first transformation matrix in t_m2o
 # refinement
+        self.start = None
+        self.finish = None
         # self.refined_variable = None
         # self.refined_variable_type = None
         # self.atom_refine_flag = None
