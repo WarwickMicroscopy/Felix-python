@@ -15,7 +15,7 @@ image_radius              = 42
 
 # Beam selection criteria
 min_reflection_pool       = 800
-min_strong_beams          = 80
+min_strong_beams          = 70
 min_weak_beams            = 0
 g_limit                   = 0.0
 
@@ -36,9 +36,8 @@ initial_thickness         = 1200.0
 final_thickness           = 1200.0
 delta_thickness           = 25.0
 precision                 = 0.00002
-
 # Refinement specific flags
-refine_mode               = 'C'
+refine_mode               = 'J'
 weighting_flag            = 0
 refine_method             = 3
 correlation_type          = 2

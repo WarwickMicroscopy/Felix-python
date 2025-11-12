@@ -171,7 +171,13 @@ def read_cif(filename):
         "_atom_site_fract_z",
         "_atom_site_b_iso_or_equiv",
         "_atom_site_u_iso_or_equiv",
-        "_atom_site_occupancy"]
+        "_atom_site_occupancy",
+        "_atom_site_aniso_u_11",
+        "_atom_site_aniso_u_22",
+        "_atom_site_aniso_u_33",
+        "_atom_site_aniso_u_12",
+        "_atom_site_aniso_u_13",
+        "_atom_site_aniso_u_23"]
     # string items to be returned
     string_items = [
         "_space_group_name_h-m_alt",
@@ -184,7 +190,9 @@ def read_cif(filename):
         "_space_group_symop_operation_xyz",
         "_atom_site_wyckoff_symbol",
         "_atom_site_label",
-        "_atom_site_type_symbol"]
+        "_atom_site_type_symbol",
+        "_atom_site_aniso_label",
+        "_atom_site_aniso_type_symbol"]
 
     # extract numeric values and uncertainties, add them to the dictionary
     for item in numeric_items:
@@ -278,9 +286,9 @@ def symop_convert(symop_xyz):
     return mat, vec
 
 
-def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
+def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,basis_atom_type_label,
                           basis_atom_name, basis_atom_position, basis_B_iso,
-                          basis_occupancy):
+                          basis_occupancy, basis_aniso_matrix,basis_pv,basis_kappa):
     """
     Fills the unit cell by applying symmetry operations to the basis
 
@@ -306,9 +314,17 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
 
     # Initialize arrays to store all atom positions, including duplicates
     all_atom_label = np.tile(basis_atom_label, n_symmetry_operations)
+    #print (basis_atom_type_label)
+    
+    all_atom_type_label = np.tile(basis_atom_type_label, n_symmetry_operations)
+    print(all_atom_type_label)
+    
     all_atom_name = np.tile(basis_atom_name, n_symmetry_operations)
+    #print(all_atom_name)
     all_occupancy = np.tile(basis_occupancy, n_symmetry_operations)
     all_B_iso = np.tile(basis_B_iso, n_symmetry_operations)
+    all_Kappa =np.tile(basis_kappa, n_symmetry_operations)
+    all_Pv = np.tile(basis_pv, n_symmetry_operations)
 
     # # Generate all equivalent positions by applying symmetry
     symmetry_applied = \
@@ -320,6 +336,18 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
     all_atom_position %= 1.0
     # make small values precisely zero
     all_atom_position[np.abs(all_atom_position) < tol] = 0.0
+    
+    all_aniso_matrix = np.zeros((total_atoms, 3, 3))
+    
+    for s, R in enumerate(symmetry_matrix):
+        for a in range(n_basis_atoms):
+            idx = s * n_basis_atoms + a
+            U = basis_aniso_matrix[a]
+            all_aniso_matrix[idx] = R @ U @ R.T
+         
+    #all_aniso_matrix = np.einsum('sij,ajk,skl->s a i l', symmetry_matrix, basis_aniso_matrix, symmetry_matrix)
+    #all_aniso_matrix = all_aniso_matrix.reshape(n_symmetry_operations * n_basis_atoms, 3, 3)
+    
     # Reduce to the set of unique fractional atomic positions using tol
     dist_matrix = np.linalg.norm(all_atom_position[:, np.newaxis, :] -
                                  all_atom_position[np.newaxis, :, :], axis=-1)
@@ -334,11 +362,23 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
     # Apply the same reduction to the labels, names, occupancies, and B_iso
     atom_position = all_atom_position[i]
     atom_label = all_atom_label[i]
+    atom_type = all_atom_type_label[i]
     atom_name = all_atom_name[i]
     occupancy = all_occupancy[i]
     B_iso = all_B_iso[i]
+    
+    if all_aniso_matrix is not None:
+        aniso_matrix = all_aniso_matrix[i]
+    else:
+        aniso_matrix = None
+    
+    
 
-    return atom_position, atom_label, atom_name, B_iso, occupancy
+
+    return atom_position, atom_label,atom_type, atom_name, B_iso, occupancy, aniso_matrix, all_Pv,all_Kappa
+
+
+    
 
 
 def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
@@ -461,7 +501,7 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
         print(f"Microscope frame: a = {a_vec_m}, b = {b_vec_m}, c = {c_vec_m}")
         print(f"Specimen surface normal = {norm_dir_m}")
         print(f"a* = {ar_vec_m}, b* = {br_vec_m}, c* = {c_vec_m}")
-    return a_vec_m, b_vec_m, c_vec_m, ar_vec_m, br_vec_m, cr_vec_m, norm_dir_m
+    return a_vec_m, b_vec_m, c_vec_m, ar_vec_m, br_vec_m, cr_vec_m, norm_dir_m, t_mat_o2m, t_mat_c2o
 
 
 def change_origin(space_group, basis_atom_position, basis_wyckoff):
@@ -1039,22 +1079,30 @@ def hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k, lattice_type,
 
 def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
               atomic_number, occupancy, B_iso, g_matrix, g_magnitude,
-              absorption_method, absorption_per, electron_velocity):
+              absorption_method, absorption_per, electron_velocity, g_pool, aniso_matrix,kappas,pv_initial):
     Fg_matrix = np.zeros([n_hkl, n_hkl], dtype=np.complex128)
     # calculate g.r for all g-vectors and atom posns [n_hkl, n_hkl, n_atoms]
     g_dot_r = np.einsum('ijk,lk->ijl', g_matrix, atom_coordinate)
     # exp(i g.r) [n_hkl, n_hkl, n_atoms]
     phase = np.exp(-1j * g_dot_r)
     # scattering factor for all g-vectors, to be used atom by atom
+    
+    # new refined list of variables per atom in unit cell 
+    
+   
+
     # NB scattering factor methods accept and return 2D[n_hkl, n_hkl] array of
     # g magnitudes but only one atom type. (Potential speed up by broadcasting
     # all atom types and modifying scattering factor methods to accept 2D + 1D
     # arrays [n_hkl, n_hkl] & [n_atoms],
     # returning an array [n_hkl, n_hkl, n_atoms])
+    gUg = np.einsum('ajk,ij,ik->ai', aniso_matrix, g_pool, g_pool)
+    T_factor = np.exp(- 0.5 * gUg )
+    
     for i in range(n_atoms):
         # get the scattering factor
         if scatter_factor_method == 0:
-            f_g = f_kirkland(atomic_number[i], g_magnitude)
+            f_g = f_kirkland(atomic_number[i], g_magnitude,kappas[i],pv_initial[i])
         elif scatter_factor_method == 1:
             f_g = f_lobato(atomic_number[i], g_magnitude)
         elif scatter_factor_method == 2:
@@ -1075,13 +1123,23 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
         elif absorption_method == 2:
             f_g_prime = 1j * f_thomas(g_magnitude, B_iso[i],
                                       atomic_number[i], electron_velocity)
-
+    
         # The Structure Factor Equation
         # multiply by Debye-Waller factor, phase and occupancy
-        Fg_matrix = Fg_matrix+((f_g + f_g_prime) * phase[:, :, i] *
-                               occupancy[i] *
-                               np.exp(-B_iso[i] *
-                                      (g_magnitude**2)/(16*np.pi**2)))
+        #Fg_matrix = Fg_matrix+((f_g + f_g_prime) * phase[:, :, i] *
+                           #    occupancy[i] *
+                        #   np.exp(-B_iso[i] *
+                             #        (g_magnitude**2)/(16*np.pi**2)))
+        
+        # Anisotropic structure factor
+       
+        Fg_matrix = Fg_matrix+((f_g + f_g_prime) *
+                  phase[:, :, i] *
+                  occupancy[i] *
+                  T_factor[i, :][:, np.newaxis])
+        
+    # k-formalism
+   
 
     # *** Budhika Mendis's 'cluster' method ***
     # make a mask to exclude g-vectors above a given magnitude
@@ -1344,7 +1402,7 @@ def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list,
     return
 
 
-def f_kirkland(z, g_magnitude):
+def f_kirkland(z, g_magnitude,kappa,pv): # added our two parameters for refinement.
     """
     calculates atomic scattering factor using the Kirkland model.
     From Appendix C of "Advanced Computing in Electron Microscopy", 2nd ed.
@@ -1366,8 +1424,8 @@ def f_kirkland(z, g_magnitude):
     c = fu.kirkland[z-1, 6:11:2].reshape(-1, 1, 1)
     d = fu.kirkland[z-1, 7:12:2].reshape(-1, 1, 1)
 
-    f_g = np.sum(a/(q**2+b), axis=0) + np.sum(c*np.exp(-(d*q**2)), axis=0)
-
+    #f_g = (1-pv)*np.sum(a/(q**2+b), axis=0) + pv*np.sum(c*np.exp(-(d*(q/kappa)**2)), axis=0) # here we scale q by kappa and we weight each term by their relative electron occupation pv
+    f_g =   np.sum(a/(q**2+b), axis=0) + np.sum(c*np.exp(-(d*(q/kappa)**2)), axis=0)
     return f_g
 
 
@@ -1441,6 +1499,7 @@ def f_peng(z, g_magnitude):
     f_g = np.sum(a*np.exp(b_), axis=0)
 
     return f_g
+
 
 
 def four_gauss(x, args):

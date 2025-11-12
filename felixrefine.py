@@ -52,7 +52,7 @@ v.iter_count = 0
 # cif_dict is a dictionary of value-key pairs.  values are given as tuples
 # with the second number the uncertainty in the first.  Nothing is currently
 # done with these uncertainties...
-cif_dict = px.read_cif('felix.cif')
+cif_dict = px.read_cif('AnIso.cif')
 v.update_from_dict(cif_dict)
 # ====== extract cif data into working variables v
 v.space_group = v.symmetry_space_group_name_h_m
@@ -90,6 +90,12 @@ v.cell_beta = v.cell_angle_beta[0]*np.pi/180.0
 v.cell_gamma = v.cell_angle_gamma[0]*np.pi/180.0
 n_basis = len(v.atom_site_label)
 
+#oxidation state and type label 
+
+
+
+
+
 # symmetry operations
 if "space_group_symop_operation_xyz" in cif_dict:
     v.symmetry_matrix, v.symmetry_vector = px.symop_convert(
@@ -107,6 +113,8 @@ v.basis_atom_label = [s.rstrip() for s in v.atom_site_label]
 # atom symbols, stripping any charge etc.
 v.basis_atom_name = [''.join(filter(str.isalpha, name))
                      for name in v.atom_site_type_symbol]
+
+
 # take care of any odd symbols, get the case right
 for i in range(n_basis):
     name = v.basis_atom_name[i]
@@ -129,7 +137,42 @@ if "atom_site_b_iso_or_equiv" in cif_dict:
     v.basis_B_iso = np.array([tup[0] for tup in v.atom_site_b_iso_or_equiv])
 elif "atom_site_u_iso_or_equiv" in cif_dict:
     v.basis_B_iso = np.array([tup[0] for tup in
-                              v.atom_site_u_iso_or_equiv])*8*(np.pi**2)
+                              v.atom_site_u_iso_or_equiv]) * 8 * np.pi**2
+   
+v.aniso_matrix = np.zeros((n_basis, 3, 3)) 
+
+v.basis_U_iso = np.array([tup[0] for tup in
+                          v.atom_site_u_iso_or_equiv])
+
+v.aniso_matrix[2] = np.diag([v.basis_U_iso[0],v.basis_U_iso[0],v.basis_U_iso[0]])
+
+# Anisotropic Debye-Waller factor
+if v.atom_site_aniso_u_11 is not None:
+    v.aniso_U11 = np.array([tup[0] for tup in v.atom_site_aniso_u_11])
+
+    v.aniso_U22 = np.array([tup[0] for tup in v.atom_site_aniso_u_22])
+
+    v.aniso_U33 = np.array([tup[0] for tup in v.atom_site_aniso_u_33])
+
+    v.aniso_U12 = np.array([tup[0] for tup in v.atom_site_aniso_u_12])
+
+    v.aniso_U13 = np.array([tup[0] for tup in v.atom_site_aniso_u_13])
+
+    v.aniso_U23 = np.array([tup[0] for tup in v.atom_site_aniso_u_23])
+
+    
+    
+    for i in range(len(v.aniso_U11)):
+        v.aniso_matrix[i] = \
+            np.column_stack((np.array([v.aniso_U11[i], v.aniso_U12[i], v.aniso_U13[i]]),
+                             np.array([v.aniso_U12[i], v.aniso_U22[i], v.aniso_U23[i]]),
+                             np.array([v.aniso_U13[i], v.aniso_U23[i], v.aniso_U33[i]])))
+
+print(v.aniso_matrix)
+
+
+
+
 
 # occupancy, assume it's unity if not specified
 if v.atom_site_occupancy is not None:
@@ -162,6 +205,64 @@ v.atomic_sites = np.array(v.atomic_sites, dtype='int')
 
 # crystallography exp(2*pi*i*g.r) to physics convention exp(i*g.r)
 v.g_limit = v.g_limit * 2 * np.pi
+
+
+
+
+
+   
+    
+
+pv_initial_basis = []   
+
+for s in v.atom_site_type_symbol:
+    element = ''.join([c for c in s if c.isalpha()])  # extract element letters
+    number = int(''.join([c for c in s if c.isdigit()]))  # number of electrons lost/gained
+    sign = '+' if '+' in s else '-'  # determine if lost or gained
+    
+    
+    
+    # compute valence electrons remaining
+    if sign == '+':
+        valence_left = max(fu.neutral_valence_states[element] - number, 0)
+        total = fu.atomic_number_map[element] -number
+    else:  # gained electrons
+        valence_left = fu.neutral_valence_states[element] + number
+        total = fu.atomic_number_map[element] +number
+        
+    
+    # total electrons from atomic_number_map
+   
+    
+    # compute fraction
+    pv = valence_left / total
+    pv_initial_basis.append(pv)
+
+#for i, atom in enumerate(atom_name):
+    #if 'O' in atom:   # matches 'O1', 'O2-', etc.
+       # pv_initial[i] = 0.8
+v.Basis_Pv = pv_initial_basis
+
+# convert to array
+print(v.Basis_Pv)
+
+# kappas (default 1.0)
+kappas = np.ones_like(pv_initial_basis)
+v.Basis_Kappa = kappas
+
+# expand per atom in full unit cell
+ 
+
+
+ #print(unique_aniso_matrixes)
+ #print(unique_aniso_matrixes.shape)
+ 
+ # Step 1: define a dictionary of initial P_v guesses per element
+ # For LiNbO3 using formal charges as we discussed
+ # we just need a dictionary of the valence states of the atoms 
+
+
+ 
 
 # output
 print(f"Zone axis: {v.incident_beam_direction.astype(int)}")
@@ -201,7 +302,7 @@ else:
         print("Refining Isotropic Debye Waller Factors, D")
     if 'E' in v.refine_mode:
         print("Refining Anisotropic Debye Waller Factors, E")
-        raise ValueError("Refinement mode E not implemented")
+        #raise ValueError("Refinement mode E not implemented")
     if (len(v.atomic_sites) > n_basis):
         raise ValueError("Number of atomic sites to refine is larger than the \
                          number of atoms")
@@ -284,9 +385,17 @@ if 'S' not in v.refine_mode:
             v.atom_refine_vec.append(nullvec)  # no atom movement
 
     if 'E' in v.refine_mode:  # Anisotropic DW
-        # Not yet implemented!!! variable_type 5
-        raise ValueError("Anisotropic Debye-Waller factor refinement \
-                         not yet implemented")
+        for i in range(len(v.atomic_sites)):
+            U = v.aniso_matrix[i]
+            # Extract symmetric independent components
+            aniso_params = [U[0, 0], U[1, 1], U[2, 2], U[0, 1], U[0, 2], U[1, 2]]
+            for u in aniso_params:
+                v.refined_variable.append(u)
+                v.refined_variable_type.append(5)
+                v.atom_refine_flag.append(v.atomic_sites[i])
+                v.atom_refine_vec.append(nullvec)  # no atom movement
+                
+        
 
     if 'F' in v.refine_mode:  # Lattice parameters
         # variable_type first digit=6 indicates lattice parameter
@@ -331,6 +440,30 @@ if 'S' not in v.refine_mode:
         v.refined_variable_type.append(9)
         v.atom_refine_flag.append(-1)
         v.atom_refine_vec.append(nullvec)  # no atom movement
+        
+        
+    
+    if  'J' in v.refine_mode:
+        
+        
+        for i in range(len(v.atomic_sites)):
+            
+            v.refined_variable.append(v.Basis_Kappa[v.atomic_sites[i]])
+            v.refined_variable_type.append(10)
+            v.atom_refine_flag.append(v.atomic_sites[i])
+            v.atom_refine_vec.append(nullvec)  # no atom movement
+
+       
+    if 'K' in v.refine_mode:  
+        for i in range(len(v.atomic_sites)):
+            
+            v.refined_variable.append(v.Basis_Pv[v.atomic_sites[i]])
+            v.refined_variable_type.append(11)
+            v.atom_refine_flag.append(v.atomic_sites[i])
+            v.atom_refine_vec.append(nullvec)  # no atom movement
+       
+        
+       
 
     # Total number of independent variables
     v.n_variables = len(v.refined_variable)

@@ -9,7 +9,7 @@ Each of which call further pylix subroutines
 Returns the simulated LACBED patterns
 
 """
-
+import re
 import numpy as np
 from scipy.constants import c, h, e, m_e, angstrom
 from scipy.ndimage import gaussian_filter
@@ -49,18 +49,26 @@ def simulate(v):
                           (2.0*np.pi * m_e * e * cell_volume * (angstrom**2)))
 
     # ===============================================
+    # added unique aniso matrices
     # fill the unit cell and get mean inner potential
     # when iterating we only do it if necessary?
     # if v.iter_count == 0 or v.current_variable_type < 6:
-    atom_position, atom_label, atom_name, B_iso, occupancy = \
+    print (v.atom_site_type_symbol)
+    
+    atom_position, atom_label,atom_type, atom_name, B_iso, occupancy, unique_aniso_matrixes,pv,kappas = \
         px.unique_atom_positions(
-            v.symmetry_matrix, v.symmetry_vector, v.basis_atom_label,
+            v.symmetry_matrix, v.symmetry_vector, v.basis_atom_label,v.atom_site_type_symbol,
             v.basis_atom_name,
-            v.basis_atom_position, v.basis_B_iso, v.basis_occupancy)
+            v.basis_atom_position, v.basis_B_iso, v.basis_occupancy, v.aniso_matrix,v.Basis_Pv,v.Basis_Kappa)
 
     # Generate atomic numbers based on the elemental symbols
     atomic_number = np.array([fu.atomic_number_map[na] for na in atom_name])
-
+    print(v.Basis_Pv)
+    print(v.Basis_Kappa)
+    
+   
+    
+   
     n_atoms = len(atom_label)
     if v.iter_count == 0:
         print("  There are "+str(n_atoms)+" atoms in the unit cell")
@@ -79,7 +87,7 @@ def simulate(v):
     mip = 0.0
     for i in range(n_atoms):  # get the scattering factor
         if v.scatter_factor_method == 0:
-            mip += px.f_kirkland(atomic_number[i], 0.0)
+            mip += px.f_kirkland(atomic_number[i], 0.0,kappas[i],pv[i])
         elif v.scatter_factor_method == 1:
             mip += px.f_lobato(atomic_number[i], 0.0)
         elif v.scatter_factor_method == 2:
@@ -101,7 +109,7 @@ def simulate(v):
 
     # ===============================================
     # set up reference frames
-    a_vec_m, b_vec_m, c_vec_m, ar_vec_m, br_vec_m, cr_vec_m, norm_dir_m = \
+    a_vec_m, b_vec_m, c_vec_m, ar_vec_m, br_vec_m, cr_vec_m, norm_dir_m, t_mat_o2m, t_mat_c2o = \
         px.reference_frames(v.debug, v.cell_a, v.cell_b, v.cell_c,
                             v.cell_alpha, v.cell_beta, v.cell_gamma,
                             v.space_group, v.x_direction,
@@ -110,6 +118,13 @@ def simulate(v):
     atom_coordinate = (atom_position[:, 0, np.newaxis] * a_vec_m +
                        atom_position[:, 1, np.newaxis] * b_vec_m +
                        atom_position[:, 2, np.newaxis] * c_vec_m)
+    
+    #tranforming anisotropic matrices into microscope frame
+    
+    
+  
+    
+    #print(v.aniso_matrix_m)
 
     # plot unit cell and save .xyz file
     if v.iter_count == 0 and v.plot:
@@ -155,6 +170,7 @@ def simulate(v):
     n_hkl = len(g_pool)
     n_out = len(v.g_output)  # redefined to match what we can actually output
     # NEEDS SOME MORE WORK TO MATCH SIM/EXPT PATTERNS if this happens
+    
 
     # outputs
     if v.iter_count == 0:
@@ -216,7 +232,7 @@ def simulate(v):
                                         atomic_number, occupancy,
                                         B_iso, g_matrix, g_magnitude,
                                         v.absorption_method, v.absorption_per,
-                                        electron_velocity)
+                                        electron_velocity, g_pool, unique_aniso_matrixes,kappas,pv)
     # matrix of dot products with the surface normal
     g_dot_norm = np.dot(g_pool, norm_dir_m)
     if v.iter_count == 0:
@@ -427,7 +443,7 @@ def update_variables(v):
 
     for i in range(v.n_variables):
         # Check the type of variable, last digit of v.refined_variable_type
-        variable_type = v.refined_variable_type[i] % 10
+        variable_type = v.refined_variable_type[i] % 12
 
         if variable_type == 0:
             # Structure factor refinement (handled elsewhere)
@@ -461,8 +477,22 @@ def update_variables(v):
                 v.basis_B_iso[v.atom_refine_flag[i]] = 0.0
 
         elif variable_type == 5:
-            # Aniso Debye-Waller factor (not implemented)
-            raise NotImplementedError("Anisotropic DWF not implemented")
+            # Aniso Debye-Waller factor (implemented)
+            if 0 < v.refined_variable[i] < 0.1:
+                var_index = i % 6
+                U = v.aniso_matrix_m[v.atom_refine_flag[i]]
+                if var_index == 0:   U[0, 0] = v.refined_variable[i]*1.0
+                elif var_index == 1: U[1, 1] = v.refined_variable[i]*1.0
+                elif var_index == 2: U[2, 2] = v.refined_variable[i]*1.0
+                elif var_index == 3: U[0, 1] = U[1, 0] = v.refined_variable[i]*1.0
+                elif var_index == 4: U[0, 2] = U[2, 0] = v.refined_variable[i]*1.0
+                elif var_index == 5: U[1, 2] = U[2, 1] = v.refined_variable[i]*1.0
+                
+                v.aniso_matrix_m[v.atom_refine_flag[i]] = U
+                
+            else:
+                v.aniso_matrix_m[v.atom_refine_flag[i]][:] = 0.0
+                
 
         elif variable_type == 6:
             # Lattice parameters a, b, c
@@ -490,6 +520,30 @@ def update_variables(v):
         elif variable_type == 9:
             # Accelerating voltage
             v.accelerating_voltage_kv = v.refined_variable[i]*1.0
+            
+            #refinig kappa values in basis 
+        elif variable_type == 10:
+            if 0.7 < v.refined_variable[i] < 1.3:  # must lie in a reasonable range
+                v.Basis_Kappa[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
+            else:
+                v.Basis_Kappa_B_iso[v.atom_refine_flag[i]] = 0.0
+            
+           
+            #refining Pv values in basis 
+        elif variable_type == 11:
+            if 0 < v.refined_variable[i] < 1:  # must lie in a reasonable range
+                v.Basis_Pv[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
+            else:
+                v.Basis_Pv[v.atom_refine_flag[i]] = 0.0
+            
+        
+            
+            
+            
+        
+            
+            
+
 
     return
 

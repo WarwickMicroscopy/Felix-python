@@ -9,6 +9,14 @@ contains scattering factors kirkland, peng, doyle_turner, lobato, turner
 import numpy as np
 
 
+
+neutral_valence_states = {
+ "Li": 1,
+ "Nb": 5,
+ "O": 6
+ }
+
+
 # set up some libraries
 atomic_number_map = {'H': 1, 'He': 2, 'Li': 3, 'Be': 4, 'B': 5, 'C': 6, 'N': 7,
                      'O': 8, 'F': 9, 'Ne': 10, 'Na': 11, 'Mg': 12, 'Al': 13,
