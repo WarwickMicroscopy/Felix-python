@@ -53,18 +53,23 @@ def simulate(v):
     # fill the unit cell and get mean inner potential
     # when iterating we only do it if necessary?
     # if v.iter_count == 0 or v.current_variable_type < 6:
-    print (v.atom_site_type_symbol)
+    #print (v.atom_site_type_symbol)
     
     atom_position, atom_label,atom_type, atom_name, B_iso, occupancy, unique_aniso_matrixes,pv,kappas = \
         px.unique_atom_positions(
             v.symmetry_matrix, v.symmetry_vector, v.basis_atom_label,v.atom_site_type_symbol,
             v.basis_atom_name,
             v.basis_atom_position, v.basis_B_iso, v.basis_occupancy, v.aniso_matrix,v.Basis_Pv,v.Basis_Kappa)
-
+    
     # Generate atomic numbers based on the elemental symbols
     atomic_number = np.array([fu.atomic_number_map[na] for na in atom_name])
-    print(v.Basis_Pv)
+   
     print(v.Basis_Kappa)
+  
+    print(v.Basis_Pv)
+    #some initial values for testing 
+    
+    
     
    
     
@@ -87,7 +92,7 @@ def simulate(v):
     mip = 0.0
     for i in range(n_atoms):  # get the scattering factor
         if v.scatter_factor_method == 0:
-            mip += px.f_kirkland(atomic_number[i], 0.0,kappas[i],pv[i])
+            mip += px.f_kirkland(atomic_number[i], 0.0,kappas[i],pv[i],v.model_flag)
         elif v.scatter_factor_method == 1:
             mip += px.f_lobato(atomic_number[i], 0.0)
         elif v.scatter_factor_method == 2:
@@ -232,7 +237,7 @@ def simulate(v):
                                         atomic_number, occupancy,
                                         B_iso, g_matrix, g_magnitude,
                                         v.absorption_method, v.absorption_per,
-                                        electron_velocity, g_pool, unique_aniso_matrixes,kappas,pv)
+                                        electron_velocity, g_pool, unique_aniso_matrixes,kappas,pv,v.Debye_model,v.model_flag)
     # matrix of dot products with the surface normal
     g_dot_norm = np.dot(g_pool, norm_dir_m)
     if v.iter_count == 0:
@@ -440,6 +445,7 @@ def update_variables(v):
 
     # will tackle this when doing atomic position refinement
     # basis_atom_delta.fill(0)  # Reset atom coordinate uncertainties to zero
+    print(v.n_variables)
 
     for i in range(v.n_variables):
         # Check the type of variable, last digit of v.refined_variable_type
@@ -523,18 +529,22 @@ def update_variables(v):
             
             #refinig kappa values in basis 
         elif variable_type == 10:
-            if 0.7 < v.refined_variable[i] < 1.3:  # must lie in a reasonable range
-                v.Basis_Kappa[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
-            else:
-                v.Basis_Kappa_B_iso[v.atom_refine_flag[i]] = 0.0
+            #if 0.7 < v.refined_variable[i] < 1.3:  # must lie in a reasonable range
+           #     v.Basis_Kappa[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
+          #  else:
+             #   v.Basis_Kappa[v.atom_refine_flag[i]] = 0.0
+             v.Basis_Kappa[v.atom_refine_flag[i]] = np.clip(v.refined_variable[i], 0.7, 1.8)
+
+
             
            
             #refining Pv values in basis 
         elif variable_type == 11:
-            if 0 < v.refined_variable[i] < 1:  # must lie in a reasonable range
-                v.Basis_Pv[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
-            else:
-                v.Basis_Pv[v.atom_refine_flag[i]] = 0.0
+           #if 0.01 < v.refined_variable[i] < 0.7:  # must lie in a reasonable range
+            #    v.Basis_Pv[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
+           # else:
+             #   v.Basis_Pv[v.atom_refine_flag[i]] = 0.0
+             v.Basis_Pv[v.atom_refine_flag[i]] = np.clip(v.refined_variable[i], 0.001, 0.7)
             
         
             

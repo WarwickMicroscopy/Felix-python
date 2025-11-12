@@ -21,6 +21,8 @@ class Inp:
         self.min_strong_beams = None
         self.min_weak_beams = None
         self.g_limit = None
+        self.model_flag = None
+        self.Debye_model = None
         self.scatter_factor_method = None
         self.absorption_method = None
         self.absorption_per = None

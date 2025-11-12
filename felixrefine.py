@@ -132,6 +132,8 @@ v.basis_atom_position = \
                      np.array([tup[0] for tup in v.atom_site_fract_y]),
                      np.array([tup[0] for tup in v.atom_site_fract_z])))
 
+
+
 # Debye-Waller factor
 if "atom_site_b_iso_or_equiv" in cif_dict:
     v.basis_B_iso = np.array([tup[0] for tup in v.atom_site_b_iso_or_equiv])
@@ -168,7 +170,7 @@ if v.atom_site_aniso_u_11 is not None:
                              np.array([v.aniso_U12[i], v.aniso_U22[i], v.aniso_U23[i]]),
                              np.array([v.aniso_U13[i], v.aniso_U23[i], v.aniso_U33[i]])))
 
-print(v.aniso_matrix)
+#print(v.aniso_matrix)
 
 
 
@@ -209,10 +211,6 @@ v.g_limit = v.g_limit * 2 * np.pi
 
 
 
-
-   
-    
-
 pv_initial_basis = []   
 
 for s in v.atom_site_type_symbol:
@@ -242,13 +240,22 @@ for s in v.atom_site_type_symbol:
     #if 'O' in atom:   # matches 'O1', 'O2-', etc.
        # pv_initial[i] = 0.8
 v.Basis_Pv = pv_initial_basis
+#some initial reasonable pvs for testing
+print(v.basis_atom_name)
 
+v.Basis_Pv[0] = 0.2
+v.Basis_Pv[1] = 0.05
+v.Basis_Pv[2] = 0.15
 # convert to array
+
 print(v.Basis_Pv)
 
 # kappas (default 1.0)
 kappas = np.ones_like(pv_initial_basis)
 v.Basis_Kappa = kappas
+v.Basis_Kappa[0] = 1
+v.Basis_Kappa[1] = 1
+v.Basis_Kappa[2] = 1
 
 # expand per atom in full unit cell
  

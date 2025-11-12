@@ -1079,7 +1079,7 @@ def hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k, lattice_type,
 
 def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
               atomic_number, occupancy, B_iso, g_matrix, g_magnitude,
-              absorption_method, absorption_per, electron_velocity, g_pool, aniso_matrix,kappas,pv_initial):
+              absorption_method, absorption_per, electron_velocity, g_pool, aniso_matrix,kappas,pv_initial,Debye,model):
     Fg_matrix = np.zeros([n_hkl, n_hkl], dtype=np.complex128)
     # calculate g.r for all g-vectors and atom posns [n_hkl, n_hkl, n_atoms]
     g_dot_r = np.einsum('ijk,lk->ijl', g_matrix, atom_coordinate)
@@ -1096,13 +1096,12 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
     # all atom types and modifying scattering factor methods to accept 2D + 1D
     # arrays [n_hkl, n_hkl] & [n_atoms],
     # returning an array [n_hkl, n_hkl, n_atoms])
-    gUg = np.einsum('ajk,ij,ik->ai', aniso_matrix, g_pool, g_pool)
-    T_factor = np.exp(- 0.5 * gUg )
+   
     
     for i in range(n_atoms):
         # get the scattering factor
         if scatter_factor_method == 0:
-            f_g = f_kirkland(atomic_number[i], g_magnitude,kappas[i],pv_initial[i])
+            f_g = f_kirkland(atomic_number[i], g_magnitude,kappas[i],pv_initial[i],model)
         elif scatter_factor_method == 1:
             f_g = f_lobato(atomic_number[i], g_magnitude)
         elif scatter_factor_method == 2:
@@ -1126,19 +1125,27 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
     
         # The Structure Factor Equation
         # multiply by Debye-Waller factor, phase and occupancy
-        #Fg_matrix = Fg_matrix+((f_g + f_g_prime) * phase[:, :, i] *
-                           #    occupancy[i] *
-                        #   np.exp(-B_iso[i] *
-                             #        (g_magnitude**2)/(16*np.pi**2)))
+        if (Debye ==1):
+            # Anisotropic structure factor
+            gUg = np.einsum('ajk,ij,ik->ai', aniso_matrix, g_pool, g_pool)
+            T_factor = np.exp(- 0.5 * gUg )
+            Fg_matrix = Fg_matrix+((f_g + f_g_prime) *
+                      phase[:, :, i] *
+                      occupancy[i] *
+                      T_factor[i, :][:, np.newaxis])
+        elif (Debye ==0):
+            #Isotropic structure factor
+            Fg_matrix = Fg_matrix+((f_g + f_g_prime) * phase[:, :, i] *
+                                   occupancy[i] *
+                                   np.exp(-B_iso[i] *
+                                         (g_magnitude**2)/(16*np.pi**2)))
         
-        # Anisotropic structure factor
-       
-        Fg_matrix = Fg_matrix+((f_g + f_g_prime) *
-                  phase[:, :, i] *
-                  occupancy[i] *
-                  T_factor[i, :][:, np.newaxis])
+            
+            
+      
         
-    # k-formalism
+      
+
    
 
     # *** Budhika Mendis's 'cluster' method ***
@@ -1402,7 +1409,7 @@ def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list,
     return
 
 
-def f_kirkland(z, g_magnitude,kappa,pv): # added our two parameters for refinement.
+def f_kirkland(z, g_magnitude,kappa,pv,model): # added our two parameters for refinement. model now refers to IAM or kappa formalism
     """
     calculates atomic scattering factor using the Kirkland model.
     From Appendix C of "Advanced Computing in Electron Microscopy", 2nd ed.
@@ -1416,16 +1423,19 @@ def f_kirkland(z, g_magnitude,kappa,pv): # added our two parameters for refineme
     Returns:
     ndarray: The calculated Kirkland scattering factor.
     """
-
+    
     q = g_magnitude / (2*np.pi)
     # coefficients in shape (3, 1, 1) for broadcasting
     a = fu.kirkland[z-1, 0:6:2].reshape(-1, 1, 1)
     b = fu.kirkland[z-1, 1:7:2].reshape(-1, 1, 1)
     c = fu.kirkland[z-1, 6:11:2].reshape(-1, 1, 1)
     d = fu.kirkland[z-1, 7:12:2].reshape(-1, 1, 1)
+    
+    if (model == 1): #1 for kappa formalism scattering factors 
+        f_g = (1-pv)*np.sum(a/(q**2+b), axis=0) + pv*np.sum(c*np.exp(-(d*(q/kappa)**2)), axis=0) # here we scale q by kappa and we weight each term by their relative electron occupation pv
 
-    #f_g = (1-pv)*np.sum(a/(q**2+b), axis=0) + pv*np.sum(c*np.exp(-(d*(q/kappa)**2)), axis=0) # here we scale q by kappa and we weight each term by their relative electron occupation pv
-    f_g =   np.sum(a/(q**2+b), axis=0) + np.sum(c*np.exp(-(d*(q/kappa)**2)), axis=0)
+    elif(model == 0):# IAM scattering factors 
+       f_g =   np.sum(a/(q**2+b), axis=0) + np.sum(c*np.exp(-(d*q**2)), axis=0)
     return f_g
 
 
