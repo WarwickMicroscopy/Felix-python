@@ -317,7 +317,7 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,bas
     #print (basis_atom_type_label)
     
     all_atom_type_label = np.tile(basis_atom_type_label, n_symmetry_operations)
-    print(all_atom_type_label)
+   
     
     all_atom_name = np.tile(basis_atom_name, n_symmetry_operations)
     #print(all_atom_name)
@@ -366,6 +366,8 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,bas
     atom_name = all_atom_name[i]
     occupancy = all_occupancy[i]
     B_iso = all_B_iso[i]
+    Kappa = all_Kappa[i]
+    Pv = all_Pv[i]
     
     if all_aniso_matrix is not None:
         aniso_matrix = all_aniso_matrix[i]
@@ -375,7 +377,7 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,bas
     
 
 
-    return atom_position, atom_label,atom_type, atom_name, B_iso, occupancy, aniso_matrix, all_Pv,all_Kappa
+    return atom_position, atom_label,atom_type, atom_name, B_iso, occupancy, aniso_matrix, Pv,Kappa
 
 
     
@@ -1079,7 +1081,7 @@ def hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k, lattice_type,
 
 def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
               atomic_number, occupancy, B_iso, g_matrix, g_magnitude,
-              absorption_method, absorption_per, electron_velocity, g_pool, aniso_matrix,kappas,pv_initial,Debye,model):
+              absorption_method, absorption_per, electron_velocity, g_pool, aniso_matrix,kappas,pv,Debye,model):
     Fg_matrix = np.zeros([n_hkl, n_hkl], dtype=np.complex128)
     # calculate g.r for all g-vectors and atom posns [n_hkl, n_hkl, n_atoms]
     g_dot_r = np.einsum('ijk,lk->ijl', g_matrix, atom_coordinate)
@@ -1101,13 +1103,15 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
     for i in range(n_atoms):
         # get the scattering factor
         if scatter_factor_method == 0:
-            f_g = f_kirkland(atomic_number[i], g_magnitude,kappas[i],pv_initial[i],model)
+            f_g = f_kirkland(atomic_number[i], g_magnitude)
         elif scatter_factor_method == 1:
             f_g = f_lobato(atomic_number[i], g_magnitude)
         elif scatter_factor_method == 2:
             f_g = f_peng(atomic_number[i], g_magnitude)
         elif scatter_factor_method == 3:
             f_g = f_doyle_turner(atomic_number[i], g_magnitude)
+        elif scatter_factor_method == 4:
+            f_g = kappa(atomic_number[i], g_magnitude, kappas[i], pv[i])
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
 
@@ -1409,7 +1413,7 @@ def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list,
     return
 
 
-def f_kirkland(z, g_magnitude,kappa,pv,model): # added our two parameters for refinement. model now refers to IAM or kappa formalism
+def f_kirkland(z, g_magnitude): # added our two parameters for refinement. model now refers to IAM or kappa formalism
     """
     calculates atomic scattering factor using the Kirkland model.
     From Appendix C of "Advanced Computing in Electron Microscopy", 2nd ed.
@@ -1430,14 +1434,22 @@ def f_kirkland(z, g_magnitude,kappa,pv,model): # added our two parameters for re
     b = fu.kirkland[z-1, 1:7:2].reshape(-1, 1, 1)
     c = fu.kirkland[z-1, 6:11:2].reshape(-1, 1, 1)
     d = fu.kirkland[z-1, 7:12:2].reshape(-1, 1, 1)
-    
-    if (model == 1): #1 for kappa formalism scattering factors 
-        f_g = (1-pv)*np.sum(a/(q**2+b), axis=0) + pv*np.sum(c*np.exp(-(d*(q/kappa)**2)), axis=0) # here we scale q by kappa and we weight each term by their relative electron occupation pv
-
-    elif(model == 0):# IAM scattering factors 
-       f_g =   np.sum(a/(q**2+b), axis=0) + np.sum(c*np.exp(-(d*q**2)), axis=0)
+   
+    f_g =   np.sum(a/(q**2+b), axis=0) + np.sum(c*np.exp(-(d*q**2)), axis=0)
     return f_g
 
+# calc scattering factors for core density and valence density seperately 
+
+def kappa(z,g_magnitude,kappa,pv):
+    
+    return f_kirkland(z,g_magnitude)*(1-pv) + f_kirkland(z,g_magnitude/kappa)*pv
+    
+    
+    # start with lithium for testing against kirkland
+    # will use hartree fock calculated slater coeffiecients to recreate radial electron distributions for
+    #the shells linking to core and valence electrons csn be determined using another tsble probably
+    #then fourier transform respective parts to get scattering factors for core and vslence and apply kappa model
+    
 
 def f_doyle_turner(z, g_magnitude):
     """

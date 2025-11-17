@@ -170,7 +170,7 @@ if v.atom_site_aniso_u_11 is not None:
                              np.array([v.aniso_U12[i], v.aniso_U22[i], v.aniso_U23[i]]),
                              np.array([v.aniso_U13[i], v.aniso_U23[i], v.aniso_U33[i]])))
 
-#print(v.aniso_matrix)
+
 
 
 
@@ -230,10 +230,15 @@ for s in v.atom_site_type_symbol:
         
     
     # total electrons from atomic_number_map
+    #clip if values are extreme 1/0
    
     
     # compute fraction
     pv = valence_left / total
+    if pv ==0:
+        pv=0.1
+    elif pv ==1:
+        pv= 0.9
     pv_initial_basis.append(pv)
 
 #for i, atom in enumerate(atom_name):
@@ -241,22 +246,22 @@ for s in v.atom_site_type_symbol:
        # pv_initial[i] = 0.8
 v.Basis_Pv = pv_initial_basis
 #some initial reasonable pvs for testing
-print(v.basis_atom_name)
+#print(v.basis_atom_name)
 
-v.Basis_Pv[0] = 0.2
-v.Basis_Pv[1] = 0.05
-v.Basis_Pv[2] = 0.15
+v.Basis_Pv[0] = 0.294  #Li
+v.Basis_Pv[1] = 0.13774 #Nb
+v.Basis_Pv[2] = 0.6725  #O
 # convert to array
 
-print(v.Basis_Pv)
+
 
 # kappas (default 1.0)
 kappas = np.ones_like(pv_initial_basis)
 v.Basis_Kappa = kappas
-v.Basis_Kappa[0] = 1
-v.Basis_Kappa[1] = 1
-v.Basis_Kappa[2] = 1
-
+v.Basis_Kappa[0] = 1.1724888
+v.Basis_Kappa[1] = 1.122675
+v.Basis_Kappa[2] = 0.93547
+#refined kappa : [1.21517673 1.12267508 0.93547286]
 # expand per atom in full unit cell
  
 
@@ -286,6 +291,8 @@ elif v.scatter_factor_method == 2:
     print("Using Peng scattering factors")
 elif v.scatter_factor_method == 3:
     print("Using Doyle & Turner scattering factors")
+elif v.scatter_factor_method == 4:
+    print("using Kirkland scattering factors with Kappa formalism")
 else:
     raise ValueError("No scattering factors chosen in felix.inp")
 
@@ -321,7 +328,11 @@ if 'H' in v.refine_mode:
     print("Refining Convergence Angle, H")
 if 'I' in v.refine_mode:
     print("Refining Accelerating Voltage, I")
-
+if 'J' in v.refine_mode:
+    print("Refining Kappa values, k")
+if 'K' in v.refine_mode:
+    print("Refining Pv vales, k")
+    
 
 # %% read felix.hkl
 v.input_hkls, v.i_obs, v.sigma_obs = px.read_hkl_file("felix.hkl")

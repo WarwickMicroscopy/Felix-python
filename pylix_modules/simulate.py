@@ -67,7 +67,7 @@ def simulate(v):
     print(v.Basis_Kappa)
   
     print(v.Basis_Pv)
-    #some initial values for testing 
+ 
     
     
     
@@ -92,13 +92,16 @@ def simulate(v):
     mip = 0.0
     for i in range(n_atoms):  # get the scattering factor
         if v.scatter_factor_method == 0:
-            mip += px.f_kirkland(atomic_number[i], 0.0,kappas[i],pv[i],v.model_flag)
+            mip += px.f_kirkland(atomic_number[i], 0.0)
         elif v.scatter_factor_method == 1:
             mip += px.f_lobato(atomic_number[i], 0.0)
         elif v.scatter_factor_method == 2:
             mip += px.f_peng(atomic_number[i], 0.0)
         elif v.scatter_factor_method == 3:
             mip += px.f_doyle_turner(atomic_number[i], 0.0)
+        elif v.scatter_factor_method ==4:
+            mip += px.kappa(atomic_number[i],0.0,kappas[i],pv[i])
+            
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
     mip = mip.item()*scatt_fac_to_volts  # NB convert array to float
@@ -533,7 +536,7 @@ def update_variables(v):
            #     v.Basis_Kappa[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
           #  else:
              #   v.Basis_Kappa[v.atom_refine_flag[i]] = 0.0
-             v.Basis_Kappa[v.atom_refine_flag[i]] = np.clip(v.refined_variable[i], 0.7, 1.8)
+             v.Basis_Kappa[v.atom_refine_flag[i]] = np.clip(v.refined_variable[i], 0.7, 1.3)
 
 
             
@@ -544,7 +547,7 @@ def update_variables(v):
             #    v.Basis_Pv[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
            # else:
              #   v.Basis_Pv[v.atom_refine_flag[i]] = 0.0
-             v.Basis_Pv[v.atom_refine_flag[i]] = np.clip(v.refined_variable[i], 0.001, 0.7)
+             v.Basis_Pv[v.atom_refine_flag[i]] = np.clip(v.refined_variable[i], 0.01, 0.9)
             
         
             
