@@ -294,7 +294,7 @@ def simulate(v):
     setup = mid-strt
     bwc = time.time()-mid
     print(f"\rBloch wave calculation... done in {bwc:.1f} s (beam pool setup {setup:.1f} s)")
-    if v.iter_count == 0:
+    if v.iter_count == 0: 
         print(f"    {1000*(bwc)/(4*v.image_radius**2):.2f} ms/pixel")
 
     # increment iteration counter
@@ -484,25 +484,52 @@ def update_variables(v):
                 v.basis_B_iso[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
             else:
                 v.basis_B_iso[v.atom_refine_flag[i]] = 0.0
-
+        
+        
+        
+        
         elif variable_type == 5:
+            
+            
             # Aniso Debye-Waller factor (implemented)
-            if 0 < v.refined_variable[i] < 0.1:
-                var_index = i % 6
-                U = v.aniso_matrix_m[v.atom_refine_flag[i]]
-                if var_index == 0:   U[0, 0] = v.refined_variable[i]*1.0
-                elif var_index == 1: U[1, 1] = v.refined_variable[i]*1.0
-                elif var_index == 2: U[2, 2] = v.refined_variable[i]*1.0
-                elif var_index == 3: U[0, 1] = U[1, 0] = v.refined_variable[i]*1.0
-                elif var_index == 4: U[0, 2] = U[2, 0] = v.refined_variable[i]*1.0
-                elif var_index == 5: U[1, 2] = U[2, 1] = v.refined_variable[i]*1.0
+            
+             
+             U = v.aniso_matrix[v.atom_refine_flag[i]]
+             if   0 < U[0,0] < 0.1:
+                 U[0,0]= v.refined_variable[i]*1.0
+             else:
+                 U[0,0]=0
+             if   0 < U[1,1] < 0.1:
+                  U[1,1]= v.refined_variable[i]*1.0
+             else:
+                  U[1,1]=0
+             if   0 < U[2,2] < 0.1:
+                  U[2,2]= v.refined_variable[i]*1.0
+             else:
+                  U[2,2]=0
+             if   0 < U[0,1] < 0.1:
+                  U[0,1]= U[1,0] = v.refined_variable[i]*1.0
+             else:
+                  U[0,1]= U[1,0]= 0
+             
+             
+             if   0 < U[0,2] < 0.1:
+                 U[0,2]= U[2,0]= v.refined_variable[i]*1.0
+             else:
+                 U[0,2]= U[2,0]= 0
+            
+             
+             if   0 < U[1,2] < 0.1:
+                  U[1,2]= U[1,2]= v.refined_variable[i]*1.0
+             else:
+                  U[1,2]= U[2,1]=0
+                  
+                 
+                 
                 
-                v.aniso_matrix_m[v.atom_refine_flag[i]] = U
-                
-            else:
-                v.aniso_matrix_m[v.atom_refine_flag[i]][:] = 0.0
-                
+             v.aniso_matrix[v.atom_refine_flag[i]] = U
 
+       
         elif variable_type == 6:
             # Lattice parameters a, b, c
             if v.refined_variable_type[i] == 6:
@@ -643,11 +670,14 @@ def print_current_var(v, i):
         1: ("Current Ug", "{:.3f}"),
         3: ("Current occupancy", "{:.2f}"),
         4: ("Current Biso", "{:.2f}"),
-        5: ("Current U[ij]", "{:.2f}"),
+        5: ("Current U[ij]", "{:.5f}"),
         6: ("Current lattice parameter", "{:.4f}"),
         8: ("Current convergence angle", "{:.3f} Å^-1"),
         9: ("Current accelerating voltage", "{:.1f} kV"),
-    }
+        10:("Current Kappa", "{:.3f}"),
+        11:("Current Pv", "{:.4f}"),
+            
+            }
 
     if t == 2:  # coord output
         with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
@@ -667,8 +697,10 @@ def variable_message(vtype):
         5: "Changing anisotropic thermal displacement parameter U[ij]",
         6: "Changing lattice parameter",
         8: "Changing convergence angle",
+        10:"Changing Kappa parameter",
+        11:"Changing Pv Value",
     }
-    return msg.get(vtype % 10, "Unknown variable type")
+    return msg.get(vtype % 12, "Unknown variable type")
 
 
 def sim_fom(v, i):
