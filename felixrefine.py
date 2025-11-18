@@ -410,8 +410,9 @@ v.t0 = np.copy(v.t_m2o[0, :, :])
 v.g_obs = hkl_list @ v.t_cr2or.T
 
 x_angle = []
-for i in range(0, 500, 50):
-    # print("\r"+str(i), end="")
+for i in range(0, 911, 10):
+    print("\r"+str(i), end="")
+    # print(str(i))
     v.start = i  # start reflection
     v.end = v.start + 40  # end reflection
     x0 = 0.0  # initial angle

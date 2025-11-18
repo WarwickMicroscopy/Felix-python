@@ -1970,9 +1970,9 @@ def parabo3(x, y):
             x[2]*x[2]*(x[0]*y[1]-x[1]*y[0])) / d
         x_v = -b/(2*a)  # x-coord
         y_v = c-b*b/(4*a)  # y-coord
-    else:
-        x_v = x[1]
-        y_v = y[1]
+    else:  # return the smallest value
+        x_v = x[np.argmin(y)]
+        y_v = y[np.argmin(y)]
 
     return x_v, y_v
 
@@ -2013,7 +2013,7 @@ def convex(r3_x, r3_y, debug=False):
     else:
         next_x, next_y = parabo3(r3_x, r3_y)
         if debug:
-            print(f"Concave, predict minimum at {next_x:.3f} with fit index {100*next_y:.2f}%")
+            print(f"Concave, predict minimum at {next_x*1000:.3f} with fit index {next_y/10000:.3f}")
         minny = True
 
     return next_x, minny
@@ -2085,7 +2085,7 @@ def fom(v, val, param_type=1):
     return fom
 
 
-def minimi(v, x0, dx, tol, param_type=1, plot=False):
+def minimi(v, x0, dx, tol, param_type=1, debug=False):
     """
     Evaluate the function px.fom (Figure of Merit) for varying input x to find
     a minimum.
@@ -2098,16 +2098,17 @@ def minimi(v, x0, dx, tol, param_type=1, plot=False):
     Returns
         xm, ym : refined values of x and y
     """
+    np.set_printoptions(formatter={'float': '{:.3f}'.format})
     # Three-point gradient measurement
     x = np.zeros(3)  # input values
     y = np.zeros(3)  # evaluated foms
-    delta_y = 1e+10  # improvement each cycle to test against tol
-    plot_y = []  # to plot if desired
+    delta_x = 1e+10  # change each cycle to test against tol
+    # plot_y = []  # to plot if desired
     x[0] = x0
     y[0] = fom(v, x[0])  # first point
-    best_y = y[0]*1.0
-    plot_y.append(y[0])
-    while delta_y > tol:
+    best_x = x[0]*1.0
+    # plot_y.append(y[0])
+    while delta_x > tol:
         x[1] = x[0] + dx
         y[1] = fom(v, x[1])  # second point
         if y[1] < y[0]:  # keep going
@@ -2117,26 +2118,42 @@ def minimi(v, x0, dx, tol, param_type=1, plot=False):
         x[2] = x[1] + dx
         y[2] = fom(v, x[2])  # third point
         xm, fin = convex(x, y)  # convexity test
+        if debug:
+            print(f"{x*1000}, {y/10000}: minimum={fin} at {xm*1000:.3f}")
         # fin = True: xm = predicted minimum, False: xm = next value to try
         while fin is False:  # we don't have a minimum, keep going
             # replace the worst point
             i = np.argmax(y)
-            x[i] = xm
+            x[i] = xm*1.0
             y[i] = fom(v, xm)
             xm, fin = convex(x, y)
+            if debug:
+                print(f"{x*1000}, {y/10000}: minimum={fin} at {xm*1000:.3f}")
         # we now have a predicted minimum
         ym = fom(v, xm)
-        plot_y.append(ym)
-        delta_y = best_y - ym  # improvement in y
-        best_y = ym
+        if ym > np.min(y):  # if it's not actually better use best x & y
+            if debug:
+                print(f"but! fit index actually {ym/10000:.3f} ")
+            ym = np.min(y)*1.0
+            xm = x[np.argmin(y)]*1.0
+        # plot_y.append(ym)
+        delta_x = np.abs(best_x - xm)  # change in x
+        if debug:
+            if delta_x > tol:
+                print(f"dx = {delta_x*1000:.4f}, x={xm*1000:.3f}: continuing")
+            else:
+                print(f"dx = {delta_x*1000:.4f}, x={xm*1000:.3f}: done")
+            plt.scatter(x, y)
+            plt.show()
+        best_x = xm*1.0
         # print(f"x={xm*180/np.pi}, y={ym}")
         dx *= 0.25  # reduce the step size
-        x[0] = xm  # reinitialise, ready to go again
-        y[0] = ym
+        x[0] = xm*1.0  # reinitialise, ready to go again
+        y[0] = ym*1.0
 
-    if plot:
-        plt.plot(plot_y)
-        plt.show()
+    # if debug:
+    #     plt.plot(plot_y)
+    #     plt.show()
 
     return xm, ym
 
