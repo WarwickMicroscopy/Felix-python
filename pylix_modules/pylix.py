@@ -1670,8 +1670,8 @@ def parabo3(x, y):
         x_v = -b/(2*a)  # x-coord
         y_v = c-b*b/(4*a)  # y-coord
     else:
-        x_v = x[1]
-        y_v = y[1]
+        x_v = x[np.argmin(y)]
+        y_v = y[np.argmin(y)]
 
     return x_v, y_v
 
