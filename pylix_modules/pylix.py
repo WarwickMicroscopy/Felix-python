@@ -207,7 +207,6 @@ def sg(big_k, g_pool):
     orthogonal reference frame, returned as sg.
     2) Calculates Bragg conditions for all g-vectors, sub-frame accuracy,
     returned as s0.
-    g_mag input to save recalculation.
     """
     g_mag = np.linalg.norm(g_pool, axis=1) + 1.0e-12
     big_k_mag = np.linalg.norm(big_k[0])
@@ -2064,14 +2063,10 @@ def z_rot(v, angle):
     t = np.copy(v.t0)
     x = t[:, 0] * np.cos(angle) + t[:, 1] * np.sin(angle)
     z = t[:, 2]
-    tim = time.time()
     tt_m2o = reference_frames(v.t_c2o, v.t_cr2or, x, z, v.n_frames,
                               v.frame_angle)
-    print(time.time()-tim)
     big_k = -v.big_k_mag * tt_m2o[:, :, 2]
-    print(time.time()-tim)
     s_g, bragg_calc = sg(big_k, v.g_obs)
-    print(time.time()-tim)
 
     return bragg_calc
 
@@ -2109,35 +2104,34 @@ def minimi(v, x0, dx, tol, param_type=1, plot=False):
     delta_y = 1e+10  # improvement each cycle to test against tol
     plot_y = []  # to plot if desired
     x[0] = x0
-    y[0] = fom(v, x[0])
+    y[0] = fom(v, x[0])  # first point
     best_y = y[0]*1.0
     plot_y.append(y[0])
     while delta_y > tol:
         x[1] = x[0] + dx
-        y[1] = fom(v, x[1])
+        y[1] = fom(v, x[1])  # second point
         if y[1] < y[0]:  # keep going
             dx = np.exp(0.5) * dx
         else:  # turn around
-            dx = -2 * dx
+            dx = -np.sqrt(5) * dx
         x[2] = x[1] + dx
-        y[2] = fom(v, x[2])
-        # fin = True: xm = predicted minimum
-        # fin = False: xm = next value to try
-        xm, fin = convex(x, y)
+        y[2] = fom(v, x[2])  # third point
+        xm, fin = convex(x, y)  # convexity test
+        # fin = True: xm = predicted minimum, False: xm = next value to try
         while fin is False:  # we don't have a minimum, keep going
             # replace the worst point
             i = np.argmax(y)
             x[i] = xm
             y[i] = fom(v, xm)
             xm, fin = convex(x, y)
-        # we have a predicted minimum
+        # we now have a predicted minimum
         ym = fom(v, xm)
         plot_y.append(ym)
         delta_y = best_y - ym  # improvement in y
         best_y = ym
         # print(f"x={xm*180/np.pi}, y={ym}")
         dx *= 0.25  # reduce the step size
-        x[0] = xm  # reinitialise ready to go again
+        x[0] = xm  # reinitialise, ready to go again
         y[0] = ym
 
     if plot:
