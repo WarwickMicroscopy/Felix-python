@@ -1413,7 +1413,7 @@ def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list,
     return
 
 
-def f_kirkland(z, g_magnitude): # added our two parameters for refinement. model now refers to IAM or kappa formalism
+def f_kirkland(z, g_magnitude):
     """
     calculates atomic scattering factor using the Kirkland model.
     From Appendix C of "Advanced Computing in Electron Microscopy", 2nd ed.
