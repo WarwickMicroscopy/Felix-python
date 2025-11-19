@@ -104,6 +104,7 @@ def calc_scattering_amplitudes(q, Z ,pv,kappa):
     core_density /= (4*np.pi)  
    
     
+    core_density = core_density / np.trapz(4*np.pi*r**2*core_density, r)
     
     
     for orbital in valence_orbitals:
@@ -155,14 +156,14 @@ def convert_x(Z,f_x,q):  # q is in angstrom ^-1
 
 
 def kappa_factors(q,Z,pv,kappa):
-    #return convert_x(Z,calc_scattering_amplitudes(q, Z, pv, kappa),q)
-    return calc_scattering_amplitudes(q, Z, pv, kappa)
+    return convert_x(Z,calc_scattering_amplitudes(q, Z, pv, kappa),q)
+    #return calc_scattering_amplitudes(q, Z, pv, kappa)
 
 #should handle values below 0.5 Q using kirkland values or some type of extrapolation
 
 #Z = 3  # Li
-Z= 8  #O
-pv = 6  # 1 valence electron
+Z= 3  #O
+pv = 1  # 1 valence electron
 kappa = 1
 
 Q = np.linspace(0.5, 10, 100)  # momentum transfer array 1/bohr
@@ -177,7 +178,7 @@ f_kirkland = px.f_kirkland(Z, g).ravel()
 
 
 plt.plot(Q, f_kappa, label='Kappa/PV')
-#plt.plot(Q, f_kirkland, label='Kirkland', linestyle='--')
+plt.plot(Q, f_kirkland, label='Kirkland', linestyle='--')
 plt.xlabel('Q (1/Å)')
 plt.ylabel('Electron scattering factor f(Q)')
 plt.legend()
