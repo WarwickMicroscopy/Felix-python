@@ -56,32 +56,53 @@ def calc_slater_orbitals(z, orbital,r):
     return R_total      # now return the radial function for our atom use this function and integrate it to get form factor
     
 
+def xray_form_factor_valence(r, rho, S, pv, k):
+    """
+    Vectorized valence form factor.
+    r   : (Nr,) radial grid
+    rho : (Nr,) valence density
+    S   : (Ns,) array of momentum-transfer values
+    pv  : number of valence electrons
+    k   : kappa scaling factor
+    """
+    r2 = r**2                       # precompute r^2
+    integrand_base = 4*np.pi*(k**3) * rho * r2  # shape (Nr,)
 
-def xray_form_factor_valence(r, rho, Q,pv,k):
-    # rho = electron density at r, Q = array of Q values
-    #S= Q/2*np.pi
-    
-    fQ = []
-    for q in Q:
-        integrand =  4*np.pi*(k**3)*rho * r**2 * np.sinc(q*r/np.pi)  # np.sinc(x) = sin(pi x)/(pi x)
-        fQ.append(np.trapz(integrand, r))
-    return pv*np.array(fQ)   #scale by number of electrons in valence
+    # build matrix for all s at once
+    sr = 2 * np.outer(S, r)         # shape (Ns, Nr)
+    integrand = integrand_base[None, :] * np.sinc(sr)  # shape (Ns, Nr)
+
+    # integrate along r for each s
+    fQ = np.trapz(integrand, r, axis=1)
+
+    return pv * fQ                   # scale by number of valence electrons
 
 
+def xray_form_factor_core(r, rho, S, pc):
+    """
+    Vectorized core form factor.
+    r   : (Nr,) radial grid
+    rho : (Nr,) core density
+    S   : (Ns,) array of momentum-transfer values
+    pc  : number of core electrons
+    """
+    r2 = r**2
+    integrand_base = 4*np.pi * rho * r2
 
-def xray_form_factor_core(r,rho,Q,pc):
-    fQ = []
-    for q in Q:
-        integrand =  4*np.pi*rho * r**2 * np.sinc(q*r/np.pi)  # np.sinc(x) = sin(pi x)/(pi x)
-        fQ.append(np.trapz(integrand, r))
-    return pc*np.array(fQ)
+    sr = 2 * np.outer(S, r)
+    integrand = integrand_base[None, :] * np.sinc(sr)
+
+    fQ = np.trapz(integrand, r, axis=1)
+
+    return pc * fQ
+
     
 
 def calc_scattering_amplitudes(q, Z ,pv,kappa):
     
    
     r_max = 20  # in angstrom
-    n_points = 10000
+    n_points = 1000
     r = np.linspace(1e-6, r_max, n_points)
     
     core_orbitals = fu.elements_info[Z]['core_orbitals']
@@ -104,7 +125,7 @@ def calc_scattering_amplitudes(q, Z ,pv,kappa):
     core_density /= (4*np.pi)  
    
     
-    core_density = core_density / np.trapz(4*np.pi*r**2*core_density, r)
+    core_density_n = core_density / np.trapz(4*np.pi*r**2*core_density, r)
     
     
     for orbital in valence_orbitals:
@@ -128,9 +149,13 @@ def calc_scattering_amplitudes(q, Z ,pv,kappa):
    #core_density = (1/(4*np.pi))*(R_core**2)  # this will depend on n,l if multipolar is considered so its more complicate than this , just using this as an example 
    #valence_density = (1/(4*np.pi))*(R_valence**2)# wavefucniton = R(r)Y_l^m(theta,phi)
     pc = n_e_core
-    density_total = pc*core_density+ pv*kappa**3*valence_density_n #p_atom(r) in kappa formalism 
-    f_valence = xray_form_factor_valence(r, valence_density_n, Q, pv, kappa)
-    f_core = xray_form_factor_core(r, core_density, Q, pc)
+    
+    
+    
+                       
+    #density_total = pc*core_density_n+ pv*kappa**3*valence_density_n #p_atom(r) in kappa formalism 
+    f_valence = xray_form_factor_valence(r,valence_density_n , q, pv, kappa) # so these actually work with g
+    f_core = xray_form_factor_core(r, core_density_n, q, pc)  # works with g
     
 
     
@@ -155,31 +180,38 @@ def convert_x(Z,f_x,q):  # q is in angstrom ^-1
 #close but not quite
 
 
-def kappa_factors(q,Z,pv,kappa):
-    return convert_x(Z,calc_scattering_amplitudes(q, Z, pv, kappa),q)
+def kappa_factors(g_magnitude,Z,pv,kappa):
+    
+    S = g_magnitude / (2*np.pi)  
+    
+    
+    return convert_x(Z,calc_scattering_amplitudes(S, Z, pv, kappa),S)
     #return calc_scattering_amplitudes(q, Z, pv, kappa)
 
 #should handle values below 0.5 Q using kirkland values or some type of extrapolation
 
-#Z = 3  # Li
-Z= 3  #O
-pv = 1  # 1 valence electron
+Z = 8  # Li
+#Z= 3  #O
+pv = 6  # 1 valence electron
 kappa = 1
+#pv of Nb is 5
+Q = np.linspace(3, 10, 100)  # momentum transfer array 1/bohr  so this is actually g_magnitude 
 
-Q = np.linspace(0.5, 10, 100)  # momentum transfer array 1/bohr
 
-S = Q / (2*np.pi)
-g= Q*2*np.pi
+xsca = Q/(2*np.pi)
 
 f_kappa = kappa_factors(Q, Z, pv, kappa).ravel()
 
-f_kirkland = px.f_kirkland(Z, g).ravel() 
+f_kirkland = px.f_kirkland(Z, Q).ravel() 
+
+#we get correct values when passing S to both kirkland and kappa factors rather than Q or g magnitude
+
+plt.plot(xsca, f_kappa, label='Kappa/PV')
+plt.plot(xsca, f_kirkland, label='Kirkland', linestyle='--')
 
 
 
-plt.plot(Q, f_kappa, label='Kappa/PV')
-plt.plot(Q, f_kirkland, label='Kirkland', linestyle='--')
-plt.xlabel('Q (1/Å)')
+plt.xlabel('S (1/Å)')   # sin(theta)/lambda
 plt.ylabel('Electron scattering factor f(Q)')
 plt.legend()
 plt.show()

@@ -63,11 +63,20 @@ def simulate(v):
     
     # Generate atomic numbers based on the elemental symbols
     atomic_number = np.array([fu.atomic_number_map[na] for na in atom_name])
+    atomic_number_basis =np.array([fu.atomic_number_map[s] for s in v.basis_atom_name])
+    
+    print("Precomputing atom core and valence densities")
+    for i in range(len(atomic_number_basis)):
+        
+        px.precompute_densities(atomic_number_basis[i],v.Basis_Kappa[i],v.Basis_Pv[i])
+        
    
+   
+    
     print(v.Basis_Kappa)
   
     print(v.Basis_Pv)
- 
+    
     
     
     
@@ -90,6 +99,7 @@ def simulate(v):
     # mean inner potential as the sum of scattering factors at g=0
     # multiplied by h^2/(2pi*m0*e*CellVolume)
     mip = 0.0
+    print(n_atoms)
     for i in range(n_atoms):  # get the scattering factor
         if v.scatter_factor_method == 0:
             mip += px.f_kirkland(atomic_number[i], 0.0)
@@ -100,7 +110,7 @@ def simulate(v):
         elif v.scatter_factor_method == 3:
             mip += px.f_doyle_turner(atomic_number[i], 0.0)
         elif v.scatter_factor_method ==4:
-            mip += px.kappa(atomic_number[i],0.0,kappas[i],pv[i])
+            mip += px.f_kirkland(atomic_number[i], 0.0)    # because we use kirkland for S<0.5 we can just set it here aswell
             
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
@@ -229,6 +239,7 @@ def simulate(v):
     g_matrix = g_pool[:, np.newaxis, :] - g_pool[np.newaxis, :, :]
     # g-vector magnitudes, array [n_hkl, n_hkl]
     g_magnitude = np.sqrt(np.sum(g_matrix**2, axis=2))
+   
 
     # Conversion factor from F_g to U_g
     Fg_to_Ug = relativistic_correction / (np.pi * cell_volume)

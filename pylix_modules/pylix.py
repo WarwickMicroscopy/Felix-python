@@ -8,6 +8,8 @@ from scipy.linalg import eig, inv
 from CifFile import CifFile
 import struct
 from pylix_modules import pylix_dicts as fu
+import math
+
 
 
 def read_inp_file(filename):
@@ -1111,8 +1113,8 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
         elif scatter_factor_method == 3:
             f_g = f_doyle_turner(atomic_number[i], g_magnitude)
         elif scatter_factor_method == 4:
-            f_g = kappa(atomic_number[i], g_magnitude, kappas[i], pv[i])
-        else:
+            f_g = kappa_factors(g_magnitude,atomic_number[i],pv[i],kappas[i])
+        else: 
             raise ValueError("No scattering factors chosen in felix.inp")
 
         # get the absorptive scattering factor (null for absorption_method==0)
@@ -1440,16 +1442,9 @@ def f_kirkland(z, g_magnitude):
 
 # calc scattering factors for core density and valence density seperately 
 
-def kappa(z,g_magnitude,kappa,pv):
-    
-    return f_kirkland(z,g_magnitude)*(1-pv) + f_kirkland(z,g_magnitude/kappa)*pv
-    
-    
-    # start with lithium for testing against kirkland
-    # will use hartree fock calculated slater coeffiecients to recreate radial electron distributions for
-    #the shells linking to core and valence electrons csn be determined using another tsble probably
-    #then fourier transform respective parts to get scattering factors for core and vslence and apply kappa model
-    
+
+
+
 
 def f_doyle_turner(z, g_magnitude):
     """
@@ -1465,7 +1460,7 @@ def f_doyle_turner(z, g_magnitude):
     ndarray: The calculated Doyle & Turner scattering factor.
     """
     # Convert g to s
-    s = g_magnitude / (4*np.pi)
+    s = g_magnitude / (2*np.pi)
 
     a = fu.doyle_turner[z-1, 0:8:2].reshape(-1, 1, 1)
     b = fu.doyle_turner[z-1, 1:8:2].reshape(-1, 1, 1)
@@ -1521,6 +1516,200 @@ def f_peng(z, g_magnitude):
     f_g = np.sum(a*np.exp(b_), axis=0)
 
     return f_g
+
+
+def calc_slater_orbitals(z, orbital,r):
+    
+    
+    #ok so now when we calc slater orbital we pass kappa scaled q 
+    #r, distance of electron from atomic nucleus#
+    #N is normalizing constant 
+
+    delta = np.array(fu.slater_coefficients[z][orbital]['delta'])
+    delta = delta / 0.52917721092
+       # convert to angstrom 
+    
+    C= np.array(fu.slater_coefficients[z][orbital]['coeff'])
+    
+    n = int(orbital[0])
+    
+    # for now we just state 1s contriutes to the core and 2s contributes to valence with a respective electron occupation of 2,1
+  
+    # we need array of R values to sample the electron density from so we can actually evaluate a fourier transofrm integral
+    
+    R_total = 0
+   
+    #Total radial finction is a superposition of these primitive radial functions and their corresponding expansion coefficent C_jln given 
+    #in out hartree fock equation
+    #delta is given next to each slater type orbital in the table 
+    
+    # after we fourier transform radial function to get form factor we need to use motte bethe formula to get to electron scattering factor
+    # then compare with kirkland to check agreement and upscale
+    
+    
+    for cj,zj in zip(C,delta):
+        Nj = ((2*zj)**(n+0.5))/(np.sqrt(math.factorial(2*n)))
+        S_j = Nj*r**(n-1)*np.exp(-zj*r)          # each electron is defined by a primitive slater orbital of this form 
+        R_total += cj*S_j
+        
+    
+    return R_total      # now return the radial function for our atom use this function and integrate it to get form factor
+    
+
+
+def xray_form_factor_valence(r, rho, S,pv,k):
+    # rho = electron density at r, Q = array of Q values
+    #S= Q/2*np.pi
+    #not vectorized currently 
+    fQ = []
+    for s in S:
+        integrand =  4*np.pi*(k**3)*rho * r**2 * np.sinc(2*s*r)  # np.sinc(x) = sin(pi x)/(pi x)
+        fQ.append(np.trapz(integrand, r))
+    return pv*np.array(fQ)   #scale by number of electrons in valence
+
+
+
+def xray_form_factor_core(r,rho,S,pc):
+    fQ = []
+    for s in S:
+        integrand =  4*np.pi*rho * r**2 * np.sinc(2*s*r)  # np.sinc(x) = sin(pi x)/(pi x)
+        fQ.append(np.trapz(integrand, r))
+    return pc*np.array(fQ)
+    
+
+
+
+def precompute_densities(Z,kappa,pv):
+       
+    r_max = 20  # in angstrom
+    n_points = 1000
+    r = np.linspace(1e-6, r_max, n_points)
+    
+
+    
+    core_orbitals = fu.elements_info[Z]['core_orbitals']
+    valence_orbitals = fu.elements_info[Z]['valence_orbitals']
+    core_density =0
+    valence_density =0
+    print(core_orbitals)
+    print(valence_orbitals)
+    n_e_core=0
+    for orbital in core_orbitals:
+       
+        n_e_core += fu.elements_info[Z]['occupation'][orbital]
+        R=  calc_slater_orbitals(Z,orbital,r)
+       
+        
+        core_density += (R**2)
+        
+        
+        
+    core_density /= (4*np.pi)  
+   
+    
+    core_density_n = core_density / np.trapz(4*np.pi*r**2*core_density, r)
+    
+    
+    for orbital in valence_orbitals:
+        
+        R= calc_slater_orbitals(Z,orbital,r*kappa)
+        
+       
+        
+        valence_density +=  (R**2)
+        
+        
+        
+    valence_density /= (4*np.pi)  
+    valence_density_n = valence_density / np.trapz(4*np.pi*r**2*valence_density, r)   # need to normalize to 1 electron then scale by pv after 
+    
+
+    
+    #N_core =  (4*np.pi * np.trapz(r**2 * core_density, r))
+   # N_valence = (4*np.pi * np.trapz(r**2 * valence_density, r))
+  
+   #core_density = (1/(4*np.pi))*(R_core**2)  # this will depend on n,l if multipolar is considered so its more complicate than this , just using this as an example 
+   #valence_density = (1/(4*np.pi))*(R_valence**2)# wavefucniton = R(r)Y_l^m(theta,phi)
+    
+    #density_total = pc*core_density+ pv*kappa**3*valence_density_n #p_atom(r) in kappa formalism 
+    fu.precomputed_densities[Z] ={
+        "r": r.copy(),
+        "core": core_density_n.copy(),
+        "valence": valence_density_n.copy()
+        }
+    
+    
+    
+    return -1
+
+
+
+
+def calc_scattering_amplitudes(q, Z ,pv,kappa):
+    
+    
+    rho_core = fu.precomputed_densities[Z]["core"]
+    rho_val = fu.precomputed_densities[Z]["valence"]
+    r = fu.precomputed_densities[Z]["r"]
+    pc = fu.elements_info[Z]['pc']
+   # precomputed densities
+   
+    print(Z)
+    f_valence = xray_form_factor_valence(r, rho_val, q, pv, kappa) # so these actually work with g
+    f_core = xray_form_factor_core(r, rho_core, q, pc)  # works with g
+    
+
+    f_x_total =  f_core + f_valence    #fourier transform of the calculated radial funciton in 3d r from 0 to infinity 
+    
+                   
+    return f_x_total 
+
+def convert_x(Z,f_x,q):  # q is in angstrom ^-1 
+       
+    Bohr = 0.52917721067 # in angstrom
+    f_e = (Z - f_x) / (2 * np.pi**2 * Bohr * q**2)     # at q is 0 must handle singularity defined in kirkland book pg 295
+ #motte bethe formula
+   
+    
+   
+    return f_e # factor off here not sure why .
+
+
+# need to carefully look through and fix scaling of function 
+#close but not quite
+
+
+def kappa_factors(g, Z, pv, kappa):
+    orig_shape = g.shape
+    g_flat = g.flatten()
+    S = g_flat / (2*np.pi)
+
+    f_out = np.zeros_like(g_flat, dtype=float)
+
+    mask = S < 0.5
+    if np.any(mask):
+        f_out[mask] = np.ravel(f_kirkland(Z, g_flat[mask]))
+
+    mask = S >= 0.5
+    if np.any(mask):
+        f_out[mask] = convert_x(
+            Z,
+            calc_scattering_amplitudes(S[mask], Z, pv, kappa),
+            S[mask]
+        )
+
+    return f_out.reshape(orig_shape)
+    
+    
+   
+        
+   
+    #return calc_scattering_amplitudes(q, Z, pv, kappa)
+
+#should handle values below 0.5 Q using kirkland values or some type of extrapolation
+
+
+
 
 
 

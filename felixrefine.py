@@ -248,9 +248,9 @@ v.Basis_Pv = pv_initial_basis
 #some initial reasonable pvs for testing
 #print(v.basis_atom_name)
 
-v.Basis_Pv[0] = 0.294  #Li
-v.Basis_Pv[1] = 0.13774 #Nb
-v.Basis_Pv[2] = 0.6725  #O
+v.Basis_Pv[0] = 1  #Li
+v.Basis_Pv[1] = 5 #Nb
+v.Basis_Pv[2] = 6  #O
 # convert to array
 
 
@@ -258,9 +258,9 @@ v.Basis_Pv[2] = 0.6725  #O
 # kappas (default 1.0)
 kappas = np.ones_like(pv_initial_basis)
 v.Basis_Kappa = kappas
-v.Basis_Kappa[0] = 1.1724888
-v.Basis_Kappa[1] = 1.122675
-v.Basis_Kappa[2] = 0.93547
+v.Basis_Kappa[0] = 1.0
+v.Basis_Kappa[1] = 1.0
+v.Basis_Kappa[2] = 1.0
 #refined kappa : [1.21517673 1.12267508 0.93547286]
 # expand per atom in full unit cell
  
@@ -282,6 +282,8 @@ if v.n_thickness == 1:
     print(f"Specimen thickness {v.initial_thickness/10} nm")
 else:
     print(f"{v.n_thickness} thicknesses: {', '.join(map(str, v.thickness/10))} nm")
+    
+    
 
 if v.scatter_factor_method == 0:
     print("Using Kirkland scattering factors")
@@ -292,7 +294,7 @@ elif v.scatter_factor_method == 2:
 elif v.scatter_factor_method == 3:
     print("Using Doyle & Turner scattering factors")
 elif v.scatter_factor_method == 4:
-    print("using Kirkland scattering factors with Kappa formalism")
+    print("using orbital HF scattering factors with Kappa formalism")
 else:
     raise ValueError("No scattering factors chosen in felix.inp")
 

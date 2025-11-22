@@ -17,7 +17,9 @@ elements_info = {
         'occupation': {
             '1s': 2,
             '2s': 1
-        }
+        },
+        'pc':2,
+        'pv':1
     },
     8: {  # Oxygen
         'symbol': 'O',
@@ -28,7 +30,9 @@ elements_info = {
             '1s': 2,
             '2s': 2,
             '2p': 4
-        }
+        },
+        'pc':36,
+        'pv':5
     },
     41: { # Niobium
          'symbol': 'Nb',
@@ -46,7 +50,9 @@ elements_info = {
              '4p': 6,
              '4d': 4,
              '5s': 1
-         }
+         },
+         'pc':36,
+         'pv':5
     }
 }
 neutral_valence_states = {
@@ -124,6 +130,28 @@ slater_coefficients = {
          
     }
 }
+r_grid =[]
+rho_core =[]
+rho_valence= []
+precomputed_densities = {
+    3: {
+        "r": r_grid,
+        "core": rho_core,
+        "valence": rho_valence
+    },
+    8: {
+        "r": r_grid,
+        "core": rho_core,
+        "valence": rho_valence
+    },
+    41: {
+        "r": r_grid,
+        "core": rho_core,
+        "valence": rho_valence
+    }
+}
+
+
 
 
 
