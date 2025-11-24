@@ -8,6 +8,7 @@ from scipy.linalg import eig, inv
 from CifFile import CifFile
 import struct
 from pylix_modules import pylix_dicts as fu
+from numba import njit, prange
 import math
 
 
@@ -1113,6 +1114,7 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
         elif scatter_factor_method == 3:
             f_g = f_doyle_turner(atomic_number[i], g_magnitude)
         elif scatter_factor_method == 4:
+            print("Calculating scattering factors for atom", i+1, "/", n_atoms)
             f_g = kappa_factors(g_magnitude,atomic_number[i],pv[i],kappas[i])
         else: 
             raise ValueError("No scattering factors chosen in felix.inp")
@@ -1556,7 +1558,7 @@ def calc_slater_orbitals(z, orbital,r):
     return R_total      # now return the radial function for our atom use this function and integrate it to get form factor
     
 
-
+"""
 def xray_form_factor_valence(r, rho, S,pv,k):
     # rho = electron density at r, Q = array of Q values
     #S= Q/2*np.pi
@@ -1576,6 +1578,68 @@ def xray_form_factor_core(r,rho,S,pc):
         fQ.append(np.trapz(integrand, r))
     return pc*np.array(fQ)
     
+"""
+
+@njit(fastmath=True)
+def _sinc_numba(x):
+    if x == 0.0:
+        return 1.0
+    pix = math.pi * x
+    return math.sin(pix) / pix
+
+@njit(fastmath=True, parallel=True)
+def _form_factor_kernel(r, rho, S, scale):
+    """
+    Multi-threaded Numba kernel.
+    Parallelized over S.
+    Computes:  f_Q(s) = scale * ∫ 4*pi*rho*r^2 * sinc(2*s*r) dr
+    """
+    Nr = r.shape[0]
+    Ns = S.shape[0]
+
+    # Precompute base = 4*pi * rho * r^2
+    base = np.empty(Nr, dtype=np.float64)
+    for j in range(Nr):
+        base[j] = 4.0 * math.pi * rho[j] * (r[j] * r[j])
+
+    out = np.zeros(Ns, dtype=np.float64)
+
+    # Parallel loop over S
+    for i in prange(Ns):
+        s = S[i]
+        acc = 0.0
+
+        # manual trapezoid rule along r
+        for j in range(Nr - 1):
+            x1 = 2.0 * s * r[j]
+            x2 = 2.0 * s * r[j+1]
+
+            f1 = base[j]   * _sinc_numba(x1)
+            f2 = base[j+1] * _sinc_numba(x2)
+
+            dr = r[j+1] - r[j]
+            acc += 0.5 * (f1 + f2) * dr
+
+        out[i] = scale * acc
+
+    return out
+
+def xray_form_factor_valence(r, rho, S, pv, k):
+    r = np.asarray(r, dtype=np.float64)
+    rho = np.asarray(rho, dtype=np.float64)
+    S = np.asarray(S, dtype=np.float64)
+
+    scale = pv * (k**3)
+    return _form_factor_kernel(r, rho, S, scale)
+
+def xray_form_factor_core(r, rho, S, pc):
+    r = np.asarray(r, dtype=np.float64)
+    rho = np.asarray(rho, dtype=np.float64)
+    S = np.asarray(S, dtype=np.float64)
+
+    scale = pc
+    return _form_factor_kernel(r, rho, S, scale)
+
 
 
 
@@ -1668,7 +1732,7 @@ def convert_x(Z,f_x,q):  # q is in angstrom ^-1
        
     Bohr = 0.52917721067 # in angstrom
     f_e = (Z - f_x) / (2 * np.pi**2 * Bohr * q**2)     # at q is 0 must handle singularity defined in kirkland book pg 295
- #motte bethe formula
+   # motte bethe formula
    
     
    
@@ -1676,8 +1740,8 @@ def convert_x(Z,f_x,q):  # q is in angstrom ^-1
 
 
 # need to carefully look through and fix scaling of function 
-#close but not quite
-
+# close but not quite
+  
 
 def kappa_factors(g, Z, pv, kappa):
     orig_shape = g.shape
