@@ -31,8 +31,8 @@ elements_info = {
             '2s': 2,
             '2p': 4
         },
-        'pc':36,
-        'pv':5
+        'pc':2,
+        'pv':6
     },
     41: { # Niobium
          'symbol': 'Nb',
@@ -133,21 +133,25 @@ slater_coefficients = {
 r_grid =[]
 rho_core =[]
 rho_valence= []
+r2=0
 precomputed_densities = {
     3: {
         "r": r_grid,
         "core": rho_core,
-        "valence": rho_valence
+        "valence": rho_valence,
+        "r2": r2
     },
     8: {
         "r": r_grid,
         "core": rho_core,
-        "valence": rho_valence
+        "valence": rho_valence,
+        "r2": r2
     },
     41: {
         "r": r_grid,
         "core": rho_core,
-        "valence": rho_valence
+        "valence": rho_valence,
+        "r2": r2
     }
 }
 

@@ -1114,6 +1114,7 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
         elif scatter_factor_method == 3:
             f_g = f_doyle_turner(atomic_number[i], g_magnitude)
         elif scatter_factor_method == 4:
+            
             print("Calculating scattering factors for atom", i+1, "/", n_atoms)
             f_g = kappa_factors(g_magnitude,atomic_number[i],pv[i],kappas[i])
         else: 
@@ -1655,8 +1656,7 @@ def precompute_densities(Z,kappa,pv):
     valence_orbitals = fu.elements_info[Z]['valence_orbitals']
     core_density =0
     valence_density =0
-    print(core_orbitals)
-    print(valence_orbitals)
+    
     n_e_core=0
     for orbital in core_orbitals:
        
@@ -1695,11 +1695,21 @@ def precompute_densities(Z,kappa,pv):
    #core_density = (1/(4*np.pi))*(R_core**2)  # this will depend on n,l if multipolar is considered so its more complicate than this , just using this as an example 
    #valence_density = (1/(4*np.pi))*(R_valence**2)# wavefucniton = R(r)Y_l^m(theta,phi)
     
-    #density_total = pc*core_density+ pv*kappa**3*valence_density_n #p_atom(r) in kappa formalism 
+    pc = fu.elements_info[Z]['pc']
+    density_total = pc*core_density_n+ pv*kappa**3*valence_density_n #p_atom(r) in kappa formalism 
+    
+    integrand = density_total*np.pi*r**2
+    r2_expect = np.trapz(r**2*integrand, x=r)/np.trapz(integrand,x=r)   #mean square radius of electrons in the atom
+    fu.elements_info[Z]["r2"] = r2_expect
+    
+    
+    
+    
     fu.precomputed_densities[Z] ={
         "r": r.copy(),
         "core": core_density_n.copy(),
-        "valence": valence_density_n.copy()
+        "valence": valence_density_n.copy(),
+        "r2": r2_expect
         }
     
     
@@ -1718,7 +1728,7 @@ def calc_scattering_amplitudes(q, Z ,pv,kappa):
     pc = fu.elements_info[Z]['pc']
    # precomputed densities
    
-    print(Z)
+   
     f_valence = xray_form_factor_valence(r, rho_val, q, pv, kappa) # so these actually work with g
     f_core = xray_form_factor_core(r, rho_core, q, pc)  # works with g
     
@@ -1728,15 +1738,26 @@ def calc_scattering_amplitudes(q, Z ,pv,kappa):
                    
     return f_x_total 
 
-def convert_x(Z,f_x,q):  # q is in angstrom ^-1 
-       
-    Bohr = 0.52917721067 # in angstrom
-    f_e = (Z - f_x) / (2 * np.pi**2 * Bohr * q**2)     # at q is 0 must handle singularity defined in kirkland book pg 295
-   # motte bethe formula
-   
-    
-   
-    return f_e # factor off here not sure why .
+def convert_x(Z, f_x, q):
+    Bohr =0.52917721067 # in angstrom
+    q = np.asarray(q)
+    f_x = np.asarray(f_x)
+
+    # Output array
+    f_e = np.zeros_like(q, dtype=float)
+
+    # Mask where q == 0
+    mask0 = (q == 0)
+    maskN = ~mask0  # q ≠ 0
+
+    # Special case for q = 0 (Ibers correction)
+    r2 = fu.elements_info[Z]["r2"]
+    f_e[mask0] = (Z * r2) / (3 * Bohr)
+
+    # General Motte–Bethe formula
+    f_e[maskN] = (Z - f_x[maskN]) / (2 * np.pi**2 * Bohr * q[maskN]**2)
+
+    return f_e
 
 
 # need to carefully look through and fix scaling of function 
@@ -1744,23 +1765,19 @@ def convert_x(Z,f_x,q):  # q is in angstrom ^-1
   
 
 def kappa_factors(g, Z, pv, kappa):
+  
     orig_shape = g.shape
     g_flat = g.flatten()
     S = g_flat / (2*np.pi)
+   
 
     f_out = np.zeros_like(g_flat, dtype=float)
-
-    mask = S < 0.5
-    if np.any(mask):
-        f_out[mask] = np.ravel(f_kirkland(Z, g_flat[mask]))
-
-    mask = S >= 0.5
-    if np.any(mask):
-        f_out[mask] = convert_x(
-            Z,
-            calc_scattering_amplitudes(S[mask], Z, pv, kappa),
-            S[mask]
-        )
+  
+    f_out = convert_x(
+        Z,
+        calc_scattering_amplitudes(S, Z, pv, kappa),
+        S)
+        
 
     return f_out.reshape(orig_shape)
     

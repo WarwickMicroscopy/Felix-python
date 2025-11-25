@@ -194,7 +194,13 @@ def calc_scattering_amplitudes(q, Z ,pv,kappa):
     
     
                        
-    #density_total = pc*core_density_n+ pv*kappa**3*valence_density_n #p_atom(r) in kappa formalism 
+    density_total = pc*core_density_n+ pv*kappa**3*valence_density_n #p_atom(r) in kappa formalism 
+    
+    integrand = density_total*np.pi*r**2
+    r2_expect = np.trapz(r**2*integrand, x=r)/np.trapz(integrand,x=r)   #mean square radius of electrons in the atom
+    fu.elements_info[Z]["r2"] = r2_expect
+    
+    
     f_valence = xray_form_factor_valence(r,valence_density_n , q, pv, kappa) # so these actually work with g
     f_core = xray_form_factor_core(r, core_density_n, q, pc)  # works with g
     #f_valence = xray_form_factor_valence(r, valence_density_n, q, pv, kappa)
@@ -207,15 +213,25 @@ def calc_scattering_amplitudes(q, Z ,pv,kappa):
                    
     return f_x_total 
 
-def convert_x(Z,f_x,q):  # q is in angstrom ^-1 
-       
-    
-    f_e = (Z - f_x) / (2 * np.pi**2 * Bohr * q**2)     # at q is 0 must handle singularity defined in kirkland book pg 295
- #motte bethe formula
-   
-    
-   
-    return f_e # factor off here not sure why .
+def convert_x(Z, f_x, q):
+    q = np.asarray(q)
+    f_x = np.asarray(f_x)
+
+    # Output array
+    f_e = np.zeros_like(q, dtype=float)
+
+    # Mask where q == 0
+    mask0 = (q == 0)
+    maskN = ~mask0  # q ≠ 0
+
+    # Special case for q = 0 (Ibers correction)
+    r2 = fu.elements_info[Z]["r2"]
+    f_e[mask0] = (Z * r2) / (3 * Bohr)
+
+    # General Motte–Bethe formula
+    f_e[maskN] = (Z - f_x[maskN]) / (2 * np.pi**2 * Bohr * q[maskN]**2)
+
+    return f_e
 
 
 # need to carefully look through and fix scaling of function 
@@ -237,7 +253,7 @@ Z = 8  # Li
 pv = 6  # 1 valence electron
 kappa = 1
 #pv of Nb is 5
-Q = np.linspace(0.5, 10, 10000)  # momentum transfer array 1/bohr  so this is actually g_magnitude 
+Q = np.linspace(0, 10, 10000)  # momentum transfer array 1/bohr  so this is actually g_magnitude 
 
 
 xsca = Q/(2*np.pi)

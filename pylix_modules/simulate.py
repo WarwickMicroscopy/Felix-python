@@ -570,22 +570,22 @@ def update_variables(v):
             
             #refinig kappa values in basis 
         elif variable_type == 10:
-            #if 0.7 < v.refined_variable[i] < 1.3:  # must lie in a reasonable range
-           #     v.Basis_Kappa[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
-          #  else:
+            if 0.7 < v.refined_variable[i] < 1.3:  # must lie in a reasonable range
+                v.Basis_Kappa[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
+            else:
              #   v.Basis_Kappa[v.atom_refine_flag[i]] = 0.0
-             v.Basis_Kappa[v.atom_refine_flag[i]] = np.clip(v.refined_variable[i], 0.7, 1.3)
+                v.Basis_Kappa[v.atom_refine_flag[i]] = np.clip(v.refined_variable[i], 0.7, 1.3)
 
 
             
            
             #refining Pv values in basis 
         elif variable_type == 11:
-           #if 0.01 < v.refined_variable[i] < 0.7:  # must lie in a reasonable range
-            #    v.Basis_Pv[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
-           # else:
-             #   v.Basis_Pv[v.atom_refine_flag[i]] = 0.0
-             v.Basis_Pv[v.atom_refine_flag[i]] = np.clip(v.refined_variable[i], 0.01, 0.9)
+           if v.refined_variable[i]*0.5 < v.refined_variable[i] < v.refined_variable[i]*1.5:  # must lie in a reasonable range
+                v.Basis_Pv[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
+           else: 
+                v.Basis_Pv[v.atom_refine_flag[i]] = 0.0
+               #v.Basis_Pv[v.atom_refine_flag[i]] = np.clip(v.refined_variable[i], ,1.5 )
             
         
             

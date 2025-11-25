@@ -211,56 +211,31 @@ v.g_limit = v.g_limit * 2 * np.pi
 
 
 
-pv_initial_basis = []   
 
-for s in v.atom_site_type_symbol:
-    element = ''.join([c for c in s if c.isalpha()])  # extract element letters
-    number = int(''.join([c for c in s if c.isdigit()]))  # number of electrons lost/gained
-    sign = '+' if '+' in s else '-'  # determine if lost or gained
-    
-    
-    
-    # compute valence electrons remaining
-    if sign == '+':
-        valence_left = max(fu.neutral_valence_states[element] - number, 0)
-        total = fu.atomic_number_map[element] -number
-    else:  # gained electrons
-        valence_left = fu.neutral_valence_states[element] + number
-        total = fu.atomic_number_map[element] +number
-        
-    
-    # total electrons from atomic_number_map
-    #clip if values are extreme 1/0
-   
-    
-    # compute fraction
-    pv = valence_left / total
-    if pv ==0:
-        pv=0.1
-    elif pv ==1:
-        pv= 0.9
-    pv_initial_basis.append(pv)
+ 
 
 #for i, atom in enumerate(atom_name):
     #if 'O' in atom:   # matches 'O1', 'O2-', etc.
        # pv_initial[i] = 0.8
-v.Basis_Pv = pv_initial_basis
+
 #some initial reasonable pvs for testing
 #print(v.basis_atom_name)
 
-v.Basis_Pv[0] = 1  #Li
-v.Basis_Pv[1] = 5 #Nb
-v.Basis_Pv[2] = 6  #O
-# convert to array
 
+v.Basis_Pv = np.zeros_like(v.atom_site_label,dtype=float)
+v.Basis_Kappa = np.zeros_like(v.atom_site_label,dtype=float)
+atomic_number = np.array([fu.atomic_number_map[na] for na in v.basis_atom_name])
+print(type(v.Basis_Kappa))
+for i in range(len(atomic_number)):
+    v.Basis_Pv[i]= fu.elements_info[atomic_number[i]]["pv"]
+    v.Basis_Kappa[i] = 1.0  #set all kappa values to 1 initially 
 
+#setting up initial pv values 
+print(v.Basis_Kappa)
 
 # kappas (default 1.0)
-kappas = np.ones_like(pv_initial_basis)
-v.Basis_Kappa = kappas
-v.Basis_Kappa[0] = 1.0
-v.Basis_Kappa[1] = 1.0
-v.Basis_Kappa[2] = 1.0
+
+
 #refined kappa : [1.21517673 1.12267508 0.93547286]
 # expand per atom in full unit cell
  
@@ -331,9 +306,9 @@ if 'H' in v.refine_mode:
 if 'I' in v.refine_mode:
     print("Refining Accelerating Voltage, I")
 if 'J' in v.refine_mode:
-    print("Refining Kappa values, k")
+    print("Refining Kappa values, J")
 if 'K' in v.refine_mode:
-    print("Refining Pv vales, k")
+    print("Refining Pv vales, K")
     
 
 # %% read felix.hkl
