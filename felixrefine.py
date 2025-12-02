@@ -233,6 +233,17 @@ for i in range(len(atomic_number)):
 #setting up initial pv values 
 print(v.Basis_Kappa)
 
+'''
+v.Basis_Pv[0]= 0.9994
+v.Basis_Pv[1] = 4.997
+v.Basis_Pv[2]= 5.985
+v.Basis_Kappa[0]= 1.3
+v.Basis_Kappa[1]= 1.01
+v.Basis_Kappa[2]= 1.01
+
+'''
+
+
 # kappas (default 1.0)
 
 

@@ -248,9 +248,9 @@ def kappa_factors(g_magnitude,Z,pv,kappa):
 
 #should handle values below 0.5 Q using kirkland values or some type of extrapolation
 
-Z = 8  # Li
+Z = 41  # Li
 #Z= 3  #O
-pv = 6  # 1 valence electron
+pv = 5  # 1 valence electron
 kappa = 1
 #pv of Nb is 5
 Q = np.linspace(0, 10, 10000)  # momentum transfer array 1/bohr  so this is actually g_magnitude 
