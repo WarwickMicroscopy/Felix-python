@@ -41,10 +41,11 @@ def simulate(v):
     electron_wave_vector_magnitude = 2.0 * np.pi / electron_wavelength
     # Relativistic correction
     relativistic_correction = 1.0 / np.sqrt(1.0 - (electron_velocity / c)**2)
-    # Conversion from scattering factor to volts
-    cell_volume = v.cell_a*v.cell_b*v.cell_c*np.sqrt(1.0-np.cos(v.cell_alpha)**2
+    # Cell volume
+    cell_volume = v.cell_a*v.cell_b*v.cell_c*np.sqrt(1.-np.cos(v.cell_alpha)**2
                   - np.cos(v.cell_beta)**2 - np.cos(v.cell_gamma)**2
                   +2.0*np.cos(v.cell_alpha)*np.cos(v.cell_beta)*np.cos(v.cell_gamma))
+    # Conversion from scattering factor to volts
     scatt_fac_to_volts = ((h**2) /
                           (2.0*np.pi * m_e * e * cell_volume * (angstrom**2)))
 
@@ -53,36 +54,27 @@ def simulate(v):
     # fill the unit cell and get mean inner potential
     # when iterating we only do it if necessary?
     # if v.iter_count == 0 or v.current_variable_type < 6:
-    #print (v.atom_site_type_symbol)
-    
-    atom_position, atom_label,atom_type, atom_name, B_iso, occupancy, unique_aniso_matrixes,pv,kappas = \
+    # print (v.atom_site_type_symbol)
+
+    atom_position, atom_label, atom_type, atom_name, B_iso, occupancy, \
+        unique_aniso_matrixes, pv, kappas = \
         px.unique_atom_positions(
-            v.symmetry_matrix, v.symmetry_vector, v.basis_atom_label,v.atom_site_type_symbol,
-            v.basis_atom_name,
-            v.basis_atom_position, v.basis_B_iso, v.basis_occupancy, v.aniso_matrix,v.Basis_Pv,v.Basis_Kappa)
-    
+            v.symmetry_matrix, v.symmetry_vector, v.basis_atom_label,
+            v.atom_site_type_symbol, v.basis_atom_name, v.basis_atom_position,
+            v.basis_B_iso, v.basis_occupancy, v.basis_u_ij, v.basis_pv,
+            v.basis_kappa)
+
     # Generate atomic numbers based on the elemental symbols
     atomic_number = np.array([fu.atomic_number_map[na] for na in atom_name])
-    atomic_number_basis =np.array([fu.atomic_number_map[s] for s in v.basis_atom_name])
-    
+    atomic_number_basis = np.array([fu.atomic_number_map[s] for s in v.basis_atom_name])
+
     print("Precomputing atom core and valence densities")
     for i in range(len(atomic_number_basis)):
-        
-        px.precompute_densities(atomic_number_basis[i],v.Basis_Kappa[i],v.Basis_Pv[i])
-        
-   
-   
-    
-    print(v.Basis_Kappa)
-  
-    print(v.Basis_Pv)
-    
-    
-    
-    
-   
-    
-   
+        px.precompute_densities(atomic_number_basis[i],v.basis_kappa[i],v.basis_pv[i])
+
+    print(v.basis_kappa)
+    print(v.basis_pv)
+
     n_atoms = len(atom_label)
     if v.iter_count == 0:
         print("  There are "+str(n_atoms)+" atoms in the unit cell")

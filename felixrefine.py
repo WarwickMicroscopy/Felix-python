@@ -52,7 +52,7 @@ v.iter_count = 0
 # cif_dict is a dictionary of value-key pairs.  values are given as tuples
 # with the second number the uncertainty in the first.  Nothing is currently
 # done with these uncertainties...
-cif_dict = px.read_cif('AnIso.cif')
+cif_dict = px.read_cif('felix.cif')
 v.update_from_dict(cif_dict)
 # ====== extract cif data into working variables v
 v.space_group = v.symmetry_space_group_name_h_m
@@ -90,11 +90,7 @@ v.cell_beta = v.cell_angle_beta[0]*np.pi/180.0
 v.cell_gamma = v.cell_angle_gamma[0]*np.pi/180.0
 n_basis = len(v.atom_site_label)
 
-#oxidation state and type label 
-
-
-
-
+# oxidation state and type label
 
 # symmetry operations
 if "space_group_symop_operation_xyz" in cif_dict:
@@ -132,49 +128,38 @@ v.basis_atom_position = \
                      np.array([tup[0] for tup in v.atom_site_fract_y]),
                      np.array([tup[0] for tup in v.atom_site_fract_z])))
 
-
-
-# Debye-Waller factor
+# Thermal displacement parameters, we work with u_ij
 if "atom_site_b_iso_or_equiv" in cif_dict:
     v.basis_B_iso = np.array([tup[0] for tup in v.atom_site_b_iso_or_equiv])
+    v.basis_u_iso = v.basis_B_iso/(8 * np.pi**2)
 elif "atom_site_u_iso_or_equiv" in cif_dict:
-    v.basis_B_iso = np.array([tup[0] for tup in
-                              v.atom_site_u_iso_or_equiv]) * 8 * np.pi**2
-   
-v.aniso_matrix = np.zeros((n_basis, 3, 3)) 
+    v.basis_u_iso = np.array([tup[0] for tup in
+                              v.atom_site_u_iso_or_equiv])
+    v.basis_B_iso = v.basis_u_iso * 8 * np.pi**2  # *** TO BE DELETED ***
+# ADP tensor Uij with isotropic components on the diagonal
+v.basis_u_ij = np.zeros((n_basis, 3, 3))
+idx = np.arange(3)
+v.basis_u_ij[:, idx, idx] = v.basis_u_iso[:, None]
 
-v.basis_U_iso = np.array([tup[0] for tup in
-                          v.atom_site_u_iso_or_equiv])
-
-v.aniso_matrix[2] = np.diag([v.basis_U_iso[0],v.basis_U_iso[0],v.basis_U_iso[0]])
-
-# Anisotropic Debye-Waller factor
-if v.atom_site_aniso_u_11 is not None:
-    v.aniso_U11 = np.array([tup[0] for tup in v.atom_site_aniso_u_11])
-
-    v.aniso_U22 = np.array([tup[0] for tup in v.atom_site_aniso_u_22])
-
-    v.aniso_U33 = np.array([tup[0] for tup in v.atom_site_aniso_u_33])
-
-    v.aniso_U12 = np.array([tup[0] for tup in v.atom_site_aniso_u_12])
-
-    v.aniso_U13 = np.array([tup[0] for tup in v.atom_site_aniso_u_13])
-
-    v.aniso_U23 = np.array([tup[0] for tup in v.atom_site_aniso_u_23])
-
-    
-    
-    for i in range(len(v.aniso_U11)):
-        v.aniso_matrix[i] = \
-            np.column_stack((np.array([v.aniso_U11[i], v.aniso_U12[i], v.aniso_U13[i]]),
-                             np.array([v.aniso_U12[i], v.aniso_U22[i], v.aniso_U23[i]]),
-                             np.array([v.aniso_U13[i], v.aniso_U23[i], v.aniso_U33[i]])))
-
-
-
-
-
-
+# check for anisotropic displacement parameters
+# and if they exist match them with the correct basis atom
+if v.atom_site_aniso_label is not None:
+    # remove any trailing blanks
+    v.atom_site_aniso_label = [s.rstrip() for s in v.atom_site_aniso_label]
+    # link to labels in the basis
+    for i in range(n_basis):
+        for j in range(len(v.atom_site_aniso_label)):
+            if v.atom_site_aniso_label[j] == v.basis_atom_label[i]:
+                # the data is in 2-tuples (second value is the error)
+                v.basis_u_ij[i, 0, 0] = v.atom_site_aniso_u_11[j][0]
+                v.basis_u_ij[i, 1, 1] = v.atom_site_aniso_u_22[j][0]
+                v.basis_u_ij[i, 2, 2] = v.atom_site_aniso_u_33[j][0]
+                v.basis_u_ij[i, 0, 1] = v.atom_site_aniso_u_12[j][0]
+                v.basis_u_ij[i, 1, 0] = v.atom_site_aniso_u_12[j][0]
+                v.basis_u_ij[i, 0, 2] = v.atom_site_aniso_u_13[j][0]
+                v.basis_u_ij[i, 2, 0] = v.atom_site_aniso_u_13[j][0]
+                v.basis_u_ij[i, 1, 2] = v.atom_site_aniso_u_23[j][0]
+                v.basis_u_ij[i, 2, 1] = v.atom_site_aniso_u_23[j][0]
 
 # occupancy, assume it's unity if not specified
 if v.atom_site_occupancy is not None:
@@ -208,30 +193,16 @@ v.atomic_sites = np.array(v.atomic_sites, dtype='int')
 # crystallography exp(2*pi*i*g.r) to physics convention exp(i*g.r)
 v.g_limit = v.g_limit * 2 * np.pi
 
-
-
-
-
- 
-
-#for i, atom in enumerate(atom_name):
-    #if 'O' in atom:   # matches 'O1', 'O2-', etc.
-       # pv_initial[i] = 0.8
-
-#some initial reasonable pvs for testing
-#print(v.basis_atom_name)
-
-
-v.Basis_Pv = np.zeros_like(v.atom_site_label,dtype=float)
-v.Basis_Kappa = np.zeros_like(v.atom_site_label,dtype=float)
+v.basis_pv = np.zeros(n_basis, dtype=float)
+v.basis_kappa = np.zeros(n_basis, dtype=float)
 atomic_number = np.array([fu.atomic_number_map[na] for na in v.basis_atom_name])
-print(type(v.Basis_Kappa))
-for i in range(len(atomic_number)):
-    v.Basis_Pv[i]= fu.elements_info[atomic_number[i]]["pv"]
-    v.Basis_Kappa[i] = 1.0  #set all kappa values to 1 initially 
+print(type(v.basis_kappa))
+for i in range(n_basis):
+    v.basis_pv[i]= fu.elements_info[atomic_number[i]]["pv"]
+    v.basis_kappa[i] = 1.0  #set all kappa values to 1 initially 
 
 #setting up initial pv values 
-print(v.Basis_Kappa)
+print(v.basis_kappa)
 
 '''
 v.Basis_Pv[0]= 0.9994
@@ -392,7 +363,7 @@ if 'S' not in v.refine_mode:
 
     if 'E' in v.refine_mode:  # Anisotropic DW
         for i in range(len(v.atomic_sites)):
-            U = v.aniso_matrix[i]
+            U = v.basis_u_ij[i]
             # Extract symmetric independent components
             aniso_params = [U[0, 0], U[1, 1], U[2, 2], U[0, 1], U[0, 2], U[1, 2]]
             for u in aniso_params:
