@@ -5,10 +5,14 @@
 
 # Control flags
 write_flag                = 1
-scatter_factor_method     = 0
+scatter_factor_method     = 4
 holz_flag                 = 0
 absorption_method         = 2
 byte_size                 = 2
+
+# Isotropic (0) Anisotropic (1)
+Debye_model               = 1      
+
 
 # Radius of the beam in pixels
 image_radius              = 42
@@ -36,9 +40,8 @@ initial_thickness         = 1200.0
 final_thickness           = 1200.0
 delta_thickness           = 25.0
 precision                 = 0.00002
-
 # Refinement specific flags
-refine_mode               = 'C'
+refine_mode               = 'S'
 weighting_flag            = 0
 refine_method             = 3
 correlation_type          = 2
@@ -47,7 +50,7 @@ blur_radius               = 0.7
 no_of_ugs                 = 40
 atomic_sites              = [0,1,2]
 print_flag                = 0
-refinement_scale          = 0.02
+refinement_scale          = 0.01
 exit_criteria             = 0.00005
 debug                     = 0
 plot                      = 1

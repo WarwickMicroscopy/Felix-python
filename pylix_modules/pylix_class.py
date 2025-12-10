@@ -21,6 +21,8 @@ class Inp:
         self.min_strong_beams = None
         self.min_weak_beams = None
         self.g_limit = None
+        self.model_flag = None
+        self.Debye_model = None
         self.scatter_factor_method = None
         self.absorption_method = None
         self.absorption_per = None
@@ -71,7 +73,9 @@ class Inp:
 # class basis:
 class Cif:
     def __init__(self):
-        self.atom_site_b_iso_or_equiv = None
+        self.atom_site_b_iso_or_equiv = None  
+        self.atom_site_aniso_label = None
+        self.atom_site_aniso_type_symbol = None
         self.atom_site_label = None
         self.atom_site_type_symbol = None
         self.atom_site_fract_x = None
@@ -80,6 +84,17 @@ class Cif:
         self.atom_site_occupancy = None
         self.atom_site_u_iso_or_equiv = None
         self.atom_site_wyckoff_symbol = None
+        self.atom_site_aniso_u_11 = None
+        self.atom_site_aniso_u_22 = None
+        self.atom_site_aniso_u_33 = None
+        self.atom_site_aniso_u_12 = None
+        self.atom_site_aniso_u_13 = None
+        self.atom_site_aniso_u_23 = None
+        self.U_matrix_Aniso = None
+        self.Basis_Kappa = None
+        self.Basis_Pv = None
+        
+        
 
 # class cell:
 #     def __init__(self):

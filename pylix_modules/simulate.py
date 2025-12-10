@@ -9,7 +9,7 @@ Each of which call further pylix subroutines
 Returns the simulated LACBED patterns
 
 """
-
+import re
 import numpy as np
 from scipy.constants import c, h, e, m_e, angstrom
 from scipy.ndimage import gaussian_filter
@@ -49,18 +49,40 @@ def simulate(v):
                           (2.0*np.pi * m_e * e * cell_volume * (angstrom**2)))
 
     # ===============================================
+    # added unique aniso matrices
     # fill the unit cell and get mean inner potential
     # when iterating we only do it if necessary?
     # if v.iter_count == 0 or v.current_variable_type < 6:
-    atom_position, atom_label, atom_name, B_iso, occupancy = \
+    #print (v.atom_site_type_symbol)
+    
+    atom_position, atom_label,atom_type, atom_name, B_iso, occupancy, unique_aniso_matrixes,pv,kappas = \
         px.unique_atom_positions(
-            v.symmetry_matrix, v.symmetry_vector, v.basis_atom_label,
+            v.symmetry_matrix, v.symmetry_vector, v.basis_atom_label,v.atom_site_type_symbol,
             v.basis_atom_name,
-            v.basis_atom_position, v.basis_B_iso, v.basis_occupancy)
-
+            v.basis_atom_position, v.basis_B_iso, v.basis_occupancy, v.aniso_matrix,v.Basis_Pv,v.Basis_Kappa)
+    
     # Generate atomic numbers based on the elemental symbols
     atomic_number = np.array([fu.atomic_number_map[na] for na in atom_name])
-
+    atomic_number_basis =np.array([fu.atomic_number_map[s] for s in v.basis_atom_name])
+    
+    print("Precomputing atom core and valence densities")
+    for i in range(len(atomic_number_basis)):
+        
+        px.precompute_densities(atomic_number_basis[i],v.Basis_Kappa[i],v.Basis_Pv[i])
+        
+   
+   
+    
+    print(v.Basis_Kappa)
+  
+    print(v.Basis_Pv)
+    
+    
+    
+    
+   
+    
+   
     n_atoms = len(atom_label)
     if v.iter_count == 0:
         print("  There are "+str(n_atoms)+" atoms in the unit cell")
@@ -77,6 +99,7 @@ def simulate(v):
     # mean inner potential as the sum of scattering factors at g=0
     # multiplied by h^2/(2pi*m0*e*CellVolume)
     mip = 0.0
+    print(n_atoms)
     for i in range(n_atoms):  # get the scattering factor
         if v.scatter_factor_method == 0:
             mip += px.f_kirkland(atomic_number[i], 0.0)
@@ -86,6 +109,9 @@ def simulate(v):
             mip += px.f_peng(atomic_number[i], 0.0)
         elif v.scatter_factor_method == 3:
             mip += px.f_doyle_turner(atomic_number[i], 0.0)
+        elif v.scatter_factor_method ==4:
+            mip += px.f_kirkland(atomic_number[i], 0.0)    # because we use kirkland for S<0.5 we can just set it here aswell
+            
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
     mip = mip.item()*scatt_fac_to_volts  # NB convert array to float
@@ -101,7 +127,7 @@ def simulate(v):
 
     # ===============================================
     # set up reference frames
-    a_vec_m, b_vec_m, c_vec_m, ar_vec_m, br_vec_m, cr_vec_m, norm_dir_m = \
+    a_vec_m, b_vec_m, c_vec_m, ar_vec_m, br_vec_m, cr_vec_m, norm_dir_m, t_mat_o2m, t_mat_c2o = \
         px.reference_frames(v.debug, v.cell_a, v.cell_b, v.cell_c,
                             v.cell_alpha, v.cell_beta, v.cell_gamma,
                             v.space_group, v.x_direction,
@@ -110,6 +136,13 @@ def simulate(v):
     atom_coordinate = (atom_position[:, 0, np.newaxis] * a_vec_m +
                        atom_position[:, 1, np.newaxis] * b_vec_m +
                        atom_position[:, 2, np.newaxis] * c_vec_m)
+    
+    #tranforming anisotropic matrices into microscope frame
+    
+    
+  
+    
+    #print(v.aniso_matrix_m)
 
     # plot unit cell and save .xyz file
     if v.iter_count == 0 and v.plot:
@@ -155,6 +188,7 @@ def simulate(v):
     n_hkl = len(g_pool)
     n_out = len(v.g_output)  # redefined to match what we can actually output
     # NEEDS SOME MORE WORK TO MATCH SIM/EXPT PATTERNS if this happens
+    
 
     # outputs
     if v.iter_count == 0:
@@ -205,6 +239,7 @@ def simulate(v):
     g_matrix = g_pool[:, np.newaxis, :] - g_pool[np.newaxis, :, :]
     # g-vector magnitudes, array [n_hkl, n_hkl]
     g_magnitude = np.sqrt(np.sum(g_matrix**2, axis=2))
+   
 
     # Conversion factor from F_g to U_g
     Fg_to_Ug = relativistic_correction / (np.pi * cell_volume)
@@ -216,7 +251,7 @@ def simulate(v):
                                         atomic_number, occupancy,
                                         B_iso, g_matrix, g_magnitude,
                                         v.absorption_method, v.absorption_per,
-                                        electron_velocity)
+                                        electron_velocity, g_pool, unique_aniso_matrixes,kappas,pv,v.Debye_model,v.model_flag)
     # matrix of dot products with the surface normal
     g_dot_norm = np.dot(g_pool, norm_dir_m)
     if v.iter_count == 0:
@@ -270,7 +305,7 @@ def simulate(v):
     setup = mid-strt
     bwc = time.time()-mid
     print(f"\rBloch wave calculation... done in {bwc:.1f} s (beam pool setup {setup:.1f} s)")
-    if v.iter_count == 0:
+    if v.iter_count == 0: 
         print(f"    {1000*(bwc)/(4*v.image_radius**2):.2f} ms/pixel")
 
     # increment iteration counter
@@ -424,10 +459,11 @@ def update_variables(v):
 
     # will tackle this when doing atomic position refinement
     # basis_atom_delta.fill(0)  # Reset atom coordinate uncertainties to zero
+    print(v.n_variables)
 
     for i in range(v.n_variables):
         # Check the type of variable, last digit of v.refined_variable_type
-        variable_type = v.refined_variable_type[i] % 10
+        variable_type = v.refined_variable_type[i] % 12
 
         if variable_type == 0:
             # Structure factor refinement (handled elsewhere)
@@ -459,11 +495,52 @@ def update_variables(v):
                 v.basis_B_iso[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
             else:
                 v.basis_B_iso[v.atom_refine_flag[i]] = 0.0
-
+        
+        
+        
+        
         elif variable_type == 5:
-            # Aniso Debye-Waller factor (not implemented)
-            raise NotImplementedError("Anisotropic DWF not implemented")
+            
+            
+            # Aniso Debye-Waller factor (implemented)
+            
+             
+             U = v.aniso_matrix[v.atom_refine_flag[i]]
+             if   0 < U[0,0] < 0.1:
+                 U[0,0]= v.refined_variable[i]*1.0
+             else:
+                 U[0,0]=0
+             if   0 < U[1,1] < 0.1:
+                  U[1,1]= v.refined_variable[i]*1.0
+             else:
+                  U[1,1]=0
+             if   0 < U[2,2] < 0.1:
+                  U[2,2]= v.refined_variable[i]*1.0
+             else:
+                  U[2,2]=0
+             if   0 < U[0,1] < 0.1:
+                  U[0,1]= U[1,0] = v.refined_variable[i]*1.0
+             else:
+                  U[0,1]= U[1,0]= 0
+             
+             
+             if   0 < U[0,2] < 0.1:
+                 U[0,2]= U[2,0]= v.refined_variable[i]*1.0
+             else:
+                 U[0,2]= U[2,0]= 0
+            
+             
+             if   0 < U[1,2] < 0.1:
+                  U[1,2]= U[1,2]= v.refined_variable[i]*1.0
+             else:
+                  U[1,2]= U[2,1]=0
+                  
+                 
+                 
+                
+             v.aniso_matrix[v.atom_refine_flag[i]] = U
 
+       
         elif variable_type == 6:
             # Lattice parameters a, b, c
             if v.refined_variable_type[i] == 6:
@@ -490,6 +567,34 @@ def update_variables(v):
         elif variable_type == 9:
             # Accelerating voltage
             v.accelerating_voltage_kv = v.refined_variable[i]*1.0
+            
+            #refinig kappa values in basis 
+        elif variable_type == 10:
+            if 0.7 < v.refined_variable[i] < 1.3:  # must lie in a reasonable range
+                v.Basis_Kappa[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
+            else:
+             #   v.Basis_Kappa[v.atom_refine_flag[i]] = 0.0
+                v.Basis_Kappa[v.atom_refine_flag[i]] = np.clip(v.refined_variable[i], 0.7, 1.3)
+
+
+            
+           
+            #refining Pv values in basis 
+        elif variable_type == 11:
+           if v.refined_variable[i]*0.5 < v.refined_variable[i] < v.refined_variable[i]*1.5:  # must lie in a reasonable range
+                v.Basis_Pv[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
+           else: 
+                v.Basis_Pv[v.atom_refine_flag[i]] = 0.0
+               #v.Basis_Pv[v.atom_refine_flag[i]] = np.clip(v.refined_variable[i], ,1.5 )
+            
+        
+            
+            
+            
+        
+            
+            
+
 
     return
 
@@ -576,11 +681,14 @@ def print_current_var(v, i):
         1: ("Current Ug", "{:.3f}"),
         3: ("Current occupancy", "{:.2f}"),
         4: ("Current Biso", "{:.2f}"),
-        5: ("Current U[ij]", "{:.2f}"),
+        5: ("Current U[ij]", "{:.5f}"),
         6: ("Current lattice parameter", "{:.4f}"),
         8: ("Current convergence angle", "{:.3f} Å^-1"),
         9: ("Current accelerating voltage", "{:.1f} kV"),
-    }
+        10:("Current Kappa", "{:.3f}"),
+        11:("Current Pv", "{:.4f}"),
+            
+            }
 
     if t == 2:  # coord output
         with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
@@ -600,8 +708,10 @@ def variable_message(vtype):
         5: "Changing anisotropic thermal displacement parameter U[ij]",
         6: "Changing lattice parameter",
         8: "Changing convergence angle",
+        10:"Changing Kappa parameter",
+        11:"Changing Pv Value",
     }
-    return msg.get(vtype % 10, "Unknown variable type")
+    return msg.get(vtype % 12, "Unknown variable type")
 
 
 def sim_fom(v, i):
