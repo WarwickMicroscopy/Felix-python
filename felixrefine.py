@@ -90,8 +90,6 @@ v.cell_beta = v.cell_angle_beta[0]*np.pi/180.0
 v.cell_gamma = v.cell_angle_gamma[0]*np.pi/180.0
 n_basis = len(v.atom_site_label)
 
-# oxidation state and type label
-
 # symmetry operations
 if "space_group_symop_operation_xyz" in cif_dict:
     v.symmetry_matrix, v.symmetry_vector = px.symop_convert(
@@ -109,7 +107,6 @@ v.basis_atom_label = [s.rstrip() for s in v.atom_site_label]
 # atom symbols, stripping any charge etc.
 v.basis_atom_name = [''.join(filter(str.isalpha, name))
                      for name in v.atom_site_type_symbol]
-
 
 # take care of any odd symbols, get the case right
 for i in range(n_basis):
@@ -143,10 +140,10 @@ v.basis_u_ij[:, idx, idx] = v.basis_u_iso[:, None]
 
 # check for anisotropic displacement parameters
 # and if they exist match them with the correct basis atom
-if v.atom_site_aniso_label is not None:
+if "atom_site_aniso_label" in cif_dict:
     # remove any trailing blanks
     v.atom_site_aniso_label = [s.rstrip() for s in v.atom_site_aniso_label]
-    # link to labels in the basis
+    # link to the basis labels
     for i in range(n_basis):
         for j in range(len(v.atom_site_aniso_label)):
             if v.atom_site_aniso_label[j] == v.basis_atom_label[i]:
@@ -166,6 +163,21 @@ if v.atom_site_occupancy is not None:
     v.basis_occupancy = np.array([tup[0] for tup in v.atom_site_occupancy])
 else:
     v.basis_occupancy = np.ones([n_basis])
+
+# oxidation state
+if "atom_type_symbol" in cif_dict:
+    # remove any trailing blanks
+    v.atom_type_symbol = [s.rstrip() for s in v.atom_type_symbol]
+    v.basis_oxno = np.zeros(n_basis, dtype=int)
+    # is there an oxidation number given in the cif
+    if v.atom_type_oxidation_number is not None:
+        # link to the basis labels
+        for i in range(n_basis):
+            for j in range(len(v.atom_type_symbol)):
+                if v.atom_type_symbol[j] == v.atom_site_type_symbol[i]:
+                    v.basis_oxno[i] = v.atom_type_oxidation_number[j][0]
+    # is there a case where oxidation state is just extracted from the end
+    # of atom_type_symbol?  If so, it should go here
 
 v.basis_atom_delta = np.zeros([n_basis, 3])  # ***********what's this
 

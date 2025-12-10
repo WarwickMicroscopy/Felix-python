@@ -168,6 +168,7 @@ def read_cif(filename):
         "_cell_angle_beta",
         "_cell_angle_gamma",
         "_cell_volume",
+        "_atom_type_oxidation_number",
         "_atom_site_fract_x",
         "_atom_site_fract_y",
         "_atom_site_fract_z",
@@ -190,6 +191,7 @@ def read_cif(filename):
         "_chemical_formula_sum",
         "_symmetry_equiv_pos_as_xyz",
         "_space_group_symop_operation_xyz",
+        "_atom_type_symbol",
         "_atom_site_wyckoff_symbol",
         "_atom_site_label",
         "_atom_site_type_symbol",
@@ -288,9 +290,9 @@ def symop_convert(symop_xyz):
     return mat, vec
 
 
-def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,basis_atom_type_label,
-                          basis_atom_name, basis_atom_position, basis_B_iso,
-                          basis_occupancy, basis_aniso_matrix,basis_pv,basis_kappa):
+def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label, basis_atom_type_label,
+                          basis_atom_name, basis_atom_position, basis_u_ij,
+                          basis_occupancy, basis_pv, basis_kappa):
     """
     Fills the unit cell by applying symmetry operations to the basis
 
@@ -300,7 +302,7 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,bas
     basis_atom_label (str): a label for each basis atom
     basis_atom_name (str): element symbol for each basis atom
     basis_atom_position float(n_basis_atoms x 3): fractional coordinates
-    basis_B_iso float(n_basis_atoms): Debye-Waller factors for each basis atom
+    basis_u_ij float(n_basis_atoms, 3, 3): anisotropic displacement parameter tensor for each basis atom
     basis_occupancy float(n_basis_atoms): occupancy for each basis atom
 
     Returns:
@@ -308,7 +310,7 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,bas
     """
 
     # tolerance in fractional coordinates to consider atoms to be the same
-    tol = 0.001
+    tol = 0.000001
     # Determine the size of the all_atom_position array
     n_symmetry_operations = symmetry_vector.shape[0]
     n_basis_atoms = basis_atom_position.shape[0]
@@ -316,45 +318,36 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,bas
 
     # Initialize arrays to store all atom positions, including duplicates
     all_atom_label = np.tile(basis_atom_label, n_symmetry_operations)
-    #print (basis_atom_type_label)
-    
-    all_atom_type_label = np.tile(basis_atom_type_label, n_symmetry_operations)
-   
-    
-    all_atom_name = np.tile(basis_atom_name, n_symmetry_operations)
-    #print(all_atom_name)
-    all_occupancy = np.tile(basis_occupancy, n_symmetry_operations)
-    all_B_iso = np.tile(basis_B_iso, n_symmetry_operations)
-    all_Kappa =np.tile(basis_kappa, n_symmetry_operations)
-    all_Pv = np.tile(basis_pv, n_symmetry_operations)
+    # print (basis_atom_type_label)
 
-    # # Generate all equivalent positions by applying symmetry
+    all_atom_type_label = np.tile(basis_atom_type_label, n_symmetry_operations)
+
+    all_atom_name = np.tile(basis_atom_name, n_symmetry_operations)
+    # print(all_atom_name)
+    all_occupancy = np.tile(basis_occupancy, n_symmetry_operations)
+    all_kappa = np.tile(basis_kappa, n_symmetry_operations)
+    all_pv = np.tile(basis_pv, n_symmetry_operations)
+
+    # Generate all equivalent positions by applying symmetry
     symmetry_applied = \
         np.einsum('ijk,lk->ilj', symmetry_matrix, basis_atom_position) +\
         symmetry_vector[:, np.newaxis, :]
     all_atom_position = symmetry_applied.reshape(total_atoms, 3)
+    # ADPs, size [total_atoms, 3, 3]
+    M = symmetry_matrix[:, None]  # (n_sym, 1, 3, 3)
+    U = basis_u_ij[None, :]  # (1, n_basis, 3, 3)
+    all_u_ij = (M @ U @ M.transpose(0, 1, 3, 2)).reshape(total_atoms, 3, 3)
 
     # Normalize positions to be within [0, 1]
     all_atom_position %= 1.0
     # make small values precisely zero
     all_atom_position[np.abs(all_atom_position) < tol] = 0.0
-    
-    all_aniso_matrix = np.zeros((total_atoms, 3, 3))
-    
-    for s, R in enumerate(symmetry_matrix):
-        for a in range(n_basis_atoms):
-            idx = s * n_basis_atoms + a
-            U = basis_aniso_matrix[a]
-            all_aniso_matrix[idx] = R @ U @ R.T
-         
-    #all_aniso_matrix = np.einsum('sij,ajk,skl->s a i l', symmetry_matrix, basis_aniso_matrix, symmetry_matrix)
-    #all_aniso_matrix = all_aniso_matrix.reshape(n_symmetry_operations * n_basis_atoms, 3, 3)
-    
+
     # Reduce to the set of unique fractional atomic positions using tol
     dist_matrix = np.linalg.norm(all_atom_position[:, np.newaxis, :] -
                                  all_atom_position[np.newaxis, :, :], axis=-1)
     unique_mask = np.ones(len(all_atom_position), dtype=bool)
-    i = []  # indices of unique atom positiona
+    i = []  # indices of unique atom positions
     for j in range(total_atoms):
         if unique_mask[j]:  # If this point is still unique
             i.append(j)
@@ -367,22 +360,11 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,bas
     atom_type = all_atom_type_label[i]
     atom_name = all_atom_name[i]
     occupancy = all_occupancy[i]
-    B_iso = all_B_iso[i]
-    Kappa = all_Kappa[i]
-    Pv = all_Pv[i]
-    
-    if all_aniso_matrix is not None:
-        aniso_matrix = all_aniso_matrix[i]
-    else:
-        aniso_matrix = None
-    
-    
+    u_ij = all_u_ij[i]
+    kappa = all_kappa[i]
+    pv = all_pv[i]
 
-
-    return atom_position, atom_label,atom_type, atom_name, B_iso, occupancy, aniso_matrix, Pv,Kappa
-
-
-    
+    return atom_position, atom_label,atom_type, atom_name, u_ij, occupancy, pv, kappa
 
 
 def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
@@ -1082,18 +1064,16 @@ def hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k, lattice_type,
 
 
 def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
-              atomic_number, occupancy, B_iso, g_matrix, g_magnitude,
-              absorption_method, absorption_per, electron_velocity, g_pool, aniso_matrix,kappas,pv,Debye,model):
+              atomic_number, occupancy, u_ijm, g_matrix, g_magnitude,
+              absorption_method, absorption_per, electron_velocity, g_pool, kappas,pv,Debye,model):
     Fg_matrix = np.zeros([n_hkl, n_hkl], dtype=np.complex128)
     # calculate g.r for all g-vectors and atom posns [n_hkl, n_hkl, n_atoms]
     g_dot_r = np.einsum('ijk,lk->ijl', g_matrix, atom_coordinate)
     # exp(i g.r) [n_hkl, n_hkl, n_atoms]
     phase = np.exp(-1j * g_dot_r)
     # scattering factor for all g-vectors, to be used atom by atom
-    
-    # new refined list of variables per atom in unit cell 
-    
-   
+
+    # new refined list of variables per atom in unit cell
 
     # NB scattering factor methods accept and return 2D[n_hkl, n_hkl] array of
     # g magnitudes but only one atom type. (Potential speed up by broadcasting
@@ -1135,7 +1115,7 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
         # multiply by ADP, phase and occupancy
         if (Debye ==1):
             # Anisotropic structure factor
-            gUg = np.einsum('ajk,ij,ik->ai', aniso_matrix, g_pool, g_pool)
+            gUg = np.einsum('ajk,ij,ik->ai', u_ijm, g_pool, g_pool)
             T_factor = np.exp(- 0.5 * gUg )
             Fg_matrix = Fg_matrix+((f_g + f_g_prime) *
                       phase[:, :, i] *

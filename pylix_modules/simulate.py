@@ -50,18 +50,18 @@ def simulate(v):
                           (2.0*np.pi * m_e * e * cell_volume * (angstrom**2)))
 
     # ===============================================
-    # added unique aniso matrices
+    # added unique APD tensors u_ij
     # fill the unit cell and get mean inner potential
     # when iterating we only do it if necessary?
     # if v.iter_count == 0 or v.current_variable_type < 6:
     # print (v.atom_site_type_symbol)
 
-    atom_position, atom_label, atom_type, atom_name, B_iso, occupancy, \
-        unique_aniso_matrixes, pv, kappas = \
+    atom_position, atom_label, atom_type, atom_name, u_ij, occupancy, \
+        pv, kappas = \
         px.unique_atom_positions(
             v.symmetry_matrix, v.symmetry_vector, v.basis_atom_label,
             v.atom_site_type_symbol, v.basis_atom_name, v.basis_atom_position,
-            v.basis_B_iso, v.basis_occupancy, v.basis_u_ij, v.basis_pv,
+            v.basis_u_ij, v.basis_occupancy, v.basis_pv,
             v.basis_kappa)
 
     # Generate atomic numbers based on the elemental symbols
@@ -101,9 +101,8 @@ def simulate(v):
             mip += px.f_peng(atomic_number[i], 0.0)
         elif v.scatter_factor_method == 3:
             mip += px.f_doyle_turner(atomic_number[i], 0.0)
-        elif v.scatter_factor_method ==4:
-            mip += px.f_kirkland(atomic_number[i], 0.0)    # because we use kirkland for S<0.5 we can just set it here aswell
-            
+        elif v.scatter_factor_method == 4:
+            mip += px.f_kirkland(atomic_number[i], 0.0)    # because we use kirkland for S<0.5 we can just set it here as well
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
     mip = mip.item()*scatt_fac_to_volts  # NB convert array to float
@@ -128,11 +127,10 @@ def simulate(v):
     atom_coordinate = (atom_position[:, 0, np.newaxis] * a_vec_m +
                        atom_position[:, 1, np.newaxis] * b_vec_m +
                        atom_position[:, 2, np.newaxis] * c_vec_m)
-    
-    #tranforming anisotropic matrices into microscope frame
-    
-    
-  
+
+    # and the ADPs
+    t_mat_c2m = t_mat_o2m @ t_mat_c2o
+    u_ijm = t_mat_c2m @ u_ij @ t_mat_c2m.T
     
     #print(v.aniso_matrix_m)
 
@@ -241,9 +239,10 @@ def simulate(v):
     ug_matrix = Fg_to_Ug * px.Fg_matrix(n_hkl, v.scatter_factor_method,
                                         n_atoms, atom_coordinate,
                                         atomic_number, occupancy,
-                                        B_iso, g_matrix, g_magnitude,
+                                        u_ijm, g_matrix, g_magnitude,
                                         v.absorption_method, v.absorption_per,
-                                        electron_velocity, g_pool, unique_aniso_matrixes,kappas,pv,v.Debye_model,v.model_flag)
+                                        electron_velocity, g_pool,
+                                        kappas, pv, v.Debye_model, v.model_flag)
     # matrix of dot products with the surface normal
     g_dot_norm = np.dot(g_pool, norm_dir_m)
     if v.iter_count == 0:
