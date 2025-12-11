@@ -84,6 +84,7 @@ def simulate(v):
         print("Symmetry operations:")
         for i in range(len(v.symmetry_matrix)):
             print(f"{i+1}: {v.symmetry_matrix[i]}, {v.symmetry_vector[i]}")
+        np.set_printoptions(precision=5, suppress=True)
         print("atomic coordinates")
         for i in range(n_atoms):
             print(f"{atom_label[i]} {atom_name[i]}: {atom_position[i]}")
