@@ -128,12 +128,6 @@ def simulate(v):
                        atom_position[:, 1, np.newaxis] * b_vec_m +
                        atom_position[:, 2, np.newaxis] * c_vec_m)
 
-    # and the ADPs
-    t_mat_c2m = t_mat_o2m @ t_mat_c2o
-    u_ijm = t_mat_c2m @ u_ij @ t_mat_c2m.T
-    
-    #print(v.aniso_matrix_m)
-
     # plot unit cell and save .xyz file
     if v.iter_count == 0 and v.plot:
         atom_cvals = mcolors.Normalize(vmin=1, vmax=103)
@@ -227,9 +221,6 @@ def simulate(v):
     # g-vector matrix, array [n_hkl, n_hkl, 3]
     g_matrix = np.zeros((n_hkl, n_hkl, 3))
     g_matrix = g_pool[:, np.newaxis, :] - g_pool[np.newaxis, :, :]
-    # g-vector magnitudes, array [n_hkl, n_hkl]
-    g_magnitude = np.sqrt(np.sum(g_matrix**2, axis=2))
-   
 
     # Conversion factor from F_g to U_g
     Fg_to_Ug = relativistic_correction / (np.pi * cell_volume)
@@ -239,10 +230,10 @@ def simulate(v):
     ug_matrix = Fg_to_Ug * px.Fg_matrix(n_hkl, v.scatter_factor_method,
                                         n_atoms, atom_coordinate,
                                         atomic_number, occupancy,
-                                        u_ijm, g_matrix, g_magnitude,
-                                        v.absorption_method, v.absorption_per,
-                                        electron_velocity, g_pool,
-                                        kappas, pv, v.Debye_model, v.model_flag)
+                                        u_ij, g_matrix, v.absorption_method,
+                                        v.absorption_per, electron_velocity,
+                                        kappas, pv, v.Debye_model,
+                                        v.model_flag)
     # matrix of dot products with the surface normal
     g_dot_norm = np.dot(g_pool, norm_dir_m)
     if v.iter_count == 0:

@@ -1064,24 +1064,29 @@ def hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k, lattice_type,
 
 
 def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
-              atomic_number, occupancy, u_ijm, g_matrix, g_magnitude,
-              absorption_method, absorption_per, electron_velocity, g_pool, kappas,pv,Debye,model):
-    Fg_matrix = np.zeros([n_hkl, n_hkl], dtype=np.complex128)
+              atomic_number, occupancy, u_ij, g_matrix, absorption_method,
+              absorption_per, electron_velocity, kappas, pv,
+              Debye, model):
+
     # calculate g.r for all g-vectors and atom posns [n_hkl, n_hkl, n_atoms]
     g_dot_r = np.einsum('ijk,lk->ijl', g_matrix, atom_coordinate)
     # exp(i g.r) [n_hkl, n_hkl, n_atoms]
     phase = np.exp(-1j * g_dot_r)
-    # scattering factor for all g-vectors, to be used atom by atom
-
-    # new refined list of variables per atom in unit cell
 
     # NB scattering factor methods accept and return 2D[n_hkl, n_hkl] array of
-    # g magnitudes but only one atom type. (Potential speed up by broadcasting
-    # all atom types and modifying scattering factor methods to accept 2D + 1D
-    # arrays [n_hkl, n_hkl] & [n_atoms],
-    # returning an array [n_hkl, n_hkl, n_atoms])
-   
-    
+    # g magnitudes but only one atom type.
+
+    # g-vector magnitudes, size [n_hkl, n_hkl]
+    g_magnitude = np.sqrt(np.sum(g_matrix**2, axis=2))
+
+    # anisotropic DP U*g[i]*g[j], size [n_atoms, n_hkl, n_hkl]
+    Ugg = np.einsum('ijm, a mn, ij n -> aij', g_matrix, u_ij, g_matrix)
+    # equivalent anisotropic B, size [n_atoms, n_hkl, n_hkl]
+    B_aniso = np.divide(Ugg, np.square(g_magnitude), out=np.zeros_like(Ugg),
+                        where=(g_magnitude != 0)) * 8 * np.pi**2
+
+    Fg_matrix = np.zeros([n_hkl, n_hkl], dtype=np.complex128)
+    # scattering factor f_g, size [n_hkl, n_hkl], atom by atom
     for i in range(n_atoms):
         # get the scattering factor
         if scatter_factor_method == 0:
@@ -1093,7 +1098,6 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
         elif scatter_factor_method == 3:
             f_g = f_doyle_turner(atomic_number[i], g_magnitude)
         elif scatter_factor_method == 4:
-            
             print("Calculating scattering factors for atom", i+1, "/", n_atoms)
             f_g = kappa_factors(g_magnitude,atomic_number[i],pv[i],kappas[i])
         else: 
@@ -1108,35 +1112,14 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
             f_g_prime = 1j * f_g * absorption_per/100.0
         # Bird & King model, parameterised by Thomas (Acta Cryst 2023)
         elif absorption_method == 2:
-            f_g_prime = 1j * f_thomas(g_magnitude, B_iso[i],
+            f_g_prime = 1j * f_thomas(g_magnitude, B_aniso[i, :, :],
                                       atomic_number[i], electron_velocity)
 
         # The Structure Factor Equation
-        # multiply by ADP, phase and occupancy
-        if (Debye ==1):
-            # Anisotropic structure factor
-            gUg = np.einsum('ajk,ij,ik->ai', u_ijm, g_pool, g_pool)
-            T_factor = np.exp(- 0.5 * gUg )
-            Fg_matrix = Fg_matrix+((f_g + f_g_prime) *
-                      phase[:, :, i] *
-                      occupancy[i] *
-                      T_factor[i, :][:, np.newaxis])
-        elif (Debye ==0):
-            #Isotropic structure factor
-            Fg_matrix = Fg_matrix+((f_g + f_g_prime) * phase[:, :, i] *
-                                   occupancy[i] *
-                                   np.exp(-B_iso[i] *
-                                         (g_magnitude**2)/(16*np.pi**2)))
+        Fg_matrix = Fg_matrix+((f_g + f_g_prime) * phase[:, :, i] *
+                               occupancy[i] *
+                               np.exp(-2*np.pi**2 * Ugg[i, :, :]))
 
-
-    # *** Budhika Mendis's 'cluster' method ***
-    # make a mask to exclude g-vectors above a given magnitude
-    # mask = (g_magnitude < 1*np.pi)
-    # Fg_matrix *= mask
-    #
-    # on testing I find that setting some values in the scattering matrix
-    # to zero like this has essentially NO effect on the time required,
-    # but it does degrade the answer when < 2*pi.  So don't do it!!!
     return Fg_matrix
 
 
@@ -1711,13 +1694,22 @@ def kappa_factors(g, Z, pv, kappa):
 
 
 def four_gauss(x, args):
-    # returns the sum of four Gaussians & a constant for Thomas f_prime
-    f = args[0]*np.exp(-abs(args[1])*x**2) + \
-        args[2]*np.exp(-abs(args[3])*x**2) + \
-        args[4]*np.exp(-abs(args[5])*x**2) + \
-        args[6]*np.exp(-abs(args[7])*x**2) + args[8]
-    return f
-
+    # # returns the sum of four Gaussians & a constant for Thomas f_prime
+    # f = args[0]*np.exp(-abs(args[1])*x**2) + \
+    #     args[2]*np.exp(-abs(args[3])*x**2) + \
+    #     args[4]*np.exp(-abs(args[5])*x**2) + \
+    #     args[6]*np.exp(-abs(args[7])*x**2) + args[8]
+    # return f
+    # x: array (..., 3)
+    # args: array (..., 9)
+    return (
+        args[..., 0]*np.exp(-abs(args[..., 1])*x[..., 0]**2) +
+        args[..., 2]*np.exp(-abs(args[..., 3])*x[..., 1]**2) +
+        args[..., 4]*np.exp(-abs(args[..., 5])*x[..., 2]**2) +
+        args[..., 6]*np.exp(-abs(args[..., 7]) *
+                            (x[..., 0]**2+x[..., 1]**2+x[..., 2]**2)) +
+        args[..., 8]
+    )
 
 def f_thomas(g, B, Z, v):
     # interpolated of parameterised Bird & King absorptive scattering factors
@@ -1728,35 +1720,76 @@ def f_thomas(g, B, Z, v):
                         0.7, 1, 1.5, 2, 2.75, 4])
 
     # error checking
-    if isinstance(s, np.ndarray) and np.any(s < 0):
-        raise Exception("inavlid values of s")
-    elif isinstance(s, (int, float)) and s < 0:
-        raise Exception("invalid value of s")
-    if B < 0:
-        raise Exception("invalid value of B")
-    if B < 0.1:
-        B = 0.1
-    if B > 4:  # or 0 < B < 0.1:
-        raise Exception(f"B = {B}! Outside range of parameterisation")
+    if np.any(s < 0):
+        raise ValueError("invalid values of s (must be ≥ 0)")
+    if np.any(B < 0):
+        raise ValueError("invalid B values (must be ≥ 0)")
+    B = np.clip(B, 0.1, None)  # enforce B >= 0.1
+    if np.any(B > 4):
+        raise ValueError("B values outside parameterised range [0.1, 4]")
     if Z < 1 or Z > 103:
-        raise Exception("invalid value of Z")
-    if isinstance(s, np.ndarray) and B == 0:
-        return np.zeros(np.shape(s))
-    elif isinstance(s, (int, float)) and B == 0:
-        return 0
+        raise ValueError("invalid Z")
+    # If all B are zero: return zero map
+    if np.all(B == 0):
+        return np.zeros(B.shape)
 
-    # get f_prime
-    if np.any(B == Bvalues):  # we don't need to interpolate
-        i = np.where(Bvalues == B)[0][0]
-        line = four_gauss(s, fu.thomas[Z-1][i])
-    else:  # interpolate between parameterised values
-        i = np.where(Bvalues >= B)[0][0]
-        bounding_b = Bvalues[i - 1:i + 1]
-        line1 = four_gauss(s, fu.thomas[Z-1][i - 1])
-        line2 = four_gauss(s, fu.thomas[Z-1][i])
-        line = line1 + (B - bounding_b[0])*(line2 - line1) / \
-            (bounding_b[1] - bounding_b[0])
-    f_prime = c*np.where(line > 0, line, 0)/v
+    # interpolation - index in Bvalues just above B
+    idx_hi = np.searchsorted(Bvalues, B, side='left')
+    # exact matches (no interpolation needed)
+    exact_mask = (idx_hi < len(Bvalues)) & (Bvalues[idx_hi] == B)
+    # clamp idx_hi to valid interior region (1 ... len-1)
+    idx_hi = np.clip(idx_hi, 1, len(Bvalues) - 1)
+    idx_lo = idx_hi - 1
+    # Retrieve coefficients for the two bounding B-values for each (i,j)
+    params_lo = fu.thomas[Z - 1][idx_lo]     # shape (n_hkl, n_hkl, 9)
+    params_hi = fu.thomas[Z - 1][idx_hi]     # same shape
+    # Compute Gaussian sums for both bounding sets
+    line_lo = four_gauss(s, params_lo)       # shape (n_hkl, n_hkl)
+    line_hi = four_gauss(s, params_hi)       # shape (n_hkl, n_hkl)
+    # linear interpolation factor
+    B_lo = Bvalues[idx_lo]
+    B_hi = Bvalues[idx_hi]
+    t = (B - B_lo) / (B_hi - B_lo)
+
+    # final interpolated line
+    line = line_lo + t * (line_hi - line_lo)
+
+    # Replace values where B matched exactly
+    if np.any(exact_mask):
+        exact_idx = idx_hi   # same index for exact match
+        line_exact = four_gauss(s[exact_mask],
+                                fu.thomas[Z - 1][exact_idx[exact_mask]])
+        line[exact_mask] = line_exact
+    # # error checking
+    # if isinstance(s, np.ndarray) and np.any(s < 0):
+    #     raise Exception("inavlid values of s")
+    # elif isinstance(s, (int, float)) and s < 0:
+    #     raise Exception("invalid value of s")
+    # if B < 0:
+    #     raise Exception("invalid value of B")
+    # if B < 0.1:
+    #     B = 0.1
+    # if B > 4:  # or 0 < B < 0.1:
+    #     raise Exception(f"B = {B}! Outside range of parameterisation")
+    # if Z < 1 or Z > 103:
+    #     raise Exception("invalid value of Z")
+    # if isinstance(s, np.ndarray) and B == 0:
+    #     return np.zeros(np.shape(s))
+    # elif isinstance(s, (int, float)) and B == 0:
+    #     return 0
+
+    # # get f_prime
+    # if np.any(B == Bvalues):  # we don't need to interpolate
+    #     i = np.where(Bvalues == B)[0][0]
+    #     line = four_gauss(s, fu.thomas[Z-1][i])
+    # else:  # interpolate between parameterised values
+    #     i = np.where(Bvalues >= B)[0][0]
+    #     bounding_b = Bvalues[i - 1:i + 1]
+    #     line1 = four_gauss(s, fu.thomas[Z-1][i - 1])
+    #     line2 = four_gauss(s, fu.thomas[Z-1][i])
+    #     line = line1 + (B - bounding_b[0])*(line2 - line1) / \
+    #         (bounding_b[1] - bounding_b[0])
+    f_prime = np.where(line > 0, line, 0)*c/v
 
     return f_prime
 
