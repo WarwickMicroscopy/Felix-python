@@ -186,6 +186,11 @@ v.basis_atom_delta = np.zeros([n_basis, 3])  # ***********what's this
 inp_dict = px.read_inp_file('felix.inp')
 v.update_from_dict(inp_dict)
 
+if v.debug:
+    np.set_printoptions(precision=5, suppress=True)
+    for i in range(n_basis):
+        print(f"{v.basis_atom_label[i]}:  u_ij =\n {v.basis_u_ij[i, :, :]}")
+
 # thickness array
 if (v.final_thickness > v.initial_thickness + v.delta_thickness):
     v.thickness = np.arange(v.initial_thickness, v.final_thickness,
@@ -208,13 +213,14 @@ v.g_limit = v.g_limit * 2 * np.pi
 v.basis_pv = np.zeros(n_basis, dtype=float)
 v.basis_kappa = np.zeros(n_basis, dtype=float)
 atomic_number = np.array([fu.atomic_number_map[na] for na in v.basis_atom_name])
-print(type(v.basis_kappa))
-for i in range(n_basis):
-    v.basis_pv[i]= fu.elements_info[atomic_number[i]]["pv"]
-    v.basis_kappa[i] = 1.0  #set all kappa values to 1 initially 
 
-#setting up initial pv values 
-print(v.basis_kappa)
+for i in range(n_basis):
+    v.basis_pv[i] = fu.elements_info[atomic_number[i]]["pv"]
+    v.basis_kappa[i] = 1.0  # set all kappa values to 1 initially
+
+# setting up initial pv values
+if v.debug:
+    print(v.basis_kappa)
 
 '''
 v.Basis_Pv[0]= 0.9994
@@ -225,25 +231,15 @@ v.Basis_Kappa[1]= 1.01
 v.Basis_Kappa[2]= 1.01
 
 '''
-
-
 # kappas (default 1.0)
-
-
-#refined kappa : [1.21517673 1.12267508 0.93547286]
+# refined kappa : [1.21517673 1.12267508 0.93547286]
 # expand per atom in full unit cell
- 
+# print(unique_aniso_matrixes)
+# print(unique_aniso_matrixes.shape)
 
-
- #print(unique_aniso_matrixes)
- #print(unique_aniso_matrixes.shape)
- 
- # Step 1: define a dictionary of initial P_v guesses per element
- # For LiNbO3 using formal charges as we discussed
- # we just need a dictionary of the valence states of the atoms 
-
-
- 
+# Step 1: define a dictionary of initial P_v guesses per element
+# For LiNbO3 using formal charges as we discussed
+# we just need a dictionary of the valence states of the atoms
 
 # output
 print(f"Zone axis: {v.incident_beam_direction.astype(int)}")
@@ -251,8 +247,6 @@ if v.n_thickness == 1:
     print(f"Specimen thickness {v.initial_thickness/10} nm")
 else:
     print(f"{v.n_thickness} thicknesses: {', '.join(map(str, v.thickness/10))} nm")
-    
-    
 
 if v.scatter_factor_method == 0:
     print("Using Kirkland scattering factors")
@@ -335,6 +329,7 @@ v.atom_refine_vec = ([])  # the direction of atom movement, [0,0,0] if none
 nullvec = np.array([0, 0, 0])  # null vector for above
 if 'S' not in v.refine_mode:
     v.n_variables = 0
+    # v.iter_count = 1  # or should this be elsewhere ***
     # count refinement variables
     if 'B' in v.refine_mode:  # Atom coordinate refinement
         # the input v.atomic_sites gives the index of the atom in the cif
@@ -429,30 +424,20 @@ if 'S' not in v.refine_mode:
         v.refined_variable_type.append(9)
         v.atom_refine_flag.append(-1)
         v.atom_refine_vec.append(nullvec)  # no atom movement
-        
-        
-    
-    if  'J' in v.refine_mode:
-        
-        
+
+    if 'J' in v.refine_mode:
         for i in range(len(v.atomic_sites)):
-            
             v.refined_variable.append(v.Basis_Kappa[v.atomic_sites[i]])
             v.refined_variable_type.append(10)
             v.atom_refine_flag.append(v.atomic_sites[i])
             v.atom_refine_vec.append(nullvec)  # no atom movement
 
-       
-    if 'K' in v.refine_mode:  
+    if 'K' in v.refine_mode:
         for i in range(len(v.atomic_sites)):
-            
             v.refined_variable.append(v.Basis_Pv[v.atomic_sites[i]])
             v.refined_variable_type.append(11)
             v.atom_refine_flag.append(v.atomic_sites[i])
             v.atom_refine_vec.append(nullvec)  # no atom movement
-       
-        
-       
 
     # Total number of independent variables
     v.n_variables = len(v.refined_variable)

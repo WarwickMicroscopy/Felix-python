@@ -1084,6 +1084,7 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
     # equivalent anisotropic B, size [n_atoms, n_hkl, n_hkl]
     B_aniso = np.divide(Ugg, np.square(g_magnitude), out=np.zeros_like(Ugg),
                         where=(g_magnitude != 0)) * 8 * np.pi**2
+    print(B_aniso[:, 0, 0])
 
     Fg_matrix = np.zeros([n_hkl, n_hkl], dtype=np.complex128)
     # scattering factor f_g, size [n_hkl, n_hkl], atom by atom
@@ -1099,8 +1100,8 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
             f_g = f_doyle_turner(atomic_number[i], g_magnitude)
         elif scatter_factor_method == 4:
             print("Calculating scattering factors for atom", i+1, "/", n_atoms)
-            f_g = kappa_factors(g_magnitude,atomic_number[i],pv[i],kappas[i])
-        else: 
+            f_g = kappa_factors(g_magnitude, atomic_number[i], pv[i], kappas[i])
+        else:
             raise ValueError("No scattering factors chosen in felix.inp")
 
         # get the absorptive scattering factor (null for absorption_method==0)

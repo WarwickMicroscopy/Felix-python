@@ -91,7 +91,6 @@ def simulate(v):
     # mean inner potential as the sum of scattering factors at g=0
     # multiplied by h^2/(2pi*m0*e*CellVolume)
     mip = 0.0
-    print(n_atoms)
     for i in range(n_atoms):  # get the scattering factor
         if v.scatter_factor_method == 0:
             mip += px.f_kirkland(atomic_number[i], 0.0)
@@ -477,52 +476,35 @@ def update_variables(v):
                 v.basis_B_iso[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
             else:
                 v.basis_B_iso[v.atom_refine_flag[i]] = 0.0
-        
-        
-        
-        
         elif variable_type == 5:
-            
-            
             # Aniso Debye-Waller factor (implemented)
-            
-             
-             U = v.aniso_matrix[v.atom_refine_flag[i]]
-             if   0 < U[0,0] < 0.1:
-                 U[0,0]= v.refined_variable[i]*1.0
-             else:
-                 U[0,0]=0
-             if   0 < U[1,1] < 0.1:
-                  U[1,1]= v.refined_variable[i]*1.0
-             else:
-                  U[1,1]=0
-             if   0 < U[2,2] < 0.1:
-                  U[2,2]= v.refined_variable[i]*1.0
-             else:
-                  U[2,2]=0
-             if   0 < U[0,1] < 0.1:
-                  U[0,1]= U[1,0] = v.refined_variable[i]*1.0
-             else:
-                  U[0,1]= U[1,0]= 0
-             
-             
-             if   0 < U[0,2] < 0.1:
-                 U[0,2]= U[2,0]= v.refined_variable[i]*1.0
-             else:
-                 U[0,2]= U[2,0]= 0
-            
-             
-             if   0 < U[1,2] < 0.1:
-                  U[1,2]= U[1,2]= v.refined_variable[i]*1.0
-             else:
-                  U[1,2]= U[2,1]=0
-                  
-                 
-                 
-                
-             v.aniso_matrix[v.atom_refine_flag[i]] = U
+            U = v.aniso_matrix[v.atom_refine_flag[i]]
+            if 0 < U[0, 0] < 0.1:
+                U[0, 0] = v.refined_variable[i]*1.0
+            else:
+                U[0, 0] = 0
+            if 0 < U[1, 1] < 0.1:
+                U[1, 1] = v.refined_variable[i]*1.0
+            else:
+                U[1, 1] = 0
+            if 0 < U[2, 2] < 0.1:
+                U[2, 2] = v.refined_variable[i]*1.0
+            else:
+                U[2, 2] = 0
+            if 0 < U[0, 1] < 0.1:
+                U[0, 1] = U[1, 0] = v.refined_variable[i]*1.0
+            else:
+                U[0, 1] = U[1, 0] = 0
+            if 0 < U[0, 2] < 0.1:
+                U[0, 2] = U[2, 0] = v.refined_variable[i]*1.0
+            else:
+                U[0, 2] = U[2, 0] = 0
+            if 0 < U[1, 2] < 0.1:
+                U[1, 2] = U[1, 2] = v.refined_variable[i]*1.0
+            else:
+                U[1, 2] = U[2, 1]=0
+            v.aniso_matrix[v.atom_refine_flag[i]] = U
 
-       
         elif variable_type == 6:
             # Lattice parameters a, b, c
             if v.refined_variable_type[i] == 6:
@@ -557,26 +539,13 @@ def update_variables(v):
             else:
              #   v.Basis_Kappa[v.atom_refine_flag[i]] = 0.0
                 v.Basis_Kappa[v.atom_refine_flag[i]] = np.clip(v.refined_variable[i], 0.7, 1.3)
-
-
-            
-           
-            #refining Pv values in basis 
+        # refining Pv values in basis 
         elif variable_type == 11:
            if v.refined_variable[i]*0.5 < v.refined_variable[i] < v.refined_variable[i]*1.5:  # must lie in a reasonable range
                 v.Basis_Pv[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
            else: 
                 v.Basis_Pv[v.atom_refine_flag[i]] = 0.0
                #v.Basis_Pv[v.atom_refine_flag[i]] = np.clip(v.refined_variable[i], ,1.5 )
-            
-        
-            
-            
-            
-        
-            
-            
-
 
     return
 
@@ -585,10 +554,11 @@ def print_LACBED(v):
     '''
     Plots all LACBED patterns in a montage
     '''
-    n = v.lacbed_sim.shape[3]# actual size, if felix.hkl's missing
+    n = v.lacbed_sim.shape[3]  # actual size, if felix.hkl's missing
     w = int(np.ceil(np.sqrt(n)))
     h = int(np.ceil(n/w))
     # only print all thicknesses for the first simulation
+    print(v.iter_count)
     if v.iter_count == 1:
         for j in range(v.n_thickness):
             fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))
