@@ -469,7 +469,7 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
     # Output to check
     if debug:
         print(" ")
-        np.set_printoptions(precision=3, suppress=True)
+        np.set_printoptions(precision=5, suppress=True)
         print(f"a = {cell_a}, b = {cell_b}, c = {cell_c}")
         print(f"alpha = {cell_alpha*180.0/np.pi}, beta = {cell_beta*180.0/np.pi}, gamma = {cell_gamma*180.0/np.pi}")
         print(f"X = {x_dir_c} (reciprocal space)")
