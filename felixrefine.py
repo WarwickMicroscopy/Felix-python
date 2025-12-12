@@ -224,15 +224,13 @@ for i in range(n_basis):
 if v.debug:
     print(v.basis_kappa)
 
-'''
-v.Basis_Pv[0]= 0.9994
-v.Basis_Pv[1] = 4.997
-v.Basis_Pv[2]= 5.985
-v.Basis_Kappa[0]= 1.3
-v.Basis_Kappa[1]= 1.01
-v.Basis_Kappa[2]= 1.01
 
-'''
+# v.Basis_Pv[0]= 0.9994
+# v.Basis_Pv[1] = 4.997
+# v.Basis_Pv[2]= 5.985
+# v.Basis_Kappa[0]= 1.3
+# v.Basis_Kappa[1]= 1.01
+# v.Basis_Kappa[2]= 1.01
 # kappas (default 1.0)
 # refined kappa : [1.21517673 1.12267508 0.93547286]
 # expand per atom in full unit cell
@@ -259,7 +257,7 @@ elif v.scatter_factor_method == 2:
 elif v.scatter_factor_method == 3:
     print("Using Doyle & Turner scattering factors")
 elif v.scatter_factor_method == 4:
-    print("using orbital HF scattering factors with Kappa formalism")
+    print("Using orbital HF scattering factors with Kappa formalism")
 else:
     raise ValueError("No scattering factors chosen in felix.inp")
 
@@ -299,6 +297,12 @@ if 'J' in v.refine_mode:
     print("Refining Kappa values, J")
 if 'K' in v.refine_mode:
     print("Refining Pv vales, K")
+
+if v.correlation_type == 0:
+    print("  Using Pearson correlation to compare simulation and experiment")
+    print("    NB requires sub-pixel alignment")
+if v.correlation_type == 1:
+    print("  Using phase correlation to compare simulation and experiment")
     
 
 # %% read felix.hkl
@@ -314,16 +318,16 @@ v.n_out = len(v.input_hkls)+1  # we expect 000 NOT to be in the hkl list
 # We count the independent variables:
 # v.refined_variable = variable to be refined
 # v.refined_variable_type = what kind of variable, as follows
-# 0 = Ug amplitude
-# 1 = Ug phase
-# 2 = atom coordinate *** PARTIALLY IMPLEMENTED *** not all space groups
-# 3 = occupancy
-# 4 = B_iso
-# 5 = B_aniso *** NOT YET IMPLEMENTED ***
-# 61,62,63 = lattice parameters *** PARTIALLY IMPLEMENTED *** not rhombohedral
-# 7 = unit cell angles *** NOT YET IMPLEMENTED ***
-# 8 = convergence angle
-# 9 = accelerating_voltage_kv *** NOT YET IMPLEMENTED ***
+# 0 A1 = Ug amplitude *** NOT YET IMPLEMENTED ***
+# 1 A2 = Ug phase *** NOT YET IMPLEMENTED ***
+# 2 B = atom coordinate *** PARTIALLY IMPLEMENTED *** not all space groups
+# 3 C = occupancy
+# 4 D = isotropic atomic displacement parameters (ADPs)
+# 5 E = anisotropic atomic displacement parameters (ADPs)
+# 61,62,63 F = lattice parameters ***PARTIALLY IMPLEMENTED*** not rhombohedral
+# 7 G = unit cell angles *** NOT YET IMPLEMENTED ***
+# 8 H = convergence angle
+# 9 I = accelerating_voltage_kv *** NOT YET IMPLEMENTED ***
 v.refined_variable = ([])  # array of floats, values to be refined
 v.refined_variable_type = ([])  # array of integers corresponding to above
 v.atom_refine_flag = ([])  # the index of the atom in the .cif, -1 if none
@@ -363,25 +367,24 @@ if 'S' not in v.refine_mode:
             v.atom_refine_flag.append(v.atomic_sites[i])
             v.atom_refine_vec.append(nullvec)  # no atom movement
 
-    if 'D' in v.refine_mode:  # Isotropic DW
+    if 'D' in v.refine_mode:  # Isotropic ADPs
         for i in range(len(v.atomic_sites)):
             v.refined_variable.append(v.basis_B_iso[v.atomic_sites[i]])
             v.refined_variable_type.append(4)
             v.atom_refine_flag.append(v.atomic_sites[i])
             v.atom_refine_vec.append(nullvec)  # no atom movement
 
-    if 'E' in v.refine_mode:  # Anisotropic DW
+    if 'E' in v.refine_mode:  # Anisotropic ADPs
         for i in range(len(v.atomic_sites)):
             U = v.basis_u_ij[i]
             # Extract symmetric independent components
-            aniso_params = [U[0, 0], U[1, 1], U[2, 2], U[0, 1], U[0, 2], U[1, 2]]
+            aniso_params = [U[0, 0], U[1, 1], U[2, 2],
+                            U[0, 1], U[0, 2], U[1, 2]]
             for u in aniso_params:
                 v.refined_variable.append(u)
                 v.refined_variable_type.append(5)
                 v.atom_refine_flag.append(v.atomic_sites[i])
                 v.atom_refine_vec.append(nullvec)  # no atom movement
-                
-        
 
     if 'F' in v.refine_mode:  # Lattice parameters
         # variable_type first digit=6 indicates lattice parameter

@@ -66,14 +66,17 @@ def simulate(v):
 
     # Generate atomic numbers based on the elemental symbols
     atomic_number = np.array([fu.atomic_number_map[na] for na in atom_name])
-    atomic_number_basis = np.array([fu.atomic_number_map[s] for s in v.basis_atom_name])
+    atomic_number_basis = np.array([fu.atomic_number_map[s]
+                                    for s in v.basis_atom_name])
 
-    print("Precomputing atom core and valence densities")
-    for i in range(len(atomic_number_basis)):
-        px.precompute_densities(atomic_number_basis[i],v.basis_kappa[i],v.basis_pv[i])
+    if v.scatter_factor_method == 4:
+        print("Precomputing atom core and valence densities")
+        for i in range(len(atomic_number_basis)):
+            px.precompute_densities(atomic_number_basis[i],
+                                    v.basis_kappa[i], v.basis_pv[i])
 
-    print(v.basis_kappa)
-    print(v.basis_pv)
+        print(v.basis_kappa)
+        print(v.basis_pv)
 
     n_atoms = len(atom_label)
     if v.iter_count == 0:
