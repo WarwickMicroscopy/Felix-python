@@ -1144,13 +1144,17 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
                         where=(g_magnitude != 0)) * 8 * np.pi**2
     if debug:
         np.set_printoptions(precision=3, suppress=True)
+        print("g_magnitudes")
+        print(g_magnitude[:5, :5])
+        print("  ")
         for i in range(3):
             print(f"Anisotropic u_ij*g[i]*g[j] [{i}]")
             print(f"{Ugg[i, :5, :5]}")
+        print("  ")
         for i in range(3):
             print(f"Anisotropic B[{i}]")
             print(f"{B_aniso[i, :5, :5]}")
-
+        print("  ")
 
     Fg_matrix = np.zeros([n_hkl, n_hkl], dtype=np.complex128)
     # scattering factor f_g, size [n_hkl, n_hkl], atom by atom
@@ -1170,7 +1174,8 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
 
-        # get the absorptive scattering factor (null for absorption_method==0)
+        # get the absorptive scattering factor
+        # f_g_prime, size [n_hkl, n_hkl], atom by atom
         # no absorption
         if absorption_method == 0:
             f_g_prime = np.zeros_like(f_g)
@@ -1181,11 +1186,18 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
         elif absorption_method == 2:
             f_g_prime = 1j * f_thomas(g_magnitude, B_aniso[i, :, :],
                                       atomic_number[i], electron_velocity)
+        if debug and i < 4:
+            print(f"f_g [{i}]")
+            print(f"{f_g[:5, :5]}")
+            print("  ")
+            print(f"f_g_prime [{i}]")
+            print(f"{f_g_prime[:5, :5]}")
 
         # The Structure Factor Equation
         Fg_matrix = Fg_matrix+((f_g + f_g_prime) * phase[:, :, i] *
                                occupancy[i] *
-                               np.exp(-B_aniso[i, :, :] * g_magnitude**2) /
+                               np.exp(-B_aniso[i, 1, 0] * g_magnitude**2) /
+                               # np.exp(-B_aniso[i, :, :] * g_magnitude**2) /
                                # np.exp(-2*np.pi**2 * Ugg[i, :, :]) /
                                (16*np.pi**2))
 
