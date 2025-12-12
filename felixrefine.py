@@ -62,7 +62,7 @@ elif v.chemical_formula_sum is not None:
     v.chemical_formula = v.chemical_formula_sum
 elif v.chemical_formula_iupac is not None:
     v.chemical_formula = v.chemical_formula_iupac
-print("Material: " + v.chemical_formula)
+print(f"Material: {v.chemical_formula}")
 
 # space group number and lattice type
 if "space_group_symbol" in cif_dict:
@@ -133,6 +133,7 @@ elif "atom_site_u_iso_or_equiv" in cif_dict:
     v.basis_u_iso = np.array([tup[0] for tup in
                               v.atom_site_u_iso_or_equiv])
     v.basis_B_iso = v.basis_u_iso * 8 * np.pi**2  # *** TO BE DELETED ***
+
 # ADP tensor Uij with isotropic components on the diagonal
 v.basis_u_ij = np.zeros((n_basis, 3, 3))
 idx = np.arange(3)
@@ -147,6 +148,7 @@ if "atom_site_aniso_label" in cif_dict:
     for i in range(n_basis):
         for j in range(len(v.atom_site_aniso_label)):
             if v.atom_site_aniso_label[j] == v.basis_atom_label[i]:
+                print(f"  Using ADPs for atom {i}")
                 # the data is in 2-tuples (second value is the error)
                 v.basis_u_ij[i, 0, 0] = v.atom_site_aniso_u_11[j][0]
                 v.basis_u_ij[i, 1, 1] = v.atom_site_aniso_u_22[j][0]

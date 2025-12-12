@@ -1196,10 +1196,9 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
         # The Structure Factor Equation
         Fg_matrix = Fg_matrix+((f_g + f_g_prime) * phase[:, :, i] *
                                occupancy[i] *
-                               np.exp(-B_aniso[i, 1, 0] * g_magnitude**2) /
-                               # np.exp(-B_aniso[i, :, :] * g_magnitude**2) /
-                               # np.exp(-2*np.pi**2 * Ugg[i, :, :]) /
-                               (16*np.pi**2))
+                               # np.exp(-B_aniso[i, :, :] * (g_magnitude**2) /
+                               # (16*np.pi**2)))
+                               np.exp(-Ugg[i, :, :] / 2))
 
     return Fg_matrix
 
