@@ -62,7 +62,7 @@ def simulate(v):
             v.symmetry_matrix, v.symmetry_vector, v.basis_atom_label,
             v.atom_site_type_symbol, v.basis_atom_name, v.basis_atom_position,
             v.basis_u_ij, v.basis_occupancy, v.basis_pv,
-            v.basis_kappa)
+            v.basis_kappa, v.debug)
 
     # Generate atomic numbers based on the elemental symbols
     atomic_number = np.array([fu.atomic_number_map[na] for na in atom_name])
@@ -119,10 +119,10 @@ def simulate(v):
     # ===============================================
     # set up reference frames
     a_vec_m, b_vec_m, c_vec_m, ar_vec_m, br_vec_m, cr_vec_m, norm_dir_m, t_mat_o2m, t_mat_c2o = \
-        px.reference_frames(v.debug, v.cell_a, v.cell_b, v.cell_c,
-                            v.cell_alpha, v.cell_beta, v.cell_gamma,
-                            v.space_group, v.x_direction,
-                            v.incident_beam_direction, v.normal_direction)
+        px.reference_frames(v.cell_a, v.cell_b, v.cell_c, v.cell_alpha, 
+                            v.cell_beta, v.cell_gamma, v.space_group,
+                            v.x_direction, v.incident_beam_direction,
+                            v.normal_direction, v.debug)
     # put the crystal in the micrcoscope reference frame, in Å
     atom_coordinate = (atom_position[:, 0, np.newaxis] * a_vec_m +
                        atom_position[:, 1, np.newaxis] * b_vec_m +
@@ -233,7 +233,7 @@ def simulate(v):
                                         u_ij, g_matrix, v.absorption_method,
                                         v.absorption_per, electron_velocity,
                                         kappas, pv, v.Debye_model,
-                                        v.model_flag)
+                                        v.model_flag, v.debug)
     # matrix of dot products with the surface normal
     g_dot_norm = np.dot(g_pool, norm_dir_m)
     if v.iter_count == 0:
@@ -559,7 +559,6 @@ def print_LACBED(v):
     w = int(np.ceil(np.sqrt(n)))
     h = int(np.ceil(n/w))
     # only print all thicknesses for the first simulation
-    print(v.iter_count)
     if v.iter_count == 1:
         for j in range(v.n_thickness):
             fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))

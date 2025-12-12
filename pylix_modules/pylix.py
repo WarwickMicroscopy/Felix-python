@@ -292,7 +292,7 @@ def symop_convert(symop_xyz):
 
 def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label, basis_atom_type_label,
                           basis_atom_name, basis_atom_position, basis_u_ij,
-                          basis_occupancy, basis_pv, basis_kappa):
+                          basis_occupancy, basis_pv, basis_kappa, debug):
     """
     Fills the unit cell by applying symmetry operations to the basis
 
@@ -308,6 +308,11 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label, ba
     Returns:
     atom_position, atom_label, atom_name, B_iso, occupancy
     """
+    if debug:
+        np.set_printoptions(precision=5, suppress=True)
+        for i in range(3):
+            print(f"Basis anisotropic u_ij [{i}]")
+            print(f"{basis_u_ij[i, :5, :5]}")
 
     # tolerance in fractional coordinates to consider atoms to be the same
     tol = 0.000001
@@ -333,10 +338,17 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label, ba
         np.einsum('ijk,lk->ilj', symmetry_matrix, basis_atom_position) +\
         symmetry_vector[:, np.newaxis, :]
     all_atom_position = symmetry_applied.reshape(total_atoms, 3)
-    # ADPs, size [total_atoms, 3, 3]
-    M = symmetry_matrix[:, None]  # (n_sym, 1, 3, 3)
-    U = basis_u_ij[None, :]  # (1, n_basis, 3, 3)
-    all_u_ij = (M @ U @ M.transpose(0, 1, 3, 2)).reshape(total_atoms, 3, 3)
+
+    # Anisotropic Displacement Parameters, ADPs
+    # apply symops to u_ij's, size [n_symmetry_operations, n_basis_atoms, 3, 3]
+    tmp = np.matmul(symmetry_matrix[:, None], basis_u_ij[None, :])
+    # array of inverse operations, size [n_symmetry_operations, 3, 3]
+    # NB we can't use the transpose as symops are not always orthonormal
+    Minv = np.linalg.inv(symmetry_matrix)
+    # finsh the calculation, size [n_symmetry_operations, n_basis_atoms, 3, 3]
+    all_u_ij = np.matmul(tmp, Minv[:, None])
+    # reshape, size [n_symmetry_operations*n_basis_atoms, 3, 3]
+    all_u_ij = all_u_ij.reshape(-1, 3, 3)
 
     # Normalize positions to be within [0, 1]
     all_atom_position %= 1.0
@@ -363,12 +375,17 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label, ba
     u_ij = all_u_ij[i]
     kappa = all_kappa[i]
     pv = all_pv[i]
+    if debug:
+        np.set_printoptions(precision=5, suppress=True)
+        for i in range(3):
+            print(f"Anisotropic u_ij [{i}]")
+            print(f"{u_ij[i, :5, :5]}")
 
     return atom_position, atom_label,atom_type, atom_name, u_ij, occupancy, pv, kappa
 
 
-def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
-                     cell_gamma, space_group, x_dir_c, z_dir_c, norm_dir_c):
+def reference_frames(cell_a, cell_b, cell_c, cell_alpha, cell_beta, cell_gamma,
+                     space_group, x_dir_c, z_dir_c, norm_dir_c, debug):
     """
     Produces reciprocal lattice vectors and related parameters
 
@@ -471,22 +488,36 @@ def reference_frames(debug, cell_a, cell_b, cell_c, cell_alpha, cell_beta,
         print(" ")
         np.set_printoptions(precision=5, suppress=True)
         print(f"a = {cell_a}, b = {cell_b}, c = {cell_c}")
-        print(f"alpha = {cell_alpha*180.0/np.pi}, beta = {cell_beta*180.0/np.pi}, gamma = {cell_gamma*180.0/np.pi}")
+        print(f"alpha = {cell_alpha*180.0/np.pi:.2f}, beta = {cell_beta*180.0/np.pi:.2f}, gamma = {cell_gamma*180.0/np.pi:.2f}")
         print(f"X = {x_dir_c} (reciprocal space)")
         print(f"Z = {z_dir_c} (direct space)")
         print(" ")
         print("Transformation crystal to orthogonal (O) frame:")
         print(t_mat_c2o)
         print(t_mat_cr2or)
-        print(f"O frame: a = {a_vec_o}, b = {b_vec_o}, c = {c_vec_o}")
-        print(f"a* = {ar_vec_o}, b* = {br_vec_o}, c* = {cr_vec_o}")
-        print(f"X = {x_dir_o}, y = {y_dir_o}, Z = {z_dir_o}")
+        print("O frame:")
+        print(f" a = {a_vec_o}")
+        print(f" b = {b_vec_o}")
+        print(f" c = {c_vec_o}")
+        print(f" a* = {ar_vec_o}")
+        print(f" b* = {br_vec_o}")
+        print(f" c* = {cr_vec_o}")
+        print(" ")
+        print(f" X = {x_dir_o}")
+        print(f" Y = {y_dir_o}")
+        print(f" Z = {z_dir_o}")
         print(" ")
         print("Transformation orthogonal to microscope frame:")
         print(t_mat_o2m)
-        print(f"Microscope frame: a = {a_vec_m}, b = {b_vec_m}, c = {c_vec_m}")
+        print("Microscope frame:")
+        print(f" a = {a_vec_m}")
+        print(f" b = {b_vec_m}")
+        print(f" c = {c_vec_m}")
+        print(f" a* = {ar_vec_m}")
+        print(f" b* = {br_vec_m}")
+        print(f" c* = {cr_vec_m}")
         print(f"Specimen surface normal = {norm_dir_m}")
-        print(f"a* = {ar_vec_m}, b* = {br_vec_m}, c* = {c_vec_m}")
+
     return a_vec_m, b_vec_m, c_vec_m, ar_vec_m, br_vec_m, cr_vec_m, norm_dir_m, t_mat_o2m, t_mat_c2o
 
 
@@ -1066,7 +1097,34 @@ def hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k, lattice_type,
 def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
               atomic_number, occupancy, u_ij, g_matrix, absorption_method,
               absorption_per, electron_velocity, kappas, pv,
-              Debye, model):
+              Debye, model, debug):
+    """
+    Parameters
+    ----------
+    n_hkl : int, number of hkls
+    scatter_factor_method : int, cchoise of scattering factor calculation
+    n_atoms : int, number of atoms in the cell
+    atom_coordinate : float, fractional atom coordinates, size [n_atoms, 3]
+    atomic_number : int, size [n_atoms]
+    occupancy : float, size [n_atoms]
+    u_ij : float array of ADPs, size [n_atoms,3,3]
+    g_matrix : array of g-vectors in the microscope frame, size [n_hkl,n_hkl]
+    absorption_method : int, flag for absorption calculation
+    absorption_per : float, % absorption, if that method is used
+    electron_velocity : float
+    kappas : TYPE DESCRIPTION.
+    pv : TYPE DESCRIPTION.
+    Debye : TYPE DESCRIPTION.
+    model : TYPE DESCRIPTION.
+
+    Raises
+    ------
+    ValueError if no scatter factor method chosen
+
+    Returns
+    -------
+    Fg_matrix : size [n_hkl,n_hkl]
+    """
 
     # calculate g.r for all g-vectors and atom posns [n_hkl, n_hkl, n_atoms]
     g_dot_r = np.einsum('ijk,lk->ijl', g_matrix, atom_coordinate)
@@ -1084,7 +1142,15 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
     # equivalent anisotropic B, size [n_atoms, n_hkl, n_hkl]
     B_aniso = np.divide(Ugg, np.square(g_magnitude), out=np.zeros_like(Ugg),
                         where=(g_magnitude != 0)) * 8 * np.pi**2
-    print(B_aniso[:, 0, 0])
+    if debug:
+        np.set_printoptions(precision=3, suppress=True)
+        for i in range(3):
+            print(f"Anisotropic u_ij*g[i]*g[j] [{i}]")
+            print(f"{Ugg[i, :5, :5]}")
+        for i in range(3):
+            print(f"Anisotropic B[{i}]")
+            print(f"{B_aniso[i, :5, :5]}")
+
 
     Fg_matrix = np.zeros([n_hkl, n_hkl], dtype=np.complex128)
     # scattering factor f_g, size [n_hkl, n_hkl], atom by atom
@@ -1119,7 +1185,8 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
         # The Structure Factor Equation
         Fg_matrix = Fg_matrix+((f_g + f_g_prime) * phase[:, :, i] *
                                occupancy[i] *
-                               np.exp(-2*np.pi**2 * Ugg[i, :, :]))
+                               np.exp(-0.25*B_aniso[i, :, :] * g_magnitude**2))
+                               # np.exp(-2*np.pi**2 * Ugg[i, :, :]))
 
     return Fg_matrix
 
