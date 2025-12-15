@@ -1825,11 +1825,9 @@ def f_thomas(g, B, Z, v):
     # error checking
     if np.any(s < 0):
         raise ValueError("Absorptive f: invalid g (must be ≥ 0)")
-    if np.any(B < 0):
-        raise ValueError("Absorptive f: invalid Biso (must be ≥ 0)")
-    B = np.clip(B, 0.1, None)  # enforce B >= 0.1
-    if np.any(B > 4):
-        raise ValueError("Absorptive f: Biso outside range [0.1, 4]")
+    if np.any(B < 0) or np.any(B > 4):
+        print("Absorptive f: Biso outside range [0, 4], clipping")
+        B = np.clip(B, 0., 4.)
     if Z < 1 or Z > 103:
         raise ValueError("Absorptive f: invalid Z")
     # If all B are zero: return zero map

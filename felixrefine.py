@@ -286,9 +286,9 @@ else:  # atom-specific refinements can be done simultaneously
     if 'C' in v.refine_mode:
         print("Refining Occupancies, C")
     if 'D' in v.refine_mode:
-        print("Refining Isotropic Debye Waller Factors, D")
+        print("Refining Isotropic atomic displacement parameters, D")
     if 'E' in v.refine_mode:
-        print("Refining Anisotropic Debye Waller Factors, E")
+        print("Refining Anisotropic atomic displacement parameters, E")
     if 'J' in v.refine_mode:
         print("Refining Kappa, J")
     if 'K' in v.refine_mode:

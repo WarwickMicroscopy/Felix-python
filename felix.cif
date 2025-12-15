@@ -54,18 +54,8 @@ _atom_site_fract_z
 _atom_site_U_iso_or_equiv
 _atom_site_occupancy
 Li1 Li1+ 6 a 0 0 0.2721 0.00277 1.0
-Nb1 Nb5+ 6 a 0 0 0.9914 0.0 1.0
-O1 O2- 18 b 0.0455 0.3367 0.0555 0.0 1.0
-loop_
-_atom_site_aniso_label
-_atom_site_aniso_type_symbol
-_atom_site_aniso_U_11
-_atom_site_aniso_U_22
-_atom_site_aniso_U_33
-_atom_site_aniso_U_12
-_atom_site_aniso_U_13
-_atom_site_aniso_U_23
-Nb1 Nb5+ 0.00172(3) 0.00172(3) 0.0013(1) 0.000860(15) 0 0
-O1 O2- 0.00296(38) 0.0036(13) 0.0046(13) 0.0021(8) -0.00049(97) 0.00024(92)
+Nb1 Nb5+ 6 a 0 0 0.9914 0.00581 1.0
+O1 O2- 18 b 0.0455 0.3367 0.0555 0.00685 1.0
+
 
 #End of TTdata

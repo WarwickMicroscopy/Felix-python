@@ -465,6 +465,7 @@ def update_variables(v):
     for i in range(v.n_variables):
         j = v.atom_refine_flag[i]  # neat
         var = np.copy(v.refined_variable[i])
+
         if typ[i] == 0:
             # Structure factor refinement (handled elsewhere)
             variable_check = 1
@@ -488,10 +489,12 @@ def update_variables(v):
                 v.basis_occupancy[j] = var
 
             elif sub[i] == 2:   # Iso ADPs
-                if 0 < var:  # must lie in range
-                    v.basis_B_iso[j] = var
-                else:
-                    v.basis_B_iso[j] = 0.0
+                # if 0 < var:  # must lie in range
+                v.basis_u_ij[j, 0, 0] = var / (8 * np.pi**2)
+                v.basis_u_ij[j, 1, 1] = var / (8 * np.pi**2)
+                v.basis_u_ij[j, 2, 2] = var / (8 * np.pi**2)
+                # else:
+                #     v.basis_B_iso[j] = 0.0
             elif sub[i] == 3:  # u[1,1]
                 v.basis_u_ij[j][0][0] = var
             elif sub[i] == 4:  # u[1,1]
@@ -619,19 +622,20 @@ def print_current_var(v, i):
     # prints the variable being refined
     typ = v.refined_variable_type[i]  # variable type & subtype
     atom_id = v.atom_refine_flag[i]
+    label = v.basis_atom_label[atom_id]
 
     # dictionary of format strings
     formats = {
         10: (f"Current Ug", "{:.3f}"),
         11: (f"Current Ug", "{:.3f}"),
-        21: (f" Atom {atom_id}: Current occupancy", "{:.2f}"),
-        22: (f" Atom {atom_id}: Current B_iso", "{:.2f}"),
-        23: (f" Atom {atom_id}: Current U[0,0]", "{:.5f}"),
-        24: (f" Atom {atom_id}: Current U[1,1]", "{:.5f}"),
-        25: (f" Atom {atom_id}: Current U[2,2]", "{:.5f}"),
-        26: (f" Atom {atom_id}: Current U[1,2]", "{:.5f}"),
-        27: (f" Atom {atom_id}: Current U[1,3]", "{:.5f}"),
-        28: (f" Atom {atom_id}: Current U[2,3]", "{:.5f}"),
+        21: (f" Atom {atom_id}: {label} Current occupancy", "{:.2f}"),
+        22: (f" Atom {atom_id}: {label} Current B_iso", "{:.2f}"),
+        23: (f" Atom {atom_id}: {label} Current U[1,1]", "{:.5f}"),
+        24: (f" Atom {atom_id}: {label} Current U[2,2]", "{:.5f}"),
+        25: (f" Atom {atom_id}: {label} Current U[3,3]", "{:.5f}"),
+        26: (f" Atom {atom_id}: {label} Current U[1,2]", "{:.5f}"),
+        27: (f" Atom {atom_id}: {label} Current U[1,3]", "{:.5f}"),
+        28: (f" Atom {atom_id}: {label} Current U[2,3]", "{:.5f}"),
         30: (f"Current lattice parameter a", "{:.4f}"),
         31: (f"Current lattice parameter b", "{:.4f}"),
         32: (f"Current lattice parameter c", "{:.4f}"),
@@ -646,7 +650,7 @@ def print_current_var(v, i):
 
     if typ == 20:  # atomic coords
         with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
-            print(f"  Atom {atom_id}: {v.basis_atom_label[atom_id]} {v.basis_atom_position[atom_id, :]}")
+            print(f"  Atom {atom_id}: {label}  {v.basis_atom_position[atom_id, :]}")
     elif typ in formats:
         label, fmt = formats[typ]
         print(f"  {label} {fmt.format(v.refined_variable[i])}")
@@ -659,9 +663,9 @@ def variable_message(vtype):
         11: "Changing Ug phase",
         21: "Changing occupancy",
         22: "Changing B_iso",
-        23: "Changing U[0,0]",
-        24: "Changing U[1,1]",
-        25: "Changing U[2,2]",
+        23: "Changing U[1,1]",
+        24: "Changing U[2,2]",
+        25: "Changing U[3,3]",
         26: "Changing U[1,2]",
         27: "Changing U[1,3]",
         28: "Changing U[2,3]",
@@ -676,6 +680,7 @@ def variable_message(vtype):
         50: "Changing Kappa",
         51: "Changing proportion of valence electrons",
     }
+    return msg[vtype]
 
 
 def sim_fom(v, i):
@@ -707,14 +712,15 @@ def refine_single_variable(v, i):
     r3_var = np.zeros(3)  # for parabolic minimum
     r3_fom = np.zeros(3)
     v.current_variable_type = v.refined_variable_type[i]
-    # Check if ADP is negative, skip if so
-    if 21 < v.current_variable_type < 30 and v.refined_variable[i] <= 1e-10:
+    # Check if ADP is negative, skip if so NB u12,u13,u23 can be -ve
+    if 21 < v.current_variable_type < 26 and v.refined_variable[i] < 1e-10:
         p_i = 0.0
     else:
         # middle point is the previous best simulation
         r3_var[1] = v.refined_variable[i]*1.0
         r3_fom[1] = v.best_fit*1.0
         print(f"Finding gradient, variable {i+1} of {v.n_variables}")
+        # print(f"Variable type: {v.current_variable_type}")
         print(variable_message(v.current_variable_type))
         # print_current_var(v, i)
 
