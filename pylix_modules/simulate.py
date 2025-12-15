@@ -440,117 +440,107 @@ def update_variables(v):
     how this works!
 
     All updated variables are in the global class v so no specific return
+    
+    v.refined_variable_type:
+    10 A1 = Ug amplitude *** NOT YET IMPLEMENTED ***
+    11 A2 = Ug phase *** NOT YET IMPLEMENTED ***
+    20 B = atom coordinate *** PARTIALLY IMPLEMENTED *** not all space groups
+    21 C = occupancy
+    22 D = isotropic atomic displacement parameter (ADP)
+    23,24,25,26,27,28 E = anisotropic atomic displacement parameters (ADPs)
+    30,31,32 F = lattice parameters ***PARTIALLY IMPLEMENTED*** not rhombohedral
+    33,34,35 G = unit cell angles *** NOT YET IMPLEMENTED ***
+    40 H = convergence angle
+    41 I = accelerating_voltage_kv *** NOT YET IMPLEMENTED ***
+    50 J = Kappa
+    51 K = valence electrons
     """
 
     # will tackle this when doing atomic position refinement
     # basis_atom_delta.fill(0)  # Reset atom coordinate uncertainties to zero
-    print(v.n_variables)
+
+    typ = v.refined_variable_type // 10  # variable type
+    sub = v.refined_variable_type % 10  # variable subtype
 
     for i in range(v.n_variables):
-        # Check the type of variable, last digit of v.refined_variable_type
-        variable_type = v.refined_variable_type[i] % 12
-
-        if variable_type == 0:
+        j = v.atom_refine_flag[i]  # neat
+        var = np.copy(v.refined_variable[i])
+        if typ[i] == 0:
             # Structure factor refinement (handled elsewhere)
             variable_check = 1
 
-        elif variable_type == 2:  # NEEDS WORK
-            # Atomic coordinates
-            atom_id = v.atom_refine_flag[i]
+        elif typ[i] == 2:
+            if sub[i] == 0:  # Atomic coordinates
+                atom_id = j
+                # Update position: r' = r - v*(r.v) + v*current_var
+                r_dot_v = np.dot(v.basis_atom_position[atom_id],
+                                 v.atom_refine_vec[i])
+                v.basis_atom_position[atom_id, :] = np.mod(
+                    v.basis_atom_position[atom_id, :] + v.atom_refine_vec[i] *
+                    (var - r_dot_v), 1)
+    
+                # error estimate - needs work
+                # Update uncertainty if independent_delta is non-zero
+                # if abs(independent_delta[i]) > 1e-10:  # Tiny threshold
+                #     basis_atom_delta[atom_id, :] += vector[j - 1, :] * independent_delta[i]
 
-            # Update position: r' = r - v*(r.v) + v*current_var
-            r_dot_v = np.dot(v.basis_atom_position[atom_id],
-                             v.atom_refine_vec[i])
-            v.basis_atom_position[atom_id, :] = np.mod(
-                v.basis_atom_position[atom_id, :] + v.atom_refine_vec[i] *
-                (v.refined_variable[i] - r_dot_v), 1)
+            elif sub[i] == 1:  # Occupancy
+                v.basis_occupancy[j] = var
 
-            # error estimate - needs work
-            # Update uncertainty if independent_delta is non-zero
-            # if abs(independent_delta[i]) > 1e-10:  # Tiny threshold
-            #     basis_atom_delta[atom_id, :] += vector[j - 1, :] * independent_delta[i]
+            elif sub[i] == 2:   # Iso ADPs
+                if 0 < var:  # must lie in range
+                    v.basis_B_iso[j] = var
+                else:
+                    v.basis_B_iso[j] = 0.0
+            elif sub[i] == 3:  # u[1,1]
+                v.basis_u_ij[j][0][0] = var
+            elif sub[i] == 4:  # u[1,1]
+                v.basis_u_ij[j][1][1] = var
+            elif sub[i] == 5:  # u[2,2]
+                v.basis_u_ij[j][2][2] = var
+            elif sub[i] == 6:  # u[1,2]
+                v.basis_u_ij[j][0][1] = var
+                v.basis_u_ij[j][1][0] = var
+            elif sub[i] == 7:  # u[1,3]
+                v.basis_u_ij[j][0][2] = var
+                v.basis_u_ij[j][2][0] = var
+            elif sub[i] == 8:  # u[2,3]
+                v.basis_u_ij[j][1][2] = var
+                v.basis_u_ij[j][2][1] = var
 
-        elif variable_type == 3:
-            # Occupancy
-            v.basis_occupancy[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
-
-        elif variable_type == 4:
-            # Iso Debye-Waller factor
-            if 0 < v.refined_variable[i] < 4:  # must lie in a reasonable range
-                v.basis_B_iso[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
-            else:
-                v.basis_B_iso[v.atom_refine_flag[i]] = 0.0
-        elif variable_type == 5:
-            # Aniso Debye-Waller factor (implemented)
-            U = v.aniso_matrix[v.atom_refine_flag[i]]
-            if 0 < U[0, 0] < 0.1:
-                U[0, 0] = v.refined_variable[i]*1.0
-            else:
-                U[0, 0] = 0
-            if 0 < U[1, 1] < 0.1:
-                U[1, 1] = v.refined_variable[i]*1.0
-            else:
-                U[1, 1] = 0
-            if 0 < U[2, 2] < 0.1:
-                U[2, 2] = v.refined_variable[i]*1.0
-            else:
-                U[2, 2] = 0
-            if 0 < U[0, 1] < 0.1:
-                U[0, 1] = U[1, 0] = v.refined_variable[i]*1.0
-            else:
-                U[0, 1] = U[1, 0] = 0
-            if 0 < U[0, 2] < 0.1:
-                U[0, 2] = U[2, 0] = v.refined_variable[i]*1.0
-            else:
-                U[0, 2] = U[2, 0] = 0
-            if 0 < U[1, 2] < 0.1:
-                U[1, 2] = U[1, 2] = v.refined_variable[i]*1.0
-            else:
-                U[1, 2] = U[2, 1]=0
-            v.aniso_matrix[v.atom_refine_flag[i]] = U
-
-        elif variable_type == 6:
+        elif typ[i] == 3:
             # Lattice parameters a, b, c
-            if v.refined_variable_type[i] == 6:
-                v.cell_a = v.cell_b = v.cell_c = v.refined_variable[i]*1.0
-            elif v.refined_variable_type[i] == 16:
-                v.cell_b = v.refined_variable[i]*1.0
-            elif v.refined_variable_type[i] == 26:
-                v.cell_c = v.refined_variable[i]*1.0
+            if sub[i] == 0:
+                v.cell_a = v.cell_b = v.cell_c = var
+            elif sub[i] == 1:
+                v.cell_b = var
+            elif sub[i] == 2:
+                v.cell_c = var
+            elif sub[i] == 3:
+                v.cell_alpha = var
+            elif sub[i] == 4:
+                v.cell_beta = var
+            elif sub[i] == 5:
+                v.cell_gamma = var
 
-        # elif variable_type == 7:
-        #     # Lattice angles alpha, beta, gamma
-        #     variable_check[6] = 1
-        #     if j == 1:
-        #         v.cell_alpha = current_var[i]
-        #     elif j == 2:
-        #         v.cell_beta = current_var[i]
-        #     elif j == 3:
-        #         v.cell_gamma = current_var[i]
+        elif typ[i] == 4:
+            if sub[i] == 0:  # Convergence angle
+                v.convergence_angle = var
+            elif sub[i] == 1:  # Accelerating voltage
+                v.accelerating_voltage_kv = var
 
-        elif variable_type == 8:
-            # Convergence angle
-            v.convergence_angle = v.refined_variable[i]*1.0
-
-        elif variable_type == 9:
-            # Accelerating voltage
-            v.accelerating_voltage_kv = v.refined_variable[i]*1.0
-            
-            #refinig kappa values in basis 
-        elif variable_type == 10:
-            if 0.7 < v.refined_variable[i] < 1.3:  # must lie in a reasonable range
-                v.Basis_Kappa[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
-            else:
-             #   v.Basis_Kappa[v.atom_refine_flag[i]] = 0.0
-                v.Basis_Kappa[v.atom_refine_flag[i]] = np.clip(v.refined_variable[i], 0.7, 1.3)
-        # refining Pv values in basis 
-        elif variable_type == 11:
-           if v.refined_variable[i]*0.5 < v.refined_variable[i] < v.refined_variable[i]*1.5:  # must lie in a reasonable range
-                v.Basis_Pv[v.atom_refine_flag[i]] = v.refined_variable[i]*1.0
-           else: 
-                v.Basis_Pv[v.atom_refine_flag[i]] = 0.0
-               #v.Basis_Pv[v.atom_refine_flag[i]] = np.clip(v.refined_variable[i], ,1.5 )
-
+        elif typ[i] == 5:
+            if sub[i] == 0:  # kappa
+                if 0.7 < var < 1.3:  # must lie in a reasonable range
+                    v.Basis_Kappa[j] = var*1.0
+                else:
+                    v.Basis_Kappa[j] = np.clip(var, 0.7, 1.3)
+            elif sub[i] == 1:  # valence electrons
+                if 0.5 < var < 1.5:  # must lie in a reasonable range
+                    v.Basis_Pv[j] = var*1.0
+                else:
+                    v.Basis_Pv[j] = 0.0
+                    # v.Basis_Pv[j] = np.clip(var, ,1.5 )
     return
 
 
@@ -627,46 +617,65 @@ def save_LACBED(v):
 
 def print_current_var(v, i):
     # prints the variable being refined
-    var = v.refined_variable[i]
+    typ = v.refined_variable_type[i]  # variable type & subtype
     atom_id = v.atom_refine_flag[i]
-    t = v.current_variable_type % 10
 
     # dictionary of format strings
     formats = {
-        1: ("Current Ug", "{:.3f}"),
-        3: ("Current occupancy", "{:.2f}"),
-        4: ("Current Biso", "{:.2f}"),
-        5: ("Current U[ij]", "{:.5f}"),
-        6: ("Current lattice parameter", "{:.4f}"),
-        8: ("Current convergence angle", "{:.3f} Å^-1"),
-        9: ("Current accelerating voltage", "{:.1f} kV"),
-        10:("Current Kappa", "{:.3f}"),
-        11:("Current Pv", "{:.4f}"),
-            
+        10: (f"Current Ug", "{:.3f}"),
+        11: (f"Current Ug", "{:.3f}"),
+        21: (f" Atom {atom_id}: Current occupancy", "{:.2f}"),
+        22: (f" Atom {atom_id}: Current B_iso", "{:.2f}"),
+        23: (f" Atom {atom_id}: Current U[0,0]", "{:.5f}"),
+        24: (f" Atom {atom_id}: Current U[1,1]", "{:.5f}"),
+        25: (f" Atom {atom_id}: Current U[2,2]", "{:.5f}"),
+        26: (f" Atom {atom_id}: Current U[1,2]", "{:.5f}"),
+        27: (f" Atom {atom_id}: Current U[1,3]", "{:.5f}"),
+        28: (f" Atom {atom_id}: Current U[2,3]", "{:.5f}"),
+        30: (f"Current lattice parameter a", "{:.4f}"),
+        31: (f"Current lattice parameter b", "{:.4f}"),
+        32: (f"Current lattice parameter c", "{:.4f}"),
+        33: (f"Current lattice alpha", "{:.4f}"),
+        34: (f"Current lattice beta", "{:.4f}"),
+        35: (f"Current lattice gamma", "{:.4f}"),
+        40: (f"Current convergence angle", "{:.3f} Å^-1"),
+        41: (f"Current accelerating voltage", "{:.1f} kV"),
+        50: (f" Atom {atom_id}: Current Kappa", "{:.3f}"),
+        51: (f" Atom {atom_id}: Current proportion of valence electrons", "{:.4f}")
             }
 
-    if t == 2:  # coord output
+    if typ == 20:  # atomic coords
         with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
             print(f"  Atom {atom_id}: {v.basis_atom_label[atom_id]} {v.basis_atom_position[atom_id, :]}")
-    elif t in formats:
-        label, fmt = formats[t]
-        print(f"  {label} {fmt.format(var)}")
+    elif typ in formats:
+        label, fmt = formats[typ]
+        print(f"  {label} {fmt.format(v.refined_variable[i])}")
 
 
 def variable_message(vtype):
     """Map variable type → message string."""
     msg = {
-        1: "Changing Ug",
-        2: "Changing atomic coordinate",
-        3: "Changing occupancy",
-        4: "Changing isotropic thermal displacement parameter Biso",
-        5: "Changing anisotropic thermal displacement parameter U[ij]",
-        6: "Changing lattice parameter",
-        8: "Changing convergence angle",
-        10:"Changing Kappa parameter",
-        11:"Changing Pv Value",
+        10: "Changing Ug amplitude",
+        11: "Changing Ug phase",
+        21: "Changing occupancy",
+        22: "Changing B_iso",
+        23: "Changing U[0,0]",
+        24: "Changing U[1,1]",
+        25: "Changing U[2,2]",
+        26: "Changing U[1,2]",
+        27: "Changing U[1,3]",
+        28: "Changing U[2,3]",
+        30: "Changing lattice parameter a", 
+        31: "Changing lattice parameter b", 
+        32: "Changing lattice parameter c", 
+        33: "Changing lattice alpha", 
+        34: "Changing lattice beta", 
+        35: "Changing lattice gamma", 
+        40: "Changing convergence angle",
+        41: "Changing accelerating voltage",
+        50: "Changing Kappa",
+        51: "Changing proportion of valence electrons",
     }
-    return msg.get(vtype % 12, "Unknown variable type")
 
 
 def sim_fom(v, i):
@@ -698,8 +707,8 @@ def refine_single_variable(v, i):
     r3_var = np.zeros(3)  # for parabolic minimum
     r3_fom = np.zeros(3)
     v.current_variable_type = v.refined_variable_type[i]
-    # Check if Debye-Waller factor is zero, skip if so
-    if v.current_variable_type == 4 and v.refined_variable[i] <= 1e-10:
+    # Check if ADP is negative, skip if so
+    if 21 < v.current_variable_type < 30 and v.refined_variable[i] <= 1e-10:
         p_i = 0.0
     else:
         # middle point is the previous best simulation

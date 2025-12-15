@@ -1,5 +1,33 @@
-# Input file for Felix version :master: v1.3 :29June2024:
+# Input file for Felix version :main: :15 December 2025:
 # ------------------------------------
+Scatter factor method:
+    Kirkland, 0
+    Lobato, 1
+    Peng, 2
+    Doyle-Turner, 3
+    Kappa, 4
+
+Absorption:
+    None, 0
+    Proportional, 1 (value given by absorption per)
+    Bird & King (Thomas parameterisation) 2
+
+Refine modes:
+    Simulation only, S
+    Structure Factors, A
+    Atomic Coordinates, B  ***partially implemented
+    Occupancies, C
+    Isotropic atomic displacement parameters, D
+    Anisotropic atomic displacement parameters, E
+    Lattice Parameters, F  ***partially implemented
+    Lattice Angles, G  ***not yet implemented
+    Convergence Angle, H
+    Accelerating Voltage, I  ***not yet implemented
+    Kappa, J  ***partially implemented
+    Proportion of valence electrons, K  ***partially implemented
+
+Refinements B, C, D, E, J, K are applied to the atom(s) in cif given by atomic sites
+Refinement scale gives initial change in the refined parameter (absolute value)
 
 # ------------------------------------
 
@@ -18,8 +46,8 @@ Debye_model               = 1
 image_radius              = 42
 
 # Beam selection criteria
-min_reflection_pool       = 800
-min_strong_beams          = 80
+min_reflection_pool       = 100
+min_strong_beams          = 30
 min_weak_beams            = 0
 g_limit                   = 0.0
 
@@ -41,14 +69,14 @@ final_thickness           = 1200.0
 delta_thickness           = 25.0
 precision                 = 0.00002
 # Refinement specific flags
-refine_mode               = 'S'
+refine_mode               = 'E'
 weighting_flag            = 0
 refine_method             = 3
 correlation_type          = 2
 image_processing          = 0
 blur_radius               = 0.7
 no_of_ugs                 = 40
-atomic_sites              = [2]
+atomic_sites              = [1]
 print_flag                = 0
 refinement_scale          = 0.01
 exit_criteria             = 0.00005

@@ -45,6 +45,8 @@ print("-----------------------------------------------------------------")
 v = pc.Var()  # working variables used in the simulation
 # initialise iteration count
 v.iter_count = 0
+# a small number
+eps = 1e-10
 
 
 # %% read felix.cif
@@ -148,7 +150,7 @@ if "atom_site_aniso_label" in cif_dict:
     for i in range(n_basis):
         for j in range(len(v.atom_site_aniso_label)):
             if v.atom_site_aniso_label[j] == v.basis_atom_label[i]:
-                print(f"  Using ADPs for atom {i}")
+                print(f"  Using anisotropic atomic displacement parameters for atom {i}")
                 # the data is in 2-tuples (second value is the error)
                 v.basis_u_ij[i, 0, 0] = v.atom_site_aniso_u_11[j][0]
                 v.basis_u_ij[i, 1, 1] = v.atom_site_aniso_u_22[j][0]
@@ -159,6 +161,9 @@ if "atom_site_aniso_label" in cif_dict:
                 v.basis_u_ij[i, 2, 0] = v.atom_site_aniso_u_13[j][0]
                 v.basis_u_ij[i, 1, 2] = v.atom_site_aniso_u_23[j][0]
                 v.basis_u_ij[i, 2, 1] = v.atom_site_aniso_u_23[j][0]
+
+# np.set_printoptions(precision=5, suppress=True)
+# print(f"Anisotropic ADPs: {v.basis_u_ij}")
 
 # occupancy, assume it's unity if not specified
 if v.atom_site_occupancy is not None:
@@ -268,7 +273,10 @@ elif 'A' in v.refine_mode:
     # needs error check for any other refinement
     # raise ValueError("Structure factor refinement
     # incompatible with anything else")
-else:
+else:  # atom-specific refinements can be done simultaneously
+    if (len(v.atomic_sites) > n_basis):
+        raise ValueError("Number of atomic sites to refine is larger than the \
+                         number of atoms")
     if 'B' in v.refine_mode:
         print("Refining Atomic Coordinates, B")
         # redefine the basis if necessary to allow coordinate refinement
@@ -281,10 +289,14 @@ else:
         print("Refining Isotropic Debye Waller Factors, D")
     if 'E' in v.refine_mode:
         print("Refining Anisotropic Debye Waller Factors, E")
-        #raise ValueError("Refinement mode E not implemented")
-    if (len(v.atomic_sites) > n_basis):
-        raise ValueError("Number of atomic sites to refine is larger than the \
-                         number of atoms")
+    if 'J' in v.refine_mode:
+        print("Refining Kappa, J")
+    if 'K' in v.refine_mode:
+        print("Refining valence electrons, K")
+    for i in range(len(v.atomic_sites)):
+        print(f"  Refining basis atom {v.atomic_sites[i]}, {v.basis_atom_name[v.atomic_sites[i]]}")
+
+# non atom-specific refinements
 if 'F' in v.refine_mode:
     print("Refining Lattice Parameters, F")
 if 'G' in v.refine_mode:
@@ -293,10 +305,6 @@ if 'H' in v.refine_mode:
     print("Refining Convergence Angle, H")
 if 'I' in v.refine_mode:
     print("Refining Accelerating Voltage, I")
-if 'J' in v.refine_mode:
-    print("Refining Kappa values, J")
-if 'K' in v.refine_mode:
-    print("Refining Pv vales, K")
 
 if v.correlation_type == 0:
     print("  Using Pearson correlation to compare simulation and experiment")
@@ -318,16 +326,18 @@ v.n_out = len(v.input_hkls)+1  # we expect 000 NOT to be in the hkl list
 # We count the independent variables:
 # v.refined_variable = variable to be refined
 # v.refined_variable_type = what kind of variable, as follows
-# 0 A1 = Ug amplitude *** NOT YET IMPLEMENTED ***
-# 1 A2 = Ug phase *** NOT YET IMPLEMENTED ***
-# 2 B = atom coordinate *** PARTIALLY IMPLEMENTED *** not all space groups
-# 3 C = occupancy
-# 4 D = isotropic atomic displacement parameters (ADPs)
-# 5 E = anisotropic atomic displacement parameters (ADPs)
-# 61,62,63 F = lattice parameters ***PARTIALLY IMPLEMENTED*** not rhombohedral
-# 7 G = unit cell angles *** NOT YET IMPLEMENTED ***
-# 8 H = convergence angle
-# 9 I = accelerating_voltage_kv *** NOT YET IMPLEMENTED ***
+# 10 A1 = Ug amplitude *** NOT YET IMPLEMENTED ***
+# 11 A2 = Ug phase *** NOT YET IMPLEMENTED ***
+# 20 B = atom coordinate *** PARTIALLY IMPLEMENTED *** not all space groups
+# 21 C = occupancy
+# 22 D = isotropic atomic displacement parameters (ADPs)
+# 23,24,25,26,27,28 E = anisotropic atomic displacement parameters (ADPs)
+# 30,31,32 F = lattice parameters ***PARTIALLY IMPLEMENTED*** not rhombohedral
+# 33,34,35 G = unit cell angles *** NOT YET IMPLEMENTED ***
+# 40 H = convergence angle
+# 41 I = accelerating_voltage_kv *** NOT YET IMPLEMENTED ***
+# 50 J = Kappa
+# 51 K = valence electrons
 v.refined_variable = ([])  # array of floats, values to be refined
 v.refined_variable_type = ([])  # array of integers corresponding to above
 v.atom_refine_flag = ([])  # the index of the atom in the .cif, -1 if none
@@ -335,7 +345,6 @@ v.atom_refine_vec = ([])  # the direction of atom movement, [0,0,0] if none
 nullvec = np.array([0, 0, 0])  # null vector for above
 if 'S' not in v.refine_mode:
     v.n_variables = 0
-    # v.iter_count = 1  # or should this be elsewhere ***
     # count refinement variables
     if 'B' in v.refine_mode:  # Atom coordinate refinement
         # the input v.atomic_sites gives the index of the atom in the cif
@@ -356,35 +365,38 @@ if 'S' not in v.refine_mode:
                 r_dot_v = np.dot(v.basis_atom_position[v.atomic_sites[i]],
                                  moves[j, :])
                 v.refined_variable.append(r_dot_v)
-                v.refined_variable_type.append(2)  # flag to say it's a coord
+                v.refined_variable_type.append(20)  # flag to say it's a coord
                 v.atom_refine_flag.append(v.atomic_sites[i])  # atom index
                 v.atom_refine_vec.append(moves[j, :])  # atom movement
 
     if 'C' in v.refine_mode:  # Occupancy
         for i in range(len(v.atomic_sites)):
             v.refined_variable.append(v.basis_occupancy[v.atomic_sites[i]])
-            v.refined_variable_type.append(3)
+            v.refined_variable_type.append(21)
             v.atom_refine_flag.append(v.atomic_sites[i])
             v.atom_refine_vec.append(nullvec)  # no atom movement
 
     if 'D' in v.refine_mode:  # Isotropic ADPs
         for i in range(len(v.atomic_sites)):
             v.refined_variable.append(v.basis_B_iso[v.atomic_sites[i]])
-            v.refined_variable_type.append(4)
+            v.refined_variable_type.append(22)
             v.atom_refine_flag.append(v.atomic_sites[i])
             v.atom_refine_vec.append(nullvec)  # no atom movement
 
-    if 'E' in v.refine_mode:  # Anisotropic ADPs
+    if 'E' in v.refine_mode:  # Anisotropic ADPs, only refine non-zero
         for i in range(len(v.atomic_sites)):
-            U = v.basis_u_ij[i]
+            U = v.basis_u_ij[v.atomic_sites[i]]
             # Extract symmetric independent components
-            aniso_params = [U[0, 0], U[1, 1], U[2, 2],
-                            U[0, 1], U[0, 2], U[1, 2]]
-            for u in aniso_params:
-                v.refined_variable.append(u)
-                v.refined_variable_type.append(5)
-                v.atom_refine_flag.append(v.atomic_sites[i])
-                v.atom_refine_vec.append(nullvec)  # no atom movement
+            aniso_params = np.array([U[0, 0], U[1, 1], U[2, 2],
+                                     U[0, 1], U[0, 2], U[1, 2]])
+            anisotypes = [23, 24, 25, 26, 27, 28]
+            for param, t in zip(aniso_params, anisotypes):
+                if param > eps:
+                    v.refined_variable.append(param)
+                    v.refined_variable_type.append(t)
+                    v.atom_refine_flag.append(v.atomic_sites[i])
+                    v.atom_refine_vec.append(nullvec)  # no atom movement
+
 
     if 'F' in v.refine_mode:  # Lattice parameters
         # variable_type first digit=6 indicates lattice parameter
@@ -392,15 +404,15 @@ if 'S' not in v.refine_mode:
         # This section needs work to include rhombohedral cells and
         # non-standard settings!!!
         v.refined_variable.append(v.cell_a)  # is in all lattice types
-        v.refined_variable_type.append(61)
+        v.refined_variable_type.append(30)
         v.atom_refine_flag.append(-1)  # -1 indicates not an atom
         v.atom_refine_vec.append(nullvec)  # no atom movement
         if v.space_group_number < 75:  # Triclinic, monoclinic, orthorhombic
             v.refined_variable.append(v.cell_b)
-            v.refined_variable_type.append(62)
+            v.refined_variable_type.append(31)
             v.atom_refine_flag.append(-1)
             v.refined_variable.append(v.cell_c)
-            v.refined_variable_type.append(63)
+            v.refined_variable_type.append(32)
             v.atom_refine_flag.append(-1)
             v.atom_refine_vec.append(nullvec)  # no atom movement
         elif 142 < v.space_group_number < 168:  # Rhombohedral
@@ -409,38 +421,38 @@ if 'S' not in v.refine_mode:
         elif (167 < v.space_group_number < 195) or \
              (74 < v.space_group_number < 143):  # Hexagonal or Tetragonal
             v.refined_variable.append(v.cell_c)
-            v.refined_variable_type.append(63)
+            v.refined_variable_type.append(32)
             v.atom_refine_flag.append(-1)
             v.atom_refine_vec.append(nullvec)  # no atom movement
 
     if 'G' in v.refine_mode:  # Unit cell angles
-        # Not yet implemented!!! variable_type 7
+        # Not yet implemented!!! variable_type 33,34,35
         raise ValueError("Unit cell angle refinement not yet implemented")
 
     if 'H' in v.refine_mode:  # Convergence angle
         v.refined_variable.append(v.convergence_angle)
-        v.refined_variable_type.append(8)
+        v.refined_variable_type.append(40)
         v.atom_refine_flag.append(-1)
         v.atom_refine_vec.append(nullvec)  # no atom movement
         print(f"Starting convergence angle {v.convergence_angle} Å^-1")
 
     if 'I' in v.refine_mode:  # accelerating_voltage_kv
         v.refined_variable.append(v.accelerating_voltage_kv)
-        v.refined_variable_type.append(9)
+        v.refined_variable_type.append(41)
         v.atom_refine_flag.append(-1)
         v.atom_refine_vec.append(nullvec)  # no atom movement
 
     if 'J' in v.refine_mode:
         for i in range(len(v.atomic_sites)):
             v.refined_variable.append(v.Basis_Kappa[v.atomic_sites[i]])
-            v.refined_variable_type.append(10)
+            v.refined_variable_type.append(50)
             v.atom_refine_flag.append(v.atomic_sites[i])
             v.atom_refine_vec.append(nullvec)  # no atom movement
 
     if 'K' in v.refine_mode:
         for i in range(len(v.atomic_sites)):
             v.refined_variable.append(v.Basis_Pv[v.atomic_sites[i]])
-            v.refined_variable_type.append(11)
+            v.refined_variable_type.append(51)
             v.atom_refine_flag.append(v.atomic_sites[i])
             v.atom_refine_vec.append(nullvec)  # no atom movement
 
