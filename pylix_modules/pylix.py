@@ -98,10 +98,7 @@ def extract_cif_parameter(item):
     """
     Parses a value string with uncertainty, e.g., '8.6754(3)',
     and returns the value and uncertainty as floats.
-
-    Args:
     - item (str): The string containing the value with uncertainty.
-
     Returns:
     - tuple: A tuple containing the value and the uncertainty as floats.
     """
@@ -1184,10 +1181,10 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
             f_g_prime = 1j * f_g * absorption_per/100.0
         # Bird & King model, parameterised by Thomas (Acta Cryst 2023)
         elif absorption_method == 2:
-            f_g_prime = 1j * f_thomas(g_magnitude, 0.4,
-                                      atomic_number[i], electron_velocity)
-            # f_g_prime = 1j * f_thomas(g_magnitude, B_aniso[i, :, :],
+            # f_g_prime = 1j * f_thomas(g_magnitude, 0.4,
             #                           atomic_number[i], electron_velocity)
+            f_g_prime = 1j * f_thomas(g_magnitude, B_aniso[i, :, :],
+                                      atomic_number[i], electron_velocity)
         if debug and i < 4:
             print(f"f_g [{i}]")
             print(f"{f_g[:5, :5]}")
@@ -1775,27 +1772,51 @@ def kappa_factors(g, Z, pv, kappa):
 # should handle values below 0.5 Q using kirkland values or some type of extrapolation
 
 
-def four_gauss(x, args):
-    # # returns the sum of four Gaussians & a constant for Thomas f_prime
-    f = args[0]*np.exp(-abs(args[1])*x**2) + \
-        args[2]*np.exp(-abs(args[3])*x**2) + \
-        args[4]*np.exp(-abs(args[5])*x**2) + \
-        args[6]*np.exp(-abs(args[7])*x**2) + args[8]
+def four_gauss(s, a):
+    """
+    sum of four Gaussians & a constant for Thomas f_prime
+    s : float, sin(theta)/lambda, can be an array [n_hkl, n_hkl]
+    a : array of floats size [9] from Thomas look up table
+    
+    Returns : f_prime, array [n_hkl, n_hkl], the imaginary part of the
+    scattering factor
+    """
+    # f = a[0]*np.exp(-abs(a[1])*s**2) + \
+    #     a[2]*np.exp(-abs(a[3])*s**2) + \
+    #     a[4]*np.exp(-abs(a[5])*s**2) + \
+    #     a[6]*np.exp(-abs(a[7])*s**2) + a[8]
+    f = (a[..., 0] * np.exp(-np.abs(a[..., 1]) * s**2) +
+         a[..., 2] * np.exp(-np.abs(a[..., 3]) * s**2) +
+         a[..., 4] * np.exp(-np.abs(a[..., 5]) * s**2) +
+         a[..., 6] * np.exp(-np.abs(a[..., 7]) * s**2) +
+         a[..., 8])
     return f
-    # x: array (..., 3)
-    # args: array (..., 9)
-    # return (
-    #     args[..., 0]*np.exp(-abs(args[..., 1])*x[..., 0]**2) +
-    #     args[..., 2]*np.exp(-abs(args[..., 3])*x[..., 1]**2) +
-    #     args[..., 4]*np.exp(-abs(args[..., 5])*x[..., 2]**2) +
-    #     args[..., 6]*np.exp(-abs(args[..., 7]) *
-    #                         (x[..., 0]**2+x[..., 1]**2+x[..., 2]**2)) +
-    #     args[..., 8])
+
+    # f = (a[..., 0]*np.exp(-abs(a[..., 1])*s[..., 0]**2) +
+    #     a[..., 2]*np.exp(-abs(a[..., 3])*s[..., 1]**2) +
+    #     a[..., 4]*np.exp(-abs(a[..., 5])*s[..., 2]**2) +
+    #     a[..., 6]*np.exp(-abs(a[..., 7]) *
+    #                         (s[..., 0]**2+s[..., 1]**2+s[..., 2]**2)) +
+    #     a[..., 8])
 
 
 def f_thomas(g, B, Z, v):
-    # interpolated of parameterised Bird & King absorptive scattering factors
-    # calculation uses s = g/2
+    """
+    Interpolated parameterised Bird & King absorptive scattering factors
+    we collect 9 parameters from the table fu.thomas according to atomic
+    number Z, and use the subroutine four_gauss to produce f_prime.
+    Relativistic correction scales by v/c.
+
+    g : float, g-vector magnitude |g|, usually an array [n_hkl, n_hkl]
+    B : float, Biso (an array [n_hkl, n_hkl] if using anisotropic ADPs)
+    Z : integer, atomic number
+    v : float, electron velocity in m/s
+
+    Returns : f_prime, array [n_hkl, n_hkl], the imaginary part of the
+    scattering factor
+    """
+
+    # calculation uses s = g/2 = sin(theta)/lambda
     s = g/2
     # returns an interpolated absorptive scattering factor
     Bvalues = np.array([0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5,
@@ -1803,75 +1824,37 @@ def f_thomas(g, B, Z, v):
 
     # error checking
     if np.any(s < 0):
-        raise ValueError("invalid values of s (must be ≥ 0)")
+        raise ValueError("Absorptive f: invalid g (must be ≥ 0)")
     if np.any(B < 0):
-        raise ValueError("invalid B values (must be ≥ 0)")
+        raise ValueError("Absorptive f: invalid Biso (must be ≥ 0)")
     B = np.clip(B, 0.1, None)  # enforce B >= 0.1
     if np.any(B > 4):
-        raise ValueError("B values outside parameterised range [0.1, 4]")
+        raise ValueError("Absorptive f: Biso outside range [0.1, 4]")
     if Z < 1 or Z > 103:
-        raise ValueError("invalid Z")
+        raise ValueError("Absorptive f: invalid Z")
     # If all B are zero: return zero map
     if np.all(B == 0):
         return np.zeros(B.shape)
 
-    # # interpolation - index in Bvalues just above B
-    # idx_hi = np.searchsorted(Bvalues, B, side='left')
-    # # exact matches (no interpolation needed)
-    # exact_mask = (idx_hi < len(Bvalues)) & (Bvalues[idx_hi] == B)
-    # # clamp idx_hi to valid interior region (1 ... len-1)
-    # idx_hi = np.clip(idx_hi, 1, len(Bvalues) - 1)
-    # idx_lo = idx_hi - 1
-    # # Retrieve coefficients for the two bounding B-values for each (i,j)
-    # params_lo = fu.thomas[Z - 1][idx_lo]     # shape (n_hkl, n_hkl, 9)
-    # params_hi = fu.thomas[Z - 1][idx_hi]     # same shape
-    # # Compute Gaussian sums for both bounding sets
-    # line_lo = four_gauss(s, params_lo)       # shape (n_hkl, n_hkl)
-    # line_hi = four_gauss(s, params_hi)       # shape (n_hkl, n_hkl)
-    # # linear interpolation factor
-    # B_lo = Bvalues[idx_lo]
-    # B_hi = Bvalues[idx_hi]
-    # t = (B - B_lo) / (B_hi - B_lo)
+    # index in Bvalues just above B
+    idx = np.searchsorted(Bvalues, B, side='left')
 
-    # # final interpolated line
-    # line = line_lo + t * (line_hi - line_lo)
+    # upper and lower f_prime
+    params_hi = fu.thomas[Z - 1][idx]     # size [n_hkl, n_hkl, 9]
+    f_hi = four_gauss(s, params_hi)
+    params_lo = fu.thomas[Z - 1][idx-1]     # size [n_hkl, n_hkl, 9]
+    params_lo[idx == 0] = 0
+    f_lo = four_gauss(s, params_lo)
 
-    # # Replace values where B matched exactly
-    # if np.any(exact_mask):
-    #     exact_idx = idx_hi   # same index for exact match
-    #     line_exact = four_gauss(s[exact_mask],
-    #                             fu.thomas[Z - 1][exact_idx[exact_mask]])
-    #     line[exact_mask] = line_exact
-    # # error checking
-    # if isinstance(s, np.ndarray) and np.any(s < 0):
-    #     raise Exception("inavlid values of s")
-    # elif isinstance(s, (int, float)) and s < 0:
-    #     raise Exception("invalid value of s")
-    # if B < 0:
-    #     raise Exception("invalid value of B")
-    # if B < 0.1:
-    #     B = 0.1
-    # if B > 4:  # or 0 < B < 0.1:
-    #     raise Exception(f"B = {B}! Outside range of parameterisation")
-    # if Z < 1 or Z > 103:
-    #     raise Exception("invalid value of Z")
-    # if isinstance(s, np.ndarray) and B == 0:
-    #     return np.zeros(np.shape(s))
-    # elif isinstance(s, (int, float)) and B == 0:
-    #     return 0
+    # interpolation
+    B_hi = Bvalues[idx]
+    B_lo = Bvalues[idx-1]
+    B_lo[idx == 0] = 0
+    interp = (B_hi-B)/(B_hi-B_lo)
+    f_p = (f_lo*interp) + (f_hi*(1-interp))
 
-    # get f_prime
-    if np.any(B == Bvalues):  # we don't need to interpolate
-        i = np.where(Bvalues == B)[0][0]
-        line = four_gauss(s, fu.thomas[Z-1][i])
-    else:  # interpolate between parameterised values
-        i = np.where(Bvalues >= B)[0][0]
-        bounding_b = Bvalues[i - 1:i + 1]
-        line1 = four_gauss(s, fu.thomas[Z-1][i - 1])
-        line2 = four_gauss(s, fu.thomas[Z-1][i])
-        line = line1 + (B - bounding_b[0])*(line2 - line1) / \
-            (bounding_b[1] - bounding_b[0])
-    f_prime = np.where(line > 0, line, 0)*c/v
+    # replace negative values with zero and relativistic correction
+    f_prime = np.where(f_p > 0, f_p, 0)*c/v
 
     return f_prime
 

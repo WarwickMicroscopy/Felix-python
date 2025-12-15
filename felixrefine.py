@@ -249,15 +249,15 @@ else:
     print(f"{v.n_thickness} thicknesses: {', '.join(map(str, v.thickness/10))} nm")
 
 if v.scatter_factor_method == 0:
-    print("Using Kirkland scattering factors")
+    print("  Using Kirkland scattering factors")
 elif v.scatter_factor_method == 1:
-    print("Using Lobato scattering factors")
+    print("  Using Lobato scattering factors")
 elif v.scatter_factor_method == 2:
-    print("Using Peng scattering factors")
+    print("  Using Peng scattering factors")
 elif v.scatter_factor_method == 3:
-    print("Using Doyle & Turner scattering factors")
+    print("  Using Doyle & Turner scattering factors")
 elif v.scatter_factor_method == 4:
-    print("Using orbital HF scattering factors with Kappa formalism")
+    print("  Using orbital HF scattering factors with Kappa formalism")
 else:
     raise ValueError("No scattering factors chosen in felix.inp")
 
