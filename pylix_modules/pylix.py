@@ -1826,7 +1826,7 @@ def f_thomas(g, B, Z, v):
     if np.any(s < 0):
         raise ValueError("Absorptive f: invalid g (must be ≥ 0)")
     if np.any(B < 0) or np.any(B > 4):
-        print("Absorptive f: Biso outside range [0, 4], clipping")
+        # print("Absorptive f: Biso outside range [0, 4], clipping")
         B = np.clip(B, 0., 4.)
     if Z < 1 or Z > 103:
         raise ValueError("Absorptive f: invalid Z")

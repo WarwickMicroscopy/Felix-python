@@ -661,6 +661,7 @@ def variable_message(vtype):
     msg = {
         10: "Changing Ug amplitude",
         11: "Changing Ug phase",
+        20: "Changing atom coordinates",
         21: "Changing occupancy",
         22: "Changing B_iso",
         23: "Changing U[1,1]",
