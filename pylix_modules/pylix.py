@@ -1091,20 +1091,21 @@ def hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k, lattice_type,
     return hkl, g_pool, g_mag, np.array(g_output)
 
 
-def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
-              atomic_number, occupancy, u_ij, g_matrix, absorption_method,
-              absorption_per, electron_velocity, kappas, pv,
+def Fg_matrix(n_hkl, scatter_factor_method, basis_atom_label, atom_label,
+              atom_coordinate, atomic_number, occupancy, u_ij, g_matrix,
+              absorption_method, absorption_per, electron_velocity, kappas, pv,
               Debye, model, debug):
     """
     Parameters
     ----------
     n_hkl : int, number of hkls
     scatter_factor_method : int, cchoise of scattering factor calculation
-    n_atoms : int, number of atoms in the cell
-    atom_coordinate : float, fractional atom coordinates, size [n_atoms, 3]
-    atomic_number : int, size [n_atoms]
-    occupancy : float, size [n_atoms]
-    u_ij : float array of ADPs, size [n_atoms,3,3]
+    atom_label : string tuple, atom labels in the basis
+    atom_label : string tuple, atom labels in the cell
+    atom_coordinate : float, fractional atom coordinates, size [n_cell, 3]
+    atomic_number : int, size [n_cell], number of atoms in the cell
+    occupancy : float, size [n_cell]
+    u_ij : float array of ADPs, size [n_cell,3,3]
     g_matrix : array of g-vectors in the microscope frame, size [n_hkl,n_hkl]
     absorption_method : int, flag for absorption calculation
     absorption_per : float, % absorption, if that method is used
@@ -1122,10 +1123,11 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
     -------
     Fg_matrix : size [n_hkl,n_hkl]
     """
-
-    # calculate g.r for all g-vectors and atom posns [n_hkl, n_hkl, n_atoms]
+    n_basis = len(basis_atom_label)
+    n_cell = len(atom_label)
+    # calculate g.r for all g-vectors and atom posns [n_hkl, n_hkl, n_cell]
     g_dot_r = np.einsum('ijk,lk->ijl', g_matrix, atom_coordinate)
-    # exp(i g.r) [n_hkl, n_hkl, n_atoms]
+    # exp(i g.r) [n_hkl, n_hkl, n_cell]
     phase = np.exp(-1j * g_dot_r)
 
     # NB scattering factor methods accept and return 2D[n_hkl, n_hkl] array of
@@ -1134,9 +1136,9 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
     # g-vector magnitudes, size [n_hkl, n_hkl]
     g_magnitude = np.sqrt(np.sum(g_matrix**2, axis=2))
 
-    # anisotropic DP U*g[i]*g[j], size [n_atoms, n_hkl, n_hkl]
+    # anisotropic DP U*g[i]*g[j], size [n_cell, n_hkl, n_hkl]
     Ugg = np.einsum('ijm, a mn, ij n -> aij', g_matrix, u_ij, g_matrix)
-    # equivalent anisotropic B, size [n_atoms, n_hkl, n_hkl]
+    # equivalent anisotropic B, size [n_cell, n_hkl, n_hkl]
     B_aniso = np.divide(Ugg, np.square(g_magnitude), out=np.zeros_like(Ugg),
                         where=(g_magnitude != 0)) * 8 * np.pi**2
     if debug:
@@ -1153,47 +1155,52 @@ def Fg_matrix(n_hkl, scatter_factor_method, n_atoms, atom_coordinate,
             print(f"{B_aniso[i, :5, :5]}")
         print("  ")
 
-    Fg_matrix = np.zeros([n_hkl, n_hkl], dtype=np.complex128)
-    # scattering factor f_g, size [n_hkl, n_hkl], atom by atom
-    for i in range(n_atoms):
-        # get the scattering factor
+    # scattering factors, atom by atom in the basis and applied to cell
+    f_gb = np.zeros([n_basis, n_hkl, n_hkl], dtype=np.complex128)
+    f_gb_prime = np.zeros([n_basis, n_hkl, n_hkl], dtype=np.complex128)
+    f_g = np.zeros([n_cell, n_hkl, n_hkl], dtype=np.complex128)
+    f_g_prime = np.zeros([n_cell, n_hkl, n_hkl], dtype=np.complex128)
+    for i in range(n_basis):
+        # get the scattering factor for the basis f_gb
         if scatter_factor_method == 0:
-            f_g = f_kirkland(atomic_number[i], g_magnitude)
+            f_gb[i, :, :] = f_kirkland(atomic_number[i], g_magnitude)
         elif scatter_factor_method == 1:
-            f_g = f_lobato(atomic_number[i], g_magnitude)
+            f_gb[i, :, :] = f_lobato(atomic_number[i], g_magnitude)
         elif scatter_factor_method == 2:
-            f_g = f_peng(atomic_number[i], g_magnitude)
+            f_gb[i, :, :] = f_peng(atomic_number[i], g_magnitude)
         elif scatter_factor_method == 3:
-            f_g = f_doyle_turner(atomic_number[i], g_magnitude)
+            f_gb[i, :, :] = f_doyle_turner(atomic_number[i], g_magnitude)
         elif scatter_factor_method == 4:
-            print("Calculating scattering factors for atom", i+1, "/", n_atoms)
-            f_g = kappa_factors(g_magnitude, atomic_number[i], pv[i], kappas[i])
+            print("Calculating kappa factor for atom", i+1, "/", n_cell)
+            f_gb[i, :, :] = kappa_factors(g_magnitude, atomic_number[i], pv[i], kappas[i])
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
 
-        # get the absorptive scattering factor
-        # f_g_prime, size [n_hkl, n_hkl], atom by atom
-        # no absorption
-        if absorption_method == 0:
-            f_g_prime = np.zeros_like(f_g)
-        # proportional model
-        elif absorption_method == 1:
-            f_g_prime = 1j * f_g * absorption_per/100.0
-        # Bird & King model, parameterised by Thomas (Acta Cryst 2023)
-        elif absorption_method == 2:
-            # f_g_prime = 1j * f_thomas(g_magnitude, 0.4,
-            #                           atomic_number[i], electron_velocity)
-            f_g_prime = 1j * f_thomas(g_magnitude, B_aniso[i, :, :],
+        # get the absorptive scattering factor for the basis f_gb_prime
+        if absorption_method == 0:  # no absorption
+            f_gb_prime[i, :, :] = np.zeros_like(f_g)
+        elif absorption_method == 1:  # proportional model
+            f_gb_prime[i, :, :] = 1j * f_g * absorption_per/100.0
+        elif absorption_method == 2:  # Bird & King, Thomas (Acta Cryst 2023)
+            f_gb_prime[i, :, :] = 1j * f_thomas(g_magnitude, B_aniso[i, :, :],
                                       atomic_number[i], electron_velocity)
-        if debug and i < 4:
+        if debug:
             print(f"f_g [{i}]")
-            print(f"{f_g[:5, :5]}")
+            print(f"{f_g[i, :5, :5]}")
             print("  ")
             print(f"f_g_prime [{i}]")
-            print(f"{f_g_prime[:5, :5]}")
+            print(f"{f_g_prime[i, :5, :5]}")
 
+        # put into the unit cell
+        for j in range(n_cell):
+            if atom_label[j] == basis_atom_label[i]:
+                f_g[j, :, :] = f_gb[i, :, :]
+
+    # now make up the full matrix
+    Fg_matrix = np.zeros([n_hkl, n_hkl], dtype=np.complex128)
+    for i in range(n_cell):
         # The Structure Factor Equation
-        Fg_matrix = Fg_matrix+((f_g + f_g_prime) * phase[:, :, i] *
+        Fg_matrix = Fg_matrix+((f_g[i, :, :] + f_g_prime[i, :, :]) * phase[:, :, i] *
                                occupancy[i] *
                                # np.exp(-B_aniso[i, :, :] * (g_magnitude**2) /
                                # (16*np.pi**2)))

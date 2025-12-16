@@ -274,43 +274,51 @@ elif 'A' in v.refine_mode:
     # raise ValueError("Structure factor refinement
     # incompatible with anything else")
 else:  # atom-specific refinements can be done simultaneously
+    atm = 0  # flag for atom-specific refinements
     if (len(v.atomic_sites) > n_basis):
         raise ValueError("Number of atomic sites to refine is larger than the \
                          number of atoms")
     if 'B' in v.refine_mode:
+        atm = 1
         print("Refining Atomic Coordinates, B")
         # redefine the basis if necessary to allow coordinate refinement
         v.basis_atom_position = px.preferred_basis(v.space_group_number,
                                                    v.basis_atom_position,
                                                    v.basis_wyckoff)
     if 'C' in v.refine_mode:
+        atm = 1
         print("Refining Occupancies, C")
     if 'D' in v.refine_mode:
+        atm = 1
         print("Refining Isotropic atomic displacement parameters, D")
     if 'E' in v.refine_mode:
+        atm = 1
         print("Refining Anisotropic atomic displacement parameters, E")
     if 'J' in v.refine_mode:
+        atm = 1
         print("Refining Kappa, J")
     if 'K' in v.refine_mode:
+        atm = 1
         print("Refining valence electrons, K")
-    for i in range(len(v.atomic_sites)):
-        print(f"  Refining basis atom {v.atomic_sites[i]}, {v.basis_atom_name[v.atomic_sites[i]]}")
+    if atm == 1:
+        for i in range(len(v.atomic_sites)):
+            print(f"  Refining basis atom {v.atomic_sites[i]}, {v.basis_atom_name[v.atomic_sites[i]]}")
 
-# non atom-specific refinements
-if 'F' in v.refine_mode:
-    print("Refining Lattice Parameters, F")
-if 'G' in v.refine_mode:
-    print("Refining Lattice Angles, G")
-if 'H' in v.refine_mode:
-    print("Refining Convergence Angle, H")
-if 'I' in v.refine_mode:
-    print("Refining Accelerating Voltage, I")
-
-if v.correlation_type == 0:
-    print("  Using Pearson correlation to compare simulation and experiment")
-    print("    NB requires sub-pixel alignment")
-if v.correlation_type == 1:
-    print("  Using phase correlation to compare simulation and experiment")
+    # non atom-specific refinements
+    if 'F' in v.refine_mode:
+        print("Refining Lattice Parameters, F")
+    if 'G' in v.refine_mode:
+        print("Refining Lattice Angles, G")
+    if 'H' in v.refine_mode:
+        print("Refining Convergence Angle, H")
+    if 'I' in v.refine_mode:
+        print("Refining Accelerating Voltage, I")
+    
+    if v.correlation_type == 0:
+        print("  Using Pearson correlation to compare simulation and experiment")
+        print("    NB requires sub-pixel alignment")
+    if v.correlation_type == 1:
+        print("  Using phase correlation to compare simulation and experiment")
     
 
 # %% read felix.hkl
@@ -415,11 +423,11 @@ if 'S' not in v.refine_mode:
             v.refined_variable_type.append(32)
             v.atom_refine_flag.append(-1)
             v.atom_refine_vec.append(nullvec)  # no atom movement
-        elif 142 < v.space_group_number < 168:  # Rhombohedral
+        elif 142 < v.space_group_number < 160:  # Rhombohedral 168
             # Need to work out R- vs H- settings!!!
             raise ValueError("Rhombohedral R- vs H- not yet implemented")
-        elif (167 < v.space_group_number < 195) or \
-             (74 < v.space_group_number < 143):  # Hexagonal or Tetragonal
+        elif (160 < v.space_group_number < 195) or \
+             (74 < v.space_group_number < 143):  # Hexagonal or Tetragonal 167
             v.refined_variable.append(v.cell_c)
             v.refined_variable_type.append(32)
             v.atom_refine_flag.append(-1)

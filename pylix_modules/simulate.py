@@ -230,13 +230,12 @@ def simulate(v):
 
     # now make the Ug matrix, i.e. calculate the structure factor Fg for all
     # g-vectors in g_matrix and convert using the above factor
-    ug_matrix = Fg_to_Ug * px.Fg_matrix(n_hkl, v.scatter_factor_method,
-                                        n_atoms, atom_coordinate,
-                                        atomic_number, occupancy,
-                                        u_ij, g_matrix, v.absorption_method,
-                                        v.absorption_per, electron_velocity,
-                                        kappas, pv, v.Debye_model,
-                                        v.model_flag, v.debug)
+    ug_matrix = Fg_to_Ug * \
+        px.Fg_matrix(n_hkl, v.scatter_factor_method, v.basis_atom_label,
+                     atom_label, atom_coordinate, atomic_number, occupancy,
+                     u_ij, g_matrix, v.absorption_method, v.absorption_per,
+                     electron_velocity, kappas, pv, v.Debye_model,
+                     v.model_flag, v.debug)
     # matrix of dot products with the surface normal
     g_dot_norm = np.dot(g_pool, norm_dir_m)
     if v.iter_count == 0:
