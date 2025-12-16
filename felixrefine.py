@@ -313,12 +313,11 @@ else:  # atom-specific refinements can be done simultaneously
         print("Refining Convergence Angle, H")
     if 'I' in v.refine_mode:
         print("Refining Accelerating Voltage, I")
-    
+
     if v.correlation_type == 0:
-        print("  Using Pearson correlation to compare simulation and experiment")
-        print("    NB requires sub-pixel alignment")
+        print("  Using Pearson correlation, requires sub-pixel alignment")
     if v.correlation_type == 1:
-        print("  Using phase correlation to compare simulation and experiment")
+        print("  Using phase correlation")
     
 
 # %% read felix.hkl
