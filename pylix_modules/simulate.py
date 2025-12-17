@@ -422,12 +422,20 @@ def figure_of_merit(v):
         fig.set_size_inches(1.5*w_f, w_f)
         plt.plot(v.thickness/10, np.mean(fom_array, axis=1), 'ro', linewidth=2)
         colours = plt.cm.gnuplot(np.linspace(0, 1, n_out))
-        styles = ['-', '--', ':']
+        styles = ['-', '-.', '--', ':', '-', '-.', '--', ':', '-', '-.', '--',
+                  ':', '-', '-.', '--', ':', '-', '-.', '--', ':', '-', '-.',
+                  '--', ':', '-', '-.', '--', ':', '-', '-.', '--', ':', '-',
+                  '-.', '--', ':', '-', '-.', '--', ':', '-', '-.', '--', ':',
+                  '-', '-.', '--', ':', '-', '-.', '--', ':', '-', '-.', '--',
+                  ':', '-', '-.', '--', ':', '-', '-.', '--', ':', '-', '-.',
+                  '--', ':', '-', '-.', '--', ':', '-', '-.', '--', ':', '-',
+                  '-.', '--', ':', '-', '-.', '--', ':', '-', '-.', '--', ':',
+                  '-', '-.', '--', ':', '-', '-.', '--', ':', '-', '-.', '--']
         for i in range(n_out):
             annotation = f"{v.hkl[v.g_output[i], 0]}{v.hkl[v.g_output[i], 1]}{v.hkl[v.g_output[i], 2]}"
             plt.plot(v.thickness/10, fom_array[:, i],
                      color=colours[i],
-                     linestyles=styles[i],
+                     linestyle=styles[i],
                      label=annotation)
         ax.set_xlabel('Thickness (nm)', size=24)
         ax.set_ylabel('Figure of merit', size=24)
