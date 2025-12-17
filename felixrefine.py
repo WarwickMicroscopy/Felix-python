@@ -616,10 +616,9 @@ if 'S' not in v.refine_mode:
     fit0 = fom*1.0
     v.best_fit = fom*1.0
     last_fit = fom*1.0
-    # p is a vector along the gradient in n-dimensional space
+    # dydx is a vector along the gradient in n-dimensional space
     # we initially set these as
-    p = np.ones(v.n_variables)
-    # last_p = np.ones(v.n_variables)
+    dydx = np.ones(v.n_variables)
     r3_var = np.zeros(3)  # for parabolic minimum
     r3_fom = np.zeros(3)
     # dunno what this is
@@ -637,35 +636,38 @@ if 'S' not in v.refine_mode:
         # next_var is the predicted next (best) point
         v.next_var = np.copy(v.refined_variable)
         # if all variables have been refined and we're still in the loop, reset
-        if np.sum(np.abs(p)) < 1e-10:
-            p = np.ones(v.n_variables)
+        if np.sum(np.abs(dydx)) < 1e-10:
+            dydx = np.ones(v.n_variables)
 
         # ===========individual variable minimisation
         # Go through the variables looking at three points in the hope
         # of capturing a minimum - if there is one, we take it and remove
-        # that variable from multidimensional refinement, p[i] = 0.
-        # Otherwise p[i] is the gradient for that variable.
+        # that variable from multidimensional refinement, dydx[i] = 0.
+        # Otherwise dydx[i] is the gradient for that variable.
         # We also get a predicted best starting point
         # for gradient descent, v.next_var
         for i in range(v.n_variables):
             # Skip variables already optimized
-            if abs(p[i]) < 1e-10:
-                p[i] = 0.0
+            if abs(dydx[i]) < 1e-10:
+                dydx[i] = 0.0
                 continue
-            p[i] = sim.refine_single_variable(v, i)
+            dydx[i] = sim.refine_single_variable(v, i)
 
         # if all variables have predicted minima, do a final simulation
         # if it's better, it will update v.best_fit and v.best_var accordingly
-        if np.count_nonzero(p) == 0:
+        if np.count_nonzero(dydx) == 0:
             print("Closing simulation for this cycle")
             v.refined_variable = np.copy(v.best_var)
             fom = sim.sim_fom(v, 0)
+            if (fom < v.best_fit):
+                v.best_fit = fom*1.0
+                v.best_var = np.copy(v.refined_variable)
         else:
             # ===========vector descent
             # Downhill minimisation until we eliminate all variables
-            while np.sum(np.abs(p)) > 1e-10:
-                # the returned p will have an extra zero!
-                p = sim.refine_multi_variable(v, p)
+            while np.sum(np.abs(dydx)) > 1e-10:
+                # the returned dydx will have an extra zero!
+                dydx = sim.refine_multi_variable(v, dydx)
         # Update for next iteration
         df = last_fit - v.best_fit
         last_fit = np.copy(v.best_fit)
@@ -683,8 +685,6 @@ if 'S' not in v.refine_mode:
 sim.print_LACBED(v)
 total_time = time.time() - start
 print("-----------------------------------------------------------------")
-# print(f"Beam pool calculation took {setup:.3f} seconds")
-# print(f"Bloch wave calculation in {bwc:.1f} s ({1000*(bwc)/(4*v.image_radius**2):.2f} ms/pixel)")
 print(f"Total time {total_time:.1f} s")
 print("-----------------------------------------------------------------")
 print("|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||")

@@ -390,8 +390,17 @@ def figure_of_merit(v):
             for j in range(n_out):
                 v.lacbed_sim[i, :, :, j] = gaussian_filter(v.lacbed_sim[i, :, :, j],
                                                            sigma=v.blur_radius)
-        # fom_array[i, :] = 1.0 - zncc(v.lacbed_expt, v.lacbed_sim[i, :, :, :])
-        fom_array[i, :] = 1.0 - pcc(v.lacbed_expt, v.lacbed_sim[i, :, :, :])
+        # figure of merit
+        if v.correlation_type == 0:
+            fom_array[i, :] = 1.0 - zncc(v.lacbed_expt,
+                                         v.lacbed_sim[i, :, :, :])
+        elif v.correlation_type == 1:
+            fom_array[i, :] = 1.0 - pcc(v.lacbed_expt,
+                                        v.lacbed_sim[i, :, :, :])
+        else:
+            raise ValueError("Invalid correlation_type !(0 or 1) in felix.inp")
+
+    # plot of blur fit when v.image_processing == 2
     if v.plot and v.image_processing == 2:
         plt.show()
     # print best values
@@ -413,9 +422,12 @@ def figure_of_merit(v):
         fig.set_size_inches(1.5*w_f, w_f)
         plt.plot(v.thickness/10, np.mean(fom_array, axis=1), 'ro', linewidth=2)
         colours = plt.cm.gnuplot(np.linspace(0, 1, n_out))
+        styles = ['-', '--', ':']
         for i in range(n_out):
             annotation = f"{v.hkl[v.g_output[i], 0]}{v.hkl[v.g_output[i], 1]}{v.hkl[v.g_output[i], 2]}"
-            plt.plot(v.thickness/10, fom_array[:, i], color=colours[i],
+            plt.plot(v.thickness/10, fom_array[:, i],
+                     color=colours[i],
+                     linestyles=styles[i],
                      label=annotation)
         ax.set_xlabel('Thickness (nm)', size=24)
         ax.set_ylabel('Figure of merit', size=24)
@@ -424,6 +436,7 @@ def figure_of_merit(v):
         plt.xticks(fontsize=22)
         plt.yticks(fontsize=22)
         plt.show()
+
     return fom
 
 
@@ -696,162 +709,197 @@ def sim_fom(v, i):
     # figure of merit
     fom = figure_of_merit(v)
     v.fit_log.append(fom)
-    if (fom < v.best_fit):
-        v.best_fit = fom*1.0
-        v.best_var = np.copy(v.refined_variable)
-    print(f"  Figure of merit {100*fom:.2f}% (best {100*v.best_fit:.2f}%)")
+    print(f"  Figure of merit {100*fom:.3f}% (previous best {100*v.best_fit:.3f}%)")
 
     return fom
 
 
 def refine_single_variable(v, i):
     '''
-    Does 3-point refinement for a single variable and if no nimimum is found
+    Does 3-point refinement for a single variable and if no minimum is found
     retuns the step size for a subsequent multidimensional refinement
+    i: integer, index of variable being refined
+    Uses the whole variable space v as it is passed on to the simulation:
+    v.best_fit: float, best figure of merit
+    v.best_var: float array, the refined variables with best FoM
+    v.refined_variable: float array of variables being refined
+    v.refined_variable_type: integer array, type of variable being refined
+    v.refinement_scale: float, step to change the variable (from felix.inp)
+    v.next_var: float array of predicted variable values
+    ----------------
+    Updates:
+        v.best_fit, v.best_var if necessary
+        v.next_var as an output
+    Returns:
+        dydx_i: the gradient of this variable
     '''
     r3_var = np.zeros(3)  # for parabolic minimum
     r3_fom = np.zeros(3)
-    v.current_variable_type = v.refined_variable_type[i]
     # Check if ADP is negative, skip if so NB u12,u13,u23 can be -ve
-    if 21 < v.current_variable_type < 26 and v.refined_variable[i] < 1e-10:
-        p_i = 0.0
+    if 21 < v.refined_variable_type[i] < 26 and v.refined_variable[i] < 1e-10:
+        dydx_i = 0.0
     else:
         # middle point is the previous best simulation
-        r3_var[1] = v.refined_variable[i]*1.0
+        r3_var[1] = v.best_var[i]*1.0
         r3_fom[1] = v.best_fit*1.0
         print(f"Finding gradient, variable {i+1} of {v.n_variables}")
-        # print(f"Variable type: {v.current_variable_type}")
-        print(variable_message(v.current_variable_type))
+        print(variable_message(v.refined_variable_type[i]))
         # print_current_var(v, i)
 
-        # dx is a small change in the current variable
+        # delta is a small change in the current variable
         # which is either refinement_scale for atomic coordinates and
         # refinement_scale*variable for everything else
-        dx = abs(v.refinement_scale * v.refined_variable[i])
-        if v.refined_variable_type[i] == 2:
-            dx = abs(v.refinement_scale)
+        delta = abs(v.refinement_scale * v.refined_variable[i])
+        if v.refined_variable_type[i] == 20:
+            delta = abs(v.refinement_scale)
         # Three-point gradient measurement, starting with plus
-        v.refined_variable[i] += dx
+        v.refined_variable[i] += delta
         # simulate and get figure of merit
         fom = sim_fom(v, i)
         r3_var[2] = v.refined_variable[i]*1.0
         r3_fom[2] = fom*1.0
-        print("-1-----------------------------")  # {r3_var},{r3_fom}")
+        print(f"-1----------------------------- {r3_var},{r3_fom}")
+        # update best fit
+        if (fom < v.best_fit):
+            v.best_fit = fom*1.0
+            v.best_var = np.copy(v.refined_variable)
 
         # keep going or turn round?
         if r3_fom[2] < r3_fom[1]:  # keep going
-            v.refined_variable[i] += np.exp(0.5) * dx
+            v.refined_variable[i] += np.exp(0.5) * delta
         else:  # turn round
-            dx = - dx
-            v.refined_variable[i] += np.exp(0.75) * dx
+            delta = - delta
+            v.refined_variable[i] += np.exp(0.75) * delta
         # simulate and get figure of merit
         fom = sim_fom(v, i)
         r3_var[0] = v.refined_variable[i]*1.0
         r3_fom[0] = fom*1.0
-        print("-2-----------------------------")
+        print(f"-2----------------------------- {r3_var},{r3_fom}")
+        # update best fit
+        if (fom < v.best_fit):
+            v.best_fit = fom*1.0
+            v.best_var = np.copy(v.refined_variable)
 
+        # test to see if the variable has an effect
+        if np.max(r3_fom)-np.min(r3_fom) < 1e-5:  # no effect on FoM
+            exclude = True
+        else:
+            v.next_var[i], exclude = px.convex(r3_var, r3_fom)
         # predict the next point as a minimum or a step onwards
         # v.next_var gets passed on to the multidimensional refinement
         # as a global variable
-        v.next_var[i], exclude = px.convex(r3_var, r3_fom)
         if exclude:
-            p_i = 0.0  # this variable doesn't get included in vector downhill
+            dydx_i = 0.0  # this variable excluded from vector downhill
+            print(f"  fixed at {v.best_var[i]}")
         else:
-            # we weight the variable by -df/dx
-            p_i = -(r3_fom[2] - r3_fom[0]) / (2 * dx)
+            # we weight the variable by -df/delta
+            dydx_i = -(r3_fom[2] - r3_fom[0]) / (2 * delta)
         # error estimate goes here
         # independent_delta[i] = delta_x(r3_var, r3_fom, precision, err)
         # uncert_brak(var_min, independent_delta[i])
 
-    return p_i
+    return dydx_i
 
 
-def refine_multi_variable(v, p):
+def refine_multi_variable(v, dydx):
     '''
-    multidimensional refinement using the vector p
+    multidimensional refinement
+    dydx: float array of gradients, generated in refine_single_variable
+    Uses the whole variable space v, only:
+    v.best_fit: best figure of merit so far
     '''
-    n_var = np.count_nonzero(p)
+    n_var = np.count_nonzero(dydx)
     print(f"Multidimensional refinement, {n_var} variable{'s' if n_var != 1 else ''}")
 
     # Check the gradient vector magnitude and initialize vector descent
-    p_mag = np.linalg.norm(p)
+    p_mag = np.linalg.norm(dydx)
     if np.isinf(p_mag) or np.isnan(p_mag):
-        raise ValueError(f"Infinite or NaN gradient! Refinement vector = {p}")
-    p = p / p_mag   # Normalized direction of max gradient
+        raise ValueError(f"Infinite or NaN gradient! Refinement vector = {dydx}")
+    dydx = dydx / p_mag   # Normalized direction of max gradient
     with np.printoptions(formatter={'float': lambda x: f"{x:.2f}"}):
-        print(f"    Refinement vector {p}")
+        print(f"    Refinement vector {dydx}")
 
-    j = np.argmax(abs(p))  # index of principal variable (largest gradient)
-    v.current_variable_type = v.refined_variable_type[j]
-    print(f"  Principal variable: {variable_message(v.current_variable_type)}")
+    j = np.argmax(abs(dydx))  # index of principal variable (largest gradient)
+    print(f"  Principal variable: {variable_message(v.refined_variable_type[j])}")
     print(f"    Extrapolation, should be better than {100*v.best_fit:.2f}%")
-    last_fit = np.copy(v.best_fit)
-    # initial simulation is the prediction after single variable refinement
-    v.refined_variable = np.copy(v.next_var)
+
+    # starting point is the current best set of variables
+    last_fit = 1.0*v.best_fit
+
+    # initial trial uses the predicted best set of variables
+    v.refined_variable = 1.0*v.next_var
     # simulate and get figure of merit
     fom = sim_fom(v, j)
-
     # is it actually any better
     if fom < last_fit:
+        v.best_fit = fom*1.0
+        v.best_var = np.copy(v.refined_variable)
         print("Point 1 of 3: extrapolated")  # yes, use it
     else:
         print("Point 1 of 3: previous best")  # no, use the best
-        v.refined_variable = np.copy(v.best_var)
+    v.refined_variable = np.copy(v.best_var)
     print_LACBED(v)
 
     # First point: best simulation
     r3_var = np.zeros(3)
     r3_fom = np.zeros(3)
-    r3_var[0] = np.copy(v.best_var[j])  # using principal variable
-    r3_fom[0] = np.copy(v.best_fit)
+    r3_var[0] = 1.0*v.best_var[j]  # using principal variable
+    r3_fom[0] = 1.0*v.best_fit
     print("-a-----------------------------")  # {r3_var},{r3_fom}")
 
     # reset the refinement scale (last term reverses sign if we overshot)
-    p_mag = -v.best_var[j] * v.refinement_scale  # * (2*(fom < v.best_fit)-1)
+    delta = -v.best_var[j] * v.refinement_scale  # * (2*(fom < v.best_fit)-1)
 
     # Second point
     print("Refining, point 2 of 3")
     # NB vectors here, not individual variables
-    v.refined_variable += p*p_mag  # point 2
+    v.refined_variable += dydx*delta  # point 2
     fom = sim_fom(v, j)  # simulate
-    r3_var[1] = np.copy(v.refined_variable[j])
-    r3_fom[1] = np.copy(fom)
+    r3_var[1] = 1.0*v.refined_variable[j]
+    r3_fom[1] = 1.0*fom
     print("-b-----------------------------")  # {r3_var},{r3_fom}")
+    if fom < v.best_fit:
+        v.best_fit = fom*1.0
+        v.best_var = np.copy(v.refined_variable)
 
     # Third point
     print("Refining, point 3 of 3")
     if r3_fom[1] > r3_fom[0]:  # if second point is worse
-        p_mag = -p_mag  # Go in the opposite direction
-        v.refined_variable += np.exp(0.6)*p*p_mag
+        delta = -delta  # Go in the opposite direction
+        v.refined_variable += np.exp(0.6)*dydx*delta
     else:  # keep going
-        v.refined_variable += p*p_mag
+        v.refined_variable += dydx*delta
     fom = sim_fom(v, j)
-    r3_var[2] = np.copy(v.refined_variable[j])
-    r3_fom[2] = np.copy(fom)
+    r3_var[2] = 1.0*v.refined_variable[j]
+    r3_fom[2] = 1.0*fom
     print("-c-----------------------------")  # {r3_var},{r3_fom}")
+    if fom < v.best_fit:
+        v.best_fit = fom*1.0
+        v.best_var = np.copy(v.refined_variable)
 
     # We continue downhill until we get a predicted minnymum
     minny = False
     while minny is False:
-        last_x = np.copy(v.refined_variable[j])
-        last_fit = v.best_fit
+        last_x = 1.0*v.refined_variable[j]
         # predict the next point as a minimum or a step on
         next_x, minny = px.convex(r3_var, r3_fom)
-        v.refined_variable += p * (next_x-last_x) / p[j]
+        v.refined_variable += dydx * (next_x-last_x) / dydx[j]
         fom = sim_fom(v, j)
         with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
             print(f"-.----------------------------- {r3_var}: {r3_fom}")
-        if (fom < last_fit):  # it's better, keep going
+        if (fom < v.best_fit):  # it's better, keep going
+            v.best_fit = fom*1.0
+            v.best_var = np.copy(v.refined_variable)
             # replace worst point with this one
             i = np.argmax(r3_fom)
-            r3_var[i] = v.refined_variable[j]
-            r3_fom[i] = np.copy(fom)
+            r3_var[i] = 1.0*v.refined_variable[j]
+            r3_fom[i] = 1.0*fom
         else:
-            v.refined_variable[j] = np.copy(last_x)
+            v.refined_variable[j] = 1.0*last_x
             minny = True
     # we have taken the principal variable to a minimum
-    p[j] = 0.0
+    dydx[j] = 0.0
     print(f"    ====Eliminated variable {j}====")
     print_LACBED(v)
 
-    return p
+    return dydx

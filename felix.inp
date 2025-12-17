@@ -30,6 +30,14 @@ Refinements B, C, D, E, J, K are applied to the atom(s) in cif given by atomic s
 Refinement scale gives initial change in the refined parameter
 This is fractional atomic coordinate for position refinement, fraction for everything else i.e. 0.01 is 1 percent
 
+Correlation type:
+    Pearson (zncc), 0
+    Phase (Fourier), 1
+    
+Image processing:
+    None, 0
+    Gaussian blur, 1, given by blur radius
+    Fitted gaussian blur 2, which gives the best figure of merit
 # ------------------------------------
 
 # Control flags
@@ -66,20 +74,20 @@ acceptance_angle          = 0.0
 
 # Image output options
 initial_thickness         = 1200.0
-final_thickness           = 1200.0
-delta_thickness           = 25.0
+final_thickness           = 1210.0
+delta_thickness           = 10.0
 precision                 = 0.00002
 # Refinement specific flags
-refine_mode               = 'F'
+refine_mode               = 'E'
 weighting_flag            = 0
 refine_method             = 3
-correlation_type          = 2
-image_processing          = 0
+correlation_type          = 1
+image_processing          = 1
 blur_radius               = 0.7
 no_of_ugs                 = 40
 atomic_sites              = [0,1,2]
 print_flag                = 0
-refinement_scale          = 0.003
+refinement_scale          = 0.05
 exit_criteria             = 0.00005
 debug                     = 0
 plot                      = 1
