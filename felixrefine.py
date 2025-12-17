@@ -596,11 +596,10 @@ if 'S' not in v.refine_mode:
         best_corr = np.ones(v.n_out)
 
 
-# %% output - *** needs work, apply blur/find best blur 
+# output LACBED patterns and figure of merit
 if v.image_processing == 1:
     print(f"  Blur radius {v.blur_radius} pixels")
 if 'S' in v.refine_mode:
-    #*** apply blur !!!
     # output simulated LACBED patterns
     sim.print_LACBED(v)
 else:

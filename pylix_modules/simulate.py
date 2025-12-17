@@ -758,7 +758,7 @@ def refine_single_variable(v, i):
         fom = sim_fom(v, i)
         r3_var[2] = v.refined_variable[i]*1.0
         r3_fom[2] = fom*1.0
-        print(f"-1----------------------------- {r3_var},{r3_fom}")
+        print("-1-----------------------------")  # " {r3_var},{r3_fom}")
         # update best fit
         if (fom < v.best_fit):
             v.best_fit = fom*1.0
@@ -774,7 +774,7 @@ def refine_single_variable(v, i):
         fom = sim_fom(v, i)
         r3_var[0] = v.refined_variable[i]*1.0
         r3_fom[0] = fom*1.0
-        print(f"-2----------------------------- {r3_var},{r3_fom}")
+        print("-2-----------------------------")  # " {r3_var},{r3_fom}")
         # update best fit
         if (fom < v.best_fit):
             v.best_fit = fom*1.0
@@ -783,6 +783,7 @@ def refine_single_variable(v, i):
         # test to see if the variable has an effect
         if np.max(r3_fom)-np.min(r3_fom) < 1e-5:  # no effect on FoM
             exclude = True
+            print(f"  Low effect, fixed at {v.best_var[i]}")
         else:
             v.next_var[i], exclude = px.convex(r3_var, r3_fom)
         # predict the next point as a minimum or a step onwards
@@ -790,7 +791,6 @@ def refine_single_variable(v, i):
         # as a global variable
         if exclude:
             dydx_i = 0.0  # this variable excluded from vector downhill
-            print(f"  fixed at {v.best_var[i]}")
         else:
             # we weight the variable by -df/delta
             dydx_i = -(r3_fom[2] - r3_fom[0]) / (2 * delta)
@@ -886,7 +886,7 @@ def refine_multi_variable(v, dydx):
         v.refined_variable += dydx * (next_x-last_x) / dydx[j]
         fom = sim_fom(v, j)
         with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
-            print(f"-.----------------------------- {r3_var}: {r3_fom}")
+            print("-.-----------------------------")  #" {r3_var}: {r3_fom}")
         if (fom < v.best_fit):  # it's better, keep going
             v.best_fit = fom*1.0
             v.best_var = np.copy(v.refined_variable)
