@@ -9,7 +9,6 @@ Each of which call further pylix subroutines
 Returns the simulated LACBED patterns
 
 """
-import re
 import numpy as np
 from scipy.constants import c, h, e, m_e, angstrom
 from scipy.ndimage import gaussian_filter
@@ -288,7 +287,7 @@ def simulate(v):
     # timings
     setup = mid-strt
     bwc = time.time()-mid
-    print(f"\rBloch wave calculation... done in {bwc:.1f} s (beam pool setup {setup:.1f} s)")
+    print(f"\rBloch wave calculation... done in {bwc:.1f}s")  # " (beam pool setup {setup:.1f} s)")
     if v.iter_count == 0: 
         print(f"    {1000*(bwc)/(4*v.image_radius**2):.2f} ms/pixel")
 
@@ -422,6 +421,7 @@ def figure_of_merit(v):
         fig.set_size_inches(1.5*w_f, w_f)
         plt.plot(v.thickness/10, np.mean(fom_array, axis=1), 'ro', linewidth=2)
         colours = plt.cm.gnuplot(np.linspace(0, 1, n_out))
+        # I have 99 styles but . ain't one
         styles = ['-', '-.', '--', ':', '-', '-.', '--', ':', '-', '-.', '--',
                   ':', '-', '-.', '--', ':', '-', '-.', '--', ':', '-', '-.',
                   '--', ':', '-', '-.', '--', ':', '-', '-.', '--', ':', '-',

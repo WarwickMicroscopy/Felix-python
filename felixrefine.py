@@ -634,41 +634,48 @@ if 'S' not in v.refine_mode:
         v.best_var = np.copy(v.refined_variable)
         # next_var is the predicted next (best) point
         v.next_var = np.copy(v.refined_variable)
-        # if all variables have been refined and we're still in the loop, reset
-        if np.sum(np.abs(dydx)) < 1e-10:
-            dydx = np.ones(v.n_variables)
 
-        # ===========individual variable minimisation
-        # Go through the variables looking at three points in the hope
-        # of capturing a minimum - if there is one, we take it and remove
-        # that variable from multidimensional refinement, dydx[i] = 0.
-        # Otherwise dydx[i] is the gradient for that variable.
-        # We also get a predicted best starting point
-        # for gradient descent, v.next_var
-        for i in range(v.n_variables):
-            # Skip variables already optimized
-            if abs(dydx[i]) < 1e-10:
-                dydx[i] = 0.0
-                continue
-            dydx[i] = sim.refine_single_variable(v, i)
+        if v.refine_method == 0:
+            dydx = np.zeros(v.n_variables)
+            for i in range(v.n_variables):
+                dydx[i] = 1.0
+            
+        if v.refine_method == 1:
+            # =========== step 1: individual variable minimisation
+            # if all variables have been refined and we're still in the loop, reset
+            if np.sum(np.abs(dydx)) < 1e-10:
+                dydx = np.ones(v.n_variables)
+            # Go through the variables looking at three points in the hope
+            # of capturing a minimum - if there is one, we take it and remove
+            # that variable from multidimensional refinement, dydx[i] = 0.
+            # Otherwise dydx[i] is the gradient for that variable.
+            # We also get a predicted best starting point
+            # for gradient descent, v.next_var
+            for i in range(v.n_variables):
+                # Skip variables already optimized
+                if abs(dydx[i]) < 1e-10:
+                    dydx[i] = 0.0
+                    continue
+                dydx[i] = sim.refine_single_variable(v, i)
+    
+            # all variables have updated/predicted so do a final simulation
+            # if it's better, update v.best_fit and v.best_var accordingly
+            if np.count_nonzero(dydx) == 0:
+                print("Closing simulation for this cycle")
+                v.refined_variable = np.copy(v.next_var)
+                fom = sim.sim_fom(v, 0)
+                if (fom < v.best_fit):
+                    v.best_fit = fom*1.0
+                    v.best_var = np.copy(v.refined_variable)
 
-        # if all variables have predicted minima, do a final simulation
-        # if it's better, it will update v.best_fit and v.best_var accordingly
-        if np.count_nonzero(dydx) == 0:
-            print("Closing simulation for this cycle")
-            v.refined_variable = np.copy(v.best_var)
-            fom = sim.sim_fom(v, 0)
-            if (fom < v.best_fit):
-                v.best_fit = fom*1.0
-                v.best_var = np.copy(v.refined_variable)
-        else:
-            # ===========vector descent
-            # Downhill minimisation until we eliminate all variables
-            while np.sum(np.abs(dydx)) > 1e-10:
-                # the returned dydx will have an extra zero!
-                dydx = sim.refine_multi_variable(v, dydx)
+        # ===========step 2: vector descent
+        # Downhill minimisation until we eliminate all variables
+        while np.sum(np.abs(dydx)) > 1e-10:
+            # the returned dydx will have an extra zero!
+            dydx = sim.refine_multi_variable(v, dydx)
         # Update for next iteration
         df = last_fit - v.best_fit
+
         last_fit = np.copy(v.best_fit)
         v.refined_variable = np.copy(v.best_var)
         v.refinement_scale *= (1 - 1 / (2 * v.n_variables))
