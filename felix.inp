@@ -10,7 +10,7 @@ Scatter factor method:
 Absorption:
     None, 0
     Proportional, 1 (value given by absorption per)
-    Bird & King (Thomas parameterisation) 2
+    Bird & King (Thomas parameterisation), 2
 
 Refine modes:
     Simulation only, S
@@ -30,6 +30,10 @@ Refinements B, C, D, E, J, K are applied to the atom(s) in cif given by atomic s
 Refinement scale gives initial change in the refined parameter
 This is fractional atomic coordinate for position refinement, fraction for everything else i.e. 0.01 is 1 percent
 
+Refine method:
+	One parameter at a time, gradient descent, parabolic, 0
+	Multiparameter, vector gradient descent, parabolic, 1
+
 Correlation type:
     Pearson (zncc), 0
     Phase (Fourier), 1
@@ -37,7 +41,7 @@ Correlation type:
 Image processing:
     None, 0
     Gaussian blur, 1, given by blur radius
-    Fitted gaussian blur 2, which gives the best figure of merit
+    Fitted gaussian blur 2, that which gives the best figure of merit
 # ------------------------------------
 
 # Control flags
@@ -55,7 +59,7 @@ Debye_model               = 1
 image_radius              = 42
 
 # Beam selection criteria
-min_reflection_pool       = 800
+min_reflection_pool       = 100
 min_strong_beams          = 30
 min_weak_beams            = 0
 g_limit                   = 0.0
@@ -73,14 +77,14 @@ accelerating_voltage_kv   = 200.0
 acceptance_angle          = 0.0
 
 # Image output options
-initial_thickness         = 1170.0
-final_thickness           = 1220.0
+initial_thickness         = 1200.0
+final_thickness           = 1200.0
 delta_thickness           = 10.0
 precision                 = 0.00002
 # Refinement specific flags
-refine_mode               = 'E'
+refine_mode               = 'C'
 weighting_flag            = 0
-refine_method             = 3
+refine_method             = 1
 correlation_type          = 1
 image_processing          = 1
 blur_radius               = 0.7

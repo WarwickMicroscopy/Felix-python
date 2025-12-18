@@ -809,13 +809,16 @@ def refine_single_variable(v, i):
     return dydx_i
 
 
-def refine_multi_variable(v, dydx):
+def refine_multi_variable(v, dydx, single=True):
     '''
     multidimensional refinement
     dydx: float array of gradients, generated in refine_single_variable
     Uses the whole variable space v, only:
     v.best_fit: best figure of merit so far
     '''
+    # starting point is the current best set of variables
+    last_fit = 1.0*v.best_fit
+
     n_var = np.count_nonzero(dydx)
     print(f"Multidimensional refinement, {n_var} variable{'s' if n_var != 1 else ''}")
 
@@ -829,31 +832,28 @@ def refine_multi_variable(v, dydx):
 
     j = np.argmax(abs(dydx))  # index of principal variable (largest gradient)
     print(f"  Principal variable: {variable_message(v.refined_variable_type[j])}")
-    print(f"    Extrapolation, should be better than {100*v.best_fit:.2f}%")
-
-    # starting point is the current best set of variables
-    last_fit = 1.0*v.best_fit
-
-    # initial trial uses the predicted best set of variables
-    v.refined_variable = 1.0*v.next_var
-    # simulate and get figure of merit
-    fom = sim_fom(v, j)
-    # is it actually any better
-    if fom < last_fit:
-        v.best_fit = fom*1.0
-        v.best_var = np.copy(v.refined_variable)
-        print("Point 1 of 3: extrapolated")  # yes, use it
-    else:
-        print("Point 1 of 3: previous best")  # no, use the best
-    v.refined_variable = np.copy(v.best_var)
-    print_LACBED(v)
+    if not single:
+        print(f"    Extrapolation, should be better than {100*v.best_fit:.2f}%")
+        # initial trial uses the predicted best set of variables
+        v.refined_variable = 1.0*v.next_var
+        # simulate and get figure of merit
+        fom = sim_fom(v, j)
+        # is it actually any better
+        if fom < last_fit:
+            v.best_fit = fom*1.0
+            v.best_var = np.copy(v.refined_variable)
+            print("Point 1 of 3: extrapolated")  # yes, use it
+        else:
+            print("Point 1 of 3: previous best")  # no, use the best
+        v.refined_variable = np.copy(v.best_var)
+        print_LACBED(v)
+        print("-a-----------------------------")  # {r3_var},{r3_fom}")
 
     # First point: best simulation
     r3_var = np.zeros(3)
     r3_fom = np.zeros(3)
     r3_var[0] = 1.0*v.best_var[j]  # using principal variable
     r3_fom[0] = 1.0*v.best_fit
-    print("-a-----------------------------")  # {r3_var},{r3_fom}")
 
     # reset the refinement scale (last term reverses sign if we overshot)
     delta = -v.best_var[j] * v.refinement_scale  # * (2*(fom < v.best_fit)-1)

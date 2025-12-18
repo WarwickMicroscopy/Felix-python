@@ -266,6 +266,15 @@ elif v.scatter_factor_method == 4:
 else:
     raise ValueError("No scattering factors chosen in felix.inp")
 
+if v.absorption_method == 0:
+    print("  No absorption")
+elif v.absorption_method == 1:
+    print(f"  Proportional absorption model, set at {v.absorption_per}%")
+elif v.absorption_method == 2:
+    print("  Bird and King absorption model, with Thomas parameterisation")
+else:
+    raise ValueError("Invalid absorption method (0,1,2) chosen in felix.inp")
+
 if 'S' in v.refine_mode:
     print("Simulation only, S")
 elif 'A' in v.refine_mode:
@@ -636,13 +645,18 @@ if 'S' not in v.refine_mode:
         v.next_var = np.copy(v.refined_variable)
 
         if v.refine_method == 0:
+            print("Gradient descent, one parameter at a time")
             dydx = np.zeros(v.n_variables)
             for i in range(v.n_variables):
                 dydx[i] = 1.0
-            
-        if v.refine_method == 1:
+                # single is just multiparameter with one non-zero value
+                # v.next_var = v.best_var - dydx*v.refinement_scale
+                dydx = sim.refine_multi_variable(v, dydx)
+
+        elif v.refine_method == 1:
+            print("Multiparameter refinement, finding parameter gradients")
             # =========== step 1: individual variable minimisation
-            # if all variables have been refined and we're still in the loop, reset
+            # if all variables have been refined, reset
             if np.sum(np.abs(dydx)) < 1e-10:
                 dydx = np.ones(v.n_variables)
             # Go through the variables looking at three points in the hope
@@ -657,7 +671,7 @@ if 'S' not in v.refine_mode:
                     dydx[i] = 0.0
                     continue
                 dydx[i] = sim.refine_single_variable(v, i)
-    
+
             # all variables have updated/predicted so do a final simulation
             # if it's better, update v.best_fit and v.best_var accordingly
             if np.count_nonzero(dydx) == 0:
@@ -667,24 +681,28 @@ if 'S' not in v.refine_mode:
                 if (fom < v.best_fit):
                     v.best_fit = fom*1.0
                     v.best_var = np.copy(v.refined_variable)
+            print("Vector gradient descent")
+            # ===========step 2: vector descent
+            # Downhill minimisation until we eliminate all variables
+            while np.sum(np.abs(dydx)) > 1e-10:
+                # the returned dydx will have an extra zero!
+                dydx = sim.refine_multi_variable(v, dydx, False)
+        else:
+            raise ValueError("No valid refine method (0,1) in felix.inp")
 
-        # ===========step 2: vector descent
-        # Downhill minimisation until we eliminate all variables
-        while np.sum(np.abs(dydx)) > 1e-10:
-            # the returned dydx will have an extra zero!
-            dydx = sim.refine_multi_variable(v, dydx)
         # Update for next iteration
         df = last_fit - v.best_fit
 
         last_fit = np.copy(v.best_fit)
         v.refined_variable = np.copy(v.best_var)
-        v.refinement_scale *= (1 - 1 / (2 * v.n_variables))
+        v.refinement_scale *= (1 - 1 / (v.n_variables))
         print(f"Improvement in fit {100*df:.2f}%, will stop at {100*v.exit_criteria:.2f}%")
+        print(f"Step size reduced to {v.refinement_scale:.6f}")
         print("-------------------------------")
         plt.plot(v.fit_log)
         # plt.scatter(var_pl, fit_pl)
         plt.show()
-    
+
     print(f"Refinement complete after {v.iter_count} simulations.  Refined values: {v.best_var}")
 
 # %% final print
