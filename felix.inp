@@ -9,12 +9,12 @@ Scatter factor method:
 
 Absorption:
     None, 0
-    Proportional, 1 (value given by absorption per)
+    Proportional, 1 (value given by absorption_per)
     Bird & King (Thomas parameterisation), 2
 
 Refine modes:
     Simulation only, S
-    Structure Factors, A
+    Structure Factors, A  ***not yet re-implemented
     Atomic Coordinates, B  ***partially implemented
     Occupancies, C
     Isotropic atomic displacement parameters, D
@@ -26,7 +26,7 @@ Refine modes:
     Kappa, J  ***partially implemented
     Proportion of valence electrons, K  ***partially implemented
 
-Refinements B, C, D, E, J, K are applied to the atom(s) in cif given by atomic sites
+Refinements B, C, D, E, J, K are applied to the atom(s) in cif given by atomic_sites
 Refinement scale gives initial change in the refined parameter
 This is fractional atomic coordinate for position refinement, fraction for everything else i.e. 0.01 is 1 percent
 
@@ -82,9 +82,9 @@ final_thickness           = 1200.0
 delta_thickness           = 10.0
 precision                 = 0.00002
 # Refinement specific flags
-refine_mode               = 'C'
+refine_mode               = 'J,K'
 weighting_flag            = 0
-refine_method             = 1
+refine_method             = 0
 correlation_type          = 1
 image_processing          = 1
 blur_radius               = 0.7

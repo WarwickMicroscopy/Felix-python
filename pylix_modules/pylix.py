@@ -1172,7 +1172,8 @@ def Fg_matrix(n_hkl, scatter_factor_method, basis_atom_label, atom_label,
             f_gb[i, :, :] = f_doyle_turner(atomic_number[i], g_magnitude)
         elif scatter_factor_method == 4:
             print("Calculating kappa factor for atom", i+1, "/", n_cell)
-            f_gb[i, :, :] = kappa_factors(g_magnitude, atomic_number[i], pv[i], kappas[i])
+            f_gb[i, :, :] = kappa_factors(g_magnitude, atomic_number[i],
+                                          pv[i], kappas[i])
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
 
@@ -1757,7 +1758,7 @@ def convert_x(Z, f_x, q):
     r2 = fu.elements_info[Z]["r2"]
     f_e[mask0] = (Z * r2) / (3 * Bohr)
 
-    # General Motte–Beth formula
+    # Mott–Bethe formula
     f_e[maskN] = (Z - f_x[maskN]) / (2 * np.pi**2 * Bohr * q[maskN]**2)
 
     return f_e
@@ -1770,10 +1771,7 @@ def kappa_factors(g, Z, pv, kappa):
     g_flat = g.flatten()
     S = g_flat / (2*np.pi)
     f_out = np.zeros_like(g_flat, dtype=float)
-    f_out = convert_x(
-        Z,
-        calc_scattering_amplitudes(S, Z, pv, kappa),
-        S)
+    f_out = convert_x(Z, calc_scattering_amplitudes(S, Z, pv, kappa), S)
 
     return f_out.reshape(orig_shape)
 # should handle values below 0.5 Q using kirkland values or some type of extrapolation

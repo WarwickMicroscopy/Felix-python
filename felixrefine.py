@@ -218,30 +218,25 @@ v.atomic_sites = np.array(v.atomic_sites, dtype='int')
 v.g_limit = v.g_limit * 2 * np.pi
 
 v.basis_pv = np.zeros(n_basis, dtype=float)
-v.basis_kappa = np.zeros(n_basis, dtype=float)
+# set all kappa values to 1 initially
+v.basis_kappa = np.ones(n_basis, dtype=float)
 atomic_number = np.array([fu.atomic_number_map[na] for na in v.basis_atom_name])
 
 for i in range(n_basis):
     v.basis_pv[i] = fu.elements_info[atomic_number[i]]["pv"]
-    v.basis_kappa[i] = 1.0  # set all kappa values to 1 initially
 
-# setting up initial pv values
-if v.debug:
-    print(v.basis_kappa)
-
-
-# v.Basis_Pv[0]= 0.9994
-# v.Basis_Pv[1] = 4.997
-# v.Basis_Pv[2]= 5.985
-# v.Basis_Kappa[0]= 1.3
-# v.Basis_Kappa[1]= 1.01
-# v.Basis_Kappa[2]= 1.01
+# v.basis_pv[0]= 0.9994
+# v.basis_pv[1] = 4.997
+# v.basis_pv[2]= 5.985
+# v.basis_kappa[0]= 1.3
+# v.basis_kappa[1]= 1.01
+# v.basis_kappa[2]= 1.01
 # kappas (default 1.0)
 # refined kappa : [1.21517673 1.12267508 0.93547286]
 # expand per atom in full unit cell
 # print(unique_aniso_matrixes)
 # print(unique_aniso_matrixes.shape)
-
+# print(v.basis_kappa)
 # Step 1: define a dictionary of initial P_v guesses per element
 # For LiNbO3 using formal charges as we discussed
 # we just need a dictionary of the valence states of the atoms
@@ -460,14 +455,14 @@ if 'S' not in v.refine_mode:
 
     if 'J' in v.refine_mode:
         for i in range(len(v.atomic_sites)):
-            v.refined_variable.append(v.Basis_Kappa[v.atomic_sites[i]])
+            v.refined_variable.append(v.basis_kappa[v.atomic_sites[i]])
             v.refined_variable_type.append(50)
             v.atom_refine_flag.append(v.atomic_sites[i])
             v.atom_refine_vec.append(nullvec)  # no atom movement
 
     if 'K' in v.refine_mode:
         for i in range(len(v.atomic_sites)):
-            v.refined_variable.append(v.Basis_Pv[v.atomic_sites[i]])
+            v.refined_variable.append(v.basis_pv[v.atomic_sites[i]])
             v.refined_variable_type.append(51)
             v.atom_refine_flag.append(v.atomic_sites[i])
             v.atom_refine_vec.append(nullvec)  # no atom movement

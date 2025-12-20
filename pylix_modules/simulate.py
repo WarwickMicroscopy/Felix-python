@@ -555,15 +555,15 @@ def update_variables(v):
         elif typ[i] == 5:
             if sub[i] == 0:  # kappa
                 if 0.7 < var < 1.3:  # must lie in a reasonable range
-                    v.Basis_Kappa[j] = var*1.0
+                    v.basis_kappa[j] = var*1.0
                 else:
-                    v.Basis_Kappa[j] = np.clip(var, 0.7, 1.3)
+                    v.basis_kappa[j] = np.clip(var, 0.7, 1.3)
             elif sub[i] == 1:  # valence electrons
                 if 0.5 < var < 1.5:  # must lie in a reasonable range
-                    v.Basis_Pv[j] = var*1.0
+                    v.basis_pv[j] = var*1.0
                 else:
-                    v.Basis_Pv[j] = 0.0
-                    # v.Basis_Pv[j] = np.clip(var, ,1.5 )
+                    v.basis_pv[j] = 0.0
+                    # v.basis_pv[j] = np.clip(var, ,1.5 )
     return
 
 
@@ -869,6 +869,9 @@ def refine_multi_variable(v, dydx, single=True):
     if fom < v.best_fit:
         v.best_fit = fom*1.0
         v.best_var = np.copy(v.refined_variable)
+    # check for no effect
+    if fom == v.best_fit:
+        raise ValueError(f"{variable_message(v.refined_variable_type[j])} has no effect!")
 
     # Third point
     print("Refining, point 3 of 3")

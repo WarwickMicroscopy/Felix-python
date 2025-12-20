@@ -21,6 +21,7 @@ elements_info = {
         'pc': 2,
         'pv': 1
     },
+
     8: {  # Oxygen
         'symbol': 'O',
         'orbitals': ['1s', '2s', '2p'],
@@ -34,6 +35,7 @@ elements_info = {
         'pc': 2,
         'pv': 6
     },
+
     41: {  # Niobium
          'symbol': 'Nb',
          'orbitals': ['1s', '2s', '2p', '3s', '3p', '3d', '4s', '4p', '4d', '5s'],
@@ -55,6 +57,7 @@ elements_info = {
          'pv': 5
     }
 }
+
 neutral_valence_states = {
  "Li": 1,
  "Nb": 5,
@@ -74,6 +77,7 @@ slater_coefficients = {
                       0.340542, 0.715708]
         }
     },
+
     8: {  # Oxygen
         '1s': {
             'delta': [11.2970, 6.5966, 20.5019, 9.5546, 3.2482, 2.1608,
@@ -92,6 +96,7 @@ slater_coefficients = {
             'coeff': [0.005626, 0.126618, 0.328966, 0.395422, 0.231788]
         }
     },
+
     41: { #  Niobium
          '1s': {
              'delta': [41.7434, 35.3327, 19.4788, 51.3713, 14.2959, 7.8700,
@@ -165,10 +170,12 @@ slater_coefficients = {
          }
     }
 }
+
 r_grid = []
 rho_core = []
 rho_valence = []
 r2 = 0
+
 precomputed_densities = {
     3: {
         "r": r_grid,
@@ -176,12 +183,14 @@ precomputed_densities = {
         "valence": rho_valence,
         "r2": r2
     },
+
     8: {
         "r": r_grid,
         "core": rho_core,
         "valence": rho_valence,
         "r2": r2
     },
+
     41: {
         "r": r_grid,
         "core": rho_core,
