@@ -217,30 +217,6 @@ v.atomic_sites = np.array(v.atomic_sites, dtype='int')
 # crystallography exp(2*pi*i*g.r) to physics convention exp(i*g.r)
 v.g_limit = v.g_limit * 2 * np.pi
 
-v.basis_pv = np.zeros(n_basis, dtype=float)
-# set all kappa values to 1 initially
-v.basis_kappa = np.ones(n_basis, dtype=float)
-atomic_number = np.array([fu.atomic_number_map[na] for na in v.basis_atom_name])
-
-for i in range(n_basis):
-    v.basis_pv[i] = fu.elements_info[atomic_number[i]]["pv"]
-
-# v.basis_pv[0]= 0.9994
-# v.basis_pv[1] = 4.997
-# v.basis_pv[2]= 5.985
-# v.basis_kappa[0]= 1.3
-# v.basis_kappa[1]= 1.01
-# v.basis_kappa[2]= 1.01
-# kappas (default 1.0)
-# refined kappa : [1.21517673 1.12267508 0.93547286]
-# expand per atom in full unit cell
-# print(unique_aniso_matrixes)
-# print(unique_aniso_matrixes.shape)
-# print(v.basis_kappa)
-# Step 1: define a dictionary of initial P_v guesses per element
-# For LiNbO3 using formal charges as we discussed
-# we just need a dictionary of the valence states of the atoms
-
 # output
 print(f"Zone axis: {v.incident_beam_direction.astype(int)}")
 if v.n_thickness == 1:
@@ -257,7 +233,7 @@ elif v.scatter_factor_method == 2:
 elif v.scatter_factor_method == 3:
     print("  Using Doyle & Turner scattering factors")
 elif v.scatter_factor_method == 4:
-    print("  Using orbital HF scattering factors with Kappa formalism")
+    print("  Using orbital Hartree-Fock scattering factors with Kappa")
 else:
     raise ValueError("No scattering factors chosen in felix.inp")
 
@@ -269,6 +245,11 @@ elif v.absorption_method == 2:
     print("  Bird and King absorption model, with Thomas parameterisation")
 else:
     raise ValueError("Invalid absorption method (0,1,2) chosen in felix.inp")
+
+# initialise pv and kappa
+v.basis_pv = np.zeros(n_basis, dtype=float)
+v.basis_kappa = np.ones(n_basis, dtype=float)
+
 
 if 'S' in v.refine_mode:
     print("Simulation only, S")
@@ -303,6 +284,25 @@ else:  # atom-specific refinements can be done simultaneously
         print("Refining Kappa, J")
     if 'K' in v.refine_mode:
         atm = 1
+        atomic_number = np.array([fu.atomic_number_map[na]
+                                  for na in v.basis_atom_name])
+        for i in range(n_basis):
+            v.basis_pv[i] = fu.elements_info[atomic_number[i]]["pv"]
+        # v.basis_pv[0]= 0.9994
+        # v.basis_pv[1] = 4.997
+        # v.basis_pv[2]= 5.985
+        # v.basis_kappa[0]= 1.3
+        # v.basis_kappa[1]= 1.01
+        # v.basis_kappa[2]= 1.01
+        # kappas (default 1.0)
+        # refined kappa : [1.21517673 1.12267508 0.93547286]
+        # expand per atom in full unit cell
+        # print(unique_aniso_matrixes)
+        # print(unique_aniso_matrixes.shape)
+        # print(v.basis_kappa)
+        # Step 1: define a dictionary of initial P_v guesses per element
+        # For LiNbO3 using formal charges as we discussed
+        # we just need a dictionary of the valence states of the atoms
         print("Refining valence electrons, K")
     if atm == 1:
         for i in range(len(v.atomic_sites)):

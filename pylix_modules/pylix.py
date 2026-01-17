@@ -287,9 +287,11 @@ def symop_convert(symop_xyz):
     return mat, vec
 
 
-def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label, basis_atom_type_label,
-                          basis_atom_name, basis_atom_position, basis_u_ij,
-                          basis_occupancy, basis_pv, basis_kappa, debug):
+def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
+                          basis_atom_type_label, basis_atom_name,
+                          basis_atom_position, basis_u_ij,
+                          basis_occupancy, basis_pv,
+                          basis_kappa, debug=False):
     """
     Fills the unit cell by applying symmetry operations to the basis
 
@@ -305,18 +307,18 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label, ba
     Returns:
     atom_position, atom_label, atom_name, B_iso, occupancy
     """
-    if debug:
-        np.set_printoptions(precision=5, suppress=True)
-        for i in range(3):
-            print(f"Basis anisotropic u_ij [{i}]")
-            print(f"{basis_u_ij[i, :5, :5]}")
-
     # tolerance in fractional coordinates to consider atoms to be the same
     tol = 0.000001
     # Determine the size of the all_atom_position array
     n_symmetry_operations = symmetry_vector.shape[0]
     n_basis_atoms = basis_atom_position.shape[0]
     total_atoms = n_symmetry_operations * n_basis_atoms
+    if debug:
+        np.set_printoptions(precision=5, suppress=True)
+        for i in range(n_basis_atoms):
+            print(f"Basis anisotropic u_ij [{i}]")
+            print(f"{basis_u_ij[i, :5, :5]}")
+
 
     # Initialize arrays to store all atom positions, including duplicates
     all_atom_label = np.tile(basis_atom_label, n_symmetry_operations)
@@ -1146,66 +1148,67 @@ def Fg_matrix(n_hkl, scatter_factor_method, basis_atom_label, atom_label,
         print("g_magnitudes")
         print(g_magnitude[:5, :5])
         print("  ")
-        for i in range(3):
+        for i in range(n_basis):
             print(f"Anisotropic u_ij*g[i]*g[j] [{i}]")
             print(f"{Ugg[i, :5, :5]}")
         print("  ")
-        for i in range(3):
+        for i in range(n_basis):
             print(f"Anisotropic B[{i}]")
             print(f"{B_aniso[i, :5, :5]}")
         print("  ")
 
     # scattering factors, atom by atom in the basis and applied to cell
-    f_gb = np.zeros([n_basis, n_hkl, n_hkl], dtype=np.complex128)
-    f_gb_prime = np.zeros([n_basis, n_hkl, n_hkl], dtype=np.complex128)
+    f_g_basis = np.zeros([n_basis, n_hkl, n_hkl], dtype=np.complex128)
+    f_g_basis_prime = np.zeros([n_basis, n_hkl, n_hkl], dtype=np.complex128)
     f_g = np.zeros([n_cell, n_hkl, n_hkl], dtype=np.complex128)
     f_g_prime = np.zeros([n_cell, n_hkl, n_hkl], dtype=np.complex128)
     for i in range(n_basis):
-        # get the scattering factor for the basis f_gb
+        # get the scattering factor for the basis f_g_basis
         if scatter_factor_method == 0:
-            f_gb[i, :, :] = f_kirkland(atomic_number[i], g_magnitude)
+            f_g_basis[i, :, :] = f_kirkland(atomic_number[i], g_magnitude)
         elif scatter_factor_method == 1:
-            f_gb[i, :, :] = f_lobato(atomic_number[i], g_magnitude)
+            f_g_basis[i, :, :] = f_lobato(atomic_number[i], g_magnitude)
         elif scatter_factor_method == 2:
-            f_gb[i, :, :] = f_peng(atomic_number[i], g_magnitude)
+            f_g_basis[i, :, :] = f_peng(atomic_number[i], g_magnitude)
         elif scatter_factor_method == 3:
-            f_gb[i, :, :] = f_doyle_turner(atomic_number[i], g_magnitude)
+            f_g_basis[i, :, :] = f_doyle_turner(atomic_number[i], g_magnitude)
         elif scatter_factor_method == 4:
-            print("Calculating kappa factor for atom", i+1, "/", n_cell)
-            f_gb[i, :, :] = kappa_factors(g_magnitude, atomic_number[i],
+            print(f"Calculating kappa factor for atom {i+1}/{n_cell}")
+            f_g_basis[i, :, :] = kappa_factors(g_magnitude, atomic_number[i],
                                           pv[i], kappas[i])
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
 
-        # get the absorptive scattering factor for the basis f_gb_prime
+        # get the absorptive scattering factor for the basis f_g_basis_prime
         if absorption_method == 0:  # no absorption
-            f_gb_prime[i, :, :] = np.zeros_like(f_g)
+            f_g_basis_prime[i, :, :] = np.zeros_like(f_g)
         elif absorption_method == 1:  # proportional model
-            f_gb_prime[i, :, :] = 1j * f_g * absorption_per/100.0
+            f_g_basis_prime[i, :, :] = 1j * f_g * absorption_per/100.0
         elif absorption_method == 2:  # Bird & King, Thomas (Acta Cryst 2023)
-            f_gb_prime[i, :, :] = 1j * f_thomas(g_magnitude, B_aniso[i, :, :],
+            f_g_basis_prime[i, :, :] = 1j * f_thomas(g_magnitude, B_aniso[i, :, :],
                                       atomic_number[i], electron_velocity)
         if debug:
-            print(f"f_g [{i}]")
-            print(f"{f_g[i, :5, :5]}")
+            print(f"f_g_basis [{i}]")
+            print(f"{f_g_basis[i, :5, :5]}")
             print("  ")
-            print(f"f_g_prime [{i}]")
-            print(f"{f_g_prime[i, :5, :5]}")
+            print(f"f_g_basis_prime [{i}]")
+            print(f"{f_g_basis_prime[i, :5, :5]}")
 
         # put into the unit cell
         for j in range(n_cell):
             if atom_label[j] == basis_atom_label[i]:
-                f_g[j, :, :] = f_gb[i, :, :]
+                f_g[j, :, :] = f_g_basis[i, :, :]
 
     # now make up the full matrix
     Fg_matrix = np.zeros([n_hkl, n_hkl], dtype=np.complex128)
     for i in range(n_cell):
         # The Structure Factor Equation
-        Fg_matrix = Fg_matrix+((f_g[i, :, :] + f_g_prime[i, :, :]) * phase[:, :, i] *
-                               occupancy[i] *
+        Fg_matrix = Fg_matrix+((f_g[i, :, :] + f_g_prime[i, :, :])
+                               * phase[:, :, i]
+                               * occupancy[i]
                                # np.exp(-B_aniso[i, :, :] * (g_magnitude**2) /
                                # (16*np.pi**2)))
-                               np.exp(-Ugg[i, :, :] / 2))
+                               * np.exp(-Ugg[i, :, :] / 2))
 
     return Fg_matrix
 
@@ -1708,8 +1711,6 @@ def precompute_densities(Z, kappa, pv):
 
 def calc_scattering_amplitudes(q, Z, pv, kappa):
     """
-    
-
     Parameters
     ----------
     q : TYPE

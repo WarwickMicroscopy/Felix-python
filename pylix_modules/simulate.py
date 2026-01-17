@@ -41,9 +41,12 @@ def simulate(v):
     # Relativistic correction
     relativistic_correction = 1.0 / np.sqrt(1.0 - (electron_velocity / c)**2)
     # Cell volume
-    cell_volume = v.cell_a*v.cell_b*v.cell_c*np.sqrt(1.-np.cos(v.cell_alpha)**2
-                  - np.cos(v.cell_beta)**2 - np.cos(v.cell_gamma)**2
-                  +2.0*np.cos(v.cell_alpha)*np.cos(v.cell_beta)*np.cos(v.cell_gamma))
+    cell_volume = (v.cell_a*v.cell_b*v.cell_c
+                   * np.sqrt(1.-np.cos(v.cell_alpha)**2
+                             - np.cos(v.cell_beta)**2
+                             - np.cos(v.cell_gamma)**2
+                             + 2.0*np.cos(v.cell_alpha)
+                             * np.cos(v.cell_beta) * np.cos(v.cell_gamma)))
     # Conversion from scattering factor to volts
     scatt_fac_to_volts = ((h**2) /
                           (2.0*np.pi * m_e * e * cell_volume * (angstrom**2)))
