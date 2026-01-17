@@ -504,10 +504,13 @@ def update_variables(v):
                 # error estimate - needs work
                 # Update uncertainty if independent_delta is non-zero
                 # if abs(independent_delta[i]) > 1e-10:  # Tiny threshold
-                #     basis_atom_delta[atom_id, :] += vector[j - 1, :] * independent_delta[i]
+                #     basis_atom_delta[atom_id, :] += vector[j - 1, :]
+                #                                   * independent_delta[i]
 
             elif sub[i] == 1:  # Occupancy
                 v.basis_occupancy[j] = var
+                # *** hack for GeSn refining Ge
+                v.basis_occupancy[1] = 1-var
 
             elif sub[i] == 2:   # Iso ADPs
                 if 0 < var:  # must lie in range
@@ -515,22 +518,22 @@ def update_variables(v):
                     v.basis_u_ij[j, 1, 1] = var / (8 * np.pi**2)
                     v.basis_u_ij[j, 2, 2] = var / (8 * np.pi**2)
                 else:
-                    v.basis_u_ij = 0.0
+                    v.basis_u_ij[j, :, :] = 0.0
             elif sub[i] == 3:  # u[1,1]
-                v.basis_u_ij[j][0][0] = var
+                v.basis_u_ij[j, 0, 0] = var
             elif sub[i] == 4:  # u[1,1]
-                v.basis_u_ij[j][1][1] = var
+                v.basis_u_ij[j, 1, 1] = var
             elif sub[i] == 5:  # u[2,2]
-                v.basis_u_ij[j][2][2] = var
+                v.basis_u_ij[j, 2, 2] = var
             elif sub[i] == 6:  # u[1,2]
-                v.basis_u_ij[j][0][1] = var
-                v.basis_u_ij[j][1][0] = var
+                v.basis_u_ij[j, 0, 1] = var
+                v.basis_u_ij[j, 1, 0] = var
             elif sub[i] == 7:  # u[1,3]
-                v.basis_u_ij[j][0][2] = var
-                v.basis_u_ij[j][2][0] = var
+                v.basis_u_ij[j, 0, 2] = var
+                v.basis_u_ij[j, 2, 0] = var
             elif sub[i] == 8:  # u[2,3]
-                v.basis_u_ij[j][1][2] = var
-                v.basis_u_ij[j][2][1] = var
+                v.basis_u_ij[j, 1, 2] = var
+                v.basis_u_ij[j, 2, 1] = var
 
         elif typ[i] == 3:
             # Lattice parameters a, b, c
@@ -907,7 +910,8 @@ def refine_multi_variable(v, dydx, single=True):
             r3_var[i] = 1.0*v.refined_variable[j]
             r3_fom[i] = 1.0*fom
         else:
-            v.refined_variable[j] = 1.0*last_x
+            v.refined_variable[j] = 1.0*next_x
+            print(f"  Predict minimum at {next_x:.4f}")
             minny = True
     # we have taken the principal variable to a minimum
     dydx[j] = 0.0

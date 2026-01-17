@@ -573,8 +573,8 @@ if 'S' not in v.refine_mode:
                 if g_string in file_name:
                     file_path = os.path.join(dm3_folder, file_name)
                     v.lacbed_expt[:, :, i] = px.read_dm3(file_path,
-                                                       2*v.image_radius,
-                                                       v.debug)
+                                                         2*v.image_radius,
+                                                         v.debug)
                     found = True
             if not found:
                 n_expt -= 1
@@ -587,7 +587,7 @@ if 'S' not in v.refine_mode:
         text_effect = withStroke(linewidth=3, foreground='black')
         axes = axes.flatten()
         for i in range(v.n_out):
-            axes[i].imshow(v.lacbed_expt[:, :, i], cmap='gist_earth')
+            axes[i].imshow(v.lacbed_expt[:, :, i], cmap='pink')  #'gist_earth')
             axes[i].axis('off')
             annotation = f"{v.hkl[v.g_output[i], 0]}{v.hkl[v.g_output[i], 1]}{v.hkl[v.g_output[i], 2]}"
             axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',

@@ -1784,14 +1784,9 @@ def four_gauss(s, a):
     sum of four Gaussians & a constant for Thomas f_prime
     s : float, sin(theta)/lambda, can be an array [n_hkl, n_hkl]
     a : array of floats size [9] from Thomas look up table
-    
     Returns : f_prime, array [n_hkl, n_hkl], the imaginary part of the
     scattering factor
     """
-    # f = a[0]*np.exp(-abs(a[1])*s**2) + \
-    #     a[2]*np.exp(-abs(a[3])*s**2) + \
-    #     a[4]*np.exp(-abs(a[5])*s**2) + \
-    #     a[6]*np.exp(-abs(a[7])*s**2) + a[8]
     f = (a[..., 0] * np.exp(-np.abs(a[..., 1]) * s**2) +
          a[..., 2] * np.exp(-np.abs(a[..., 3]) * s**2) +
          a[..., 4] * np.exp(-np.abs(a[..., 5]) * s**2) +
@@ -1802,9 +1797,6 @@ def four_gauss(s, a):
     # f = (a[..., 0]*np.exp(-abs(a[..., 1])*s[..., 0]**2) +
     #     a[..., 2]*np.exp(-abs(a[..., 3])*s[..., 1]**2) +
     #     a[..., 4]*np.exp(-abs(a[..., 5])*s[..., 2]**2) +
-    #     a[..., 6]*np.exp(-abs(a[..., 7]) *
-    #                         (s[..., 0]**2+s[..., 1]**2+s[..., 2]**2)) +
-    #     a[..., 8])
 
 
 def f_thomas(g, B, Z, v):
