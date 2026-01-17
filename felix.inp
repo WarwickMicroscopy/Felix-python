@@ -59,8 +59,8 @@ Debye_model               = 0
 image_radius              = 38
 
 # Beam selection criteria
-min_reflection_pool       = 100
-min_strong_beams          = 30
+min_reflection_pool       = 200
+min_strong_beams          = 50
 min_weak_beams            = 0
 g_limit                   = 0.0
 
@@ -71,27 +71,27 @@ absorption_per            = 10.0
 # Microscope settings
 convergence_angle         = 0.7264
 incident_beam_direction   = [1, -1, 0]
-x_direction               = [1, 1, 0]
+x_direction               = [0, 0, -1]
 normal_direction          = [1, -1, 0]
 accelerating_voltage_kv   = 200.0
 acceptance_angle          = 0.0
 
 # Image output options
-initial_thickness         = 1300.0
-final_thickness           = 1300.0
-delta_thickness           = 200.0
+initial_thickness         = 1000.0
+final_thickness           = 2000.0
+delta_thickness           = 100.0
 precision                 = 0.00002
 # Refinement specific flags
 refine_mode               = 'H'
 weighting_flag            = 0
 refine_method             = 0
-correlation_type          = 1
+correlation_type          = 0
 image_processing          = 1
 blur_radius               = 0.7
 no_of_ugs                 = 40
-atomic_sites              = [0]
+atomic_sites              = [0,1]
 print_flag                = 0
 refinement_scale          = 0.05
 exit_criteria             = 0.00005
-debug                     = 1
+debug                     = 0
 plot                      = 1

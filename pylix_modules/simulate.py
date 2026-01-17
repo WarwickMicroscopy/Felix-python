@@ -175,9 +175,8 @@ def simulate(v):
                     big_k, v.lattice_type, v.min_reflection_pool,
                     v.min_strong_beams, v.g_limit, v.input_hkls, big_k_mag)
     n_hkl = len(g_pool)
-    n_out = len(v.g_output)  # redefined to match what we can actually output
+    # n_out = len(v.g_output)  # redefined to match what we can actually output
     # NEEDS SOME MORE WORK TO MATCH SIM/EXPT PATTERNS if this happens
-    
 
     # outputs
     if v.iter_count == 0:
@@ -258,7 +257,6 @@ def simulate(v):
     mid = time.time()
     # Dot product of k with surface normal, [image diameter, image diameter]
     k_dot_n = np.tensordot(tilted_k, norm_dir_m, axes=([2], [0]))
-
     v.lacbed_sim = np.zeros([v.n_thickness, 2*v.image_radius, 2*v.image_radius,
                              len(v.g_output)], dtype=float)
 
@@ -512,12 +510,12 @@ def update_variables(v):
                 v.basis_occupancy[j] = var
 
             elif sub[i] == 2:   # Iso ADPs
-                # if 0 < var:  # must lie in range
-                v.basis_u_ij[j, 0, 0] = var / (8 * np.pi**2)
-                v.basis_u_ij[j, 1, 1] = var / (8 * np.pi**2)
-                v.basis_u_ij[j, 2, 2] = var / (8 * np.pi**2)
-                # else:
-                #     v.basis_B_iso[j] = 0.0
+                if 0 < var:  # must lie in range
+                    v.basis_u_ij[j, 0, 0] = var / (8 * np.pi**2)
+                    v.basis_u_ij[j, 1, 1] = var / (8 * np.pi**2)
+                    v.basis_u_ij[j, 2, 2] = var / (8 * np.pi**2)
+                else:
+                    v.basis_u_ij = 0.0
             elif sub[i] == 3:  # u[1,1]
                 v.basis_u_ij[j][0][0] = var
             elif sub[i] == 4:  # u[1,1]
@@ -869,12 +867,12 @@ def refine_multi_variable(v, dydx, single=True):
     r3_var[1] = 1.0*v.refined_variable[j]
     r3_fom[1] = 1.0*fom
     print("-b-----------------------------")  # {r3_var},{r3_fom}")
+    # if fom == v.best_fit:
+    #     raise ValueError(f"{variable_message(v.refined_variable_type[j])} has no effect!")
     if fom < v.best_fit:
         v.best_fit = fom*1.0
         v.best_var = np.copy(v.refined_variable)
     # check for no effect
-    if fom == v.best_fit:
-        raise ValueError(f"{variable_message(v.refined_variable_type[j])} has no effect!")
 
     # Third point
     print("Refining, point 3 of 3")
@@ -913,7 +911,7 @@ def refine_multi_variable(v, dydx, single=True):
             minny = True
     # we have taken the principal variable to a minimum
     dydx[j] = 0.0
-    print(f"    ====Eliminated variable {j}====")
+    print(f"    ====Refined variable {j}====")
     print_LACBED(v)
 
     return dydx

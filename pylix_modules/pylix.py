@@ -88,6 +88,9 @@ def read_hkl_file(filename):
 
     # Convert lists to numpy arrays
     input_hkls = np.array(input_hkls, dtype=int)
+    # remove [0,0,0] if it is present
+    mask = ~np.all(input_hkls == 0, axis=1)
+    input_hkls = input_hkls[mask]
     i_obs = np.array(i_obs) if cRED else None
     sigma_obs = np.array(sigma_obs) if cRED else None
 

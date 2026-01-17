@@ -690,7 +690,8 @@ if 'S' not in v.refine_mode:
 
         last_fit = np.copy(v.best_fit)
         v.refined_variable = np.copy(v.best_var)
-        v.refinement_scale *= (1 - 1 / (v.n_variables))
+        # reduce refinement scale for next round
+        v.refinement_scale *= (1 - 1 / (1 + v.n_variables))
         print(f"Improvement in fit {100*df:.2f}%, will stop at {100*v.exit_criteria:.2f}%")
         print(f"Step size reduced to {v.refinement_scale:.6f}")
         print("-------------------------------")
