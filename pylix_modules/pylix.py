@@ -1434,29 +1434,7 @@ def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list,
     ug_sg_matrix[1:n_beams, 0] -= sum_c  # Update first column (sumC)
     ug_sg_matrix[1:n_beams, 1:n_beams] -= (2.0 * big_k_mag *
                                            sum_d[:, None]) / (4.0 * np.pi**2)
-    # old version using loops
-    # for j in range(1, n_beams):
-    #     sum_c = 0 + 0j  # Complex zero
-    #     sum_d = 0 + 0j  # Complex zero
 
-    #     for i in range(n_weak_beams):
-    #         # Eq. 4 from Zuo & Weickenmeier (Ultramicroscopy 57, 1995)
-    #         sum_c += (ug_matrix[strong_beam_list[j], weak[i]] *
-    #                   ug_matrix[weak[i], 0] /
-    #                   (2.0 * big_k_mag * s_g_pix[weak_beam_list[i]]))
-
-    #         # Eq. 5 from Zuo & Weickenmeier (Ultramicroscopy 57, 1995)
-    #         sum_d += (ug_matrix[strong_beam_list[j], weak_beam_list[i]] *
-    #                   ug_matrix[weak_beam_list[i], strong_beam_list[j]] /
-    #                   (2.0 * big_k_mag * s_g_pix[weak[i]]))
-
-    #     # Update the first column of the ug_sg_matrix
-    #     mask = ug_sg_matrix == ug_sg_matrix[j, 0]
-    #     ug_sg_matrix[mask] = ug_sg_matrix[j, 0] - sum_c
-
-    #     # Update the diagonal elements (Sg's)
-    #     ug_sg_matrix[j, j] = ug_sg_matrix[j, j] - \
-    #         2.0*big_k_mag*sum_d/(4.0*np.pi**2)
     return
 
 
@@ -1729,6 +1707,26 @@ def precompute_densities(Z, kappa, pv):
 
 
 def calc_scattering_amplitudes(q, Z, pv, kappa):
+    """
+    
+
+    Parameters
+    ----------
+    q : TYPE
+        DESCRIPTION.
+    Z : TYPE
+        DESCRIPTION.
+    pv : TYPE
+        DESCRIPTION.
+    kappa : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    f_x_total : TYPE
+        DESCRIPTION.
+
+    """
     rho_core = fu.precomputed_densities[Z]["core"]
     rho_val = fu.precomputed_densities[Z]["valence"]
     r = fu.precomputed_densities[Z]["r"]

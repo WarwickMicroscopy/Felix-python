@@ -46,17 +46,17 @@ Image processing:
 
 # Control flags
 write_flag                = 1
-scatter_factor_method     = 0
+scatter_factor_method     = 4
 holz_flag                 = 0
 absorption_method         = 2
 byte_size                 = 2
 
 # Isotropic (0) Anisotropic (1)
-Debye_model               = 0      
+Debye_model               = 1      
 
 
 # Radius of the beam in pixels
-image_radius              = 38
+image_radius              = 42
 
 # Beam selection criteria
 min_reflection_pool       = 100
@@ -71,25 +71,25 @@ absorption_per            = 10.0
 # Microscope settings
 convergence_angle         = 0.7264
 incident_beam_direction   = [1, -1, 0]
-x_direction               = [1, 1, 0]
+x_direction               = [0, 0, -1]
 normal_direction          = [1, -1, 0]
 accelerating_voltage_kv   = 200.0
 acceptance_angle          = 0.0
 
 # Image output options
-initial_thickness         = 300.0
-final_thickness           = 2300.0
-delta_thickness           = 200.0
+initial_thickness         = 1200.0
+final_thickness           = 1200.0
+delta_thickness           = 10.0
 precision                 = 0.00002
 # Refinement specific flags
-refine_mode               = 'H'
+refine_mode               = 'J'
 weighting_flag            = 0
 refine_method             = 0
 correlation_type          = 1
 image_processing          = 1
 blur_radius               = 0.7
 no_of_ugs                 = 40
-atomic_sites              = [0,1]
+atomic_sites              = [0,1,2]
 print_flag                = 0
 refinement_scale          = 0.05
 exit_criteria             = 0.00005
