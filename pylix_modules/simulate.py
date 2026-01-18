@@ -500,7 +500,7 @@ def update_variables(v):
                 v.basis_atom_position[atom_id, :] = np.mod(
                     v.basis_atom_position[atom_id, :] + v.atom_refine_vec[i] *
                     (var - r_dot_v), 1)
-    
+
                 # error estimate - needs work
                 # Update uncertainty if independent_delta is non-zero
                 # if abs(independent_delta[i]) > 1e-10:  # Tiny threshold
@@ -509,8 +509,14 @@ def update_variables(v):
 
             elif sub[i] == 1:  # Occupancy
                 v.basis_occupancy[j] = var
-                # *** hack for GeSn refining Ge
-                v.basis_occupancy[1] = 1-var
+                # shared occupancy is held in v.basis_mult_occ
+                if v.basis_mult_occ[j] != 0:
+                    # get the indices of atoms on the same site
+                    mask = v.basis_mult_occ == v.basis_mult_occ[j]
+                    mask[j] = False
+                    # scale their occupancies in propotion to existing
+                    v.basis_occupancy[mask] *= (1 - var) \
+                        / v.basis_occupancy[mask].sum()
 
             elif sub[i] == 2:   # Iso ADPs
                 if 0 < var:  # must lie in range
@@ -831,9 +837,8 @@ def refine_multi_variable(v, dydx, single=True):
     if np.isinf(p_mag) or np.isnan(p_mag):
         raise ValueError(f"Infinite or NaN gradient! Refinement vector = {dydx}")
     dydx = dydx / p_mag   # Normalized direction of max gradient
-    with np.printoptions(formatter={'float': lambda x: f"{x:.2f}"}):
+    with np.printoptions(formatter={'float': lambda x: f"{x:.3f}"}):
         print(f"    Refinement vector {dydx}")
-
     j = np.argmax(abs(dydx))  # index of principal variable (largest gradient)
     print(f"  Principal variable: {variable_message(v.refined_variable_type[j])}")
     if not single:

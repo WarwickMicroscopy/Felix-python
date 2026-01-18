@@ -126,6 +126,42 @@ v.basis_atom_position = \
     np.column_stack((np.array([tup[0] for tup in v.atom_site_fract_x]),
                      np.array([tup[0] for tup in v.atom_site_fract_y]),
                      np.array([tup[0] for tup in v.atom_site_fract_z])))
+# redefine the basis to allow coordinate refinement and check for occupancy
+v.basis_atom_position = px.preferred_basis(v.space_group_number,
+                                           v.basis_atom_position,
+                                           v.basis_wyckoff)
+
+# occupancy, assume it's unity if not specified
+if v.atom_site_occupancy is not None:
+    v.basis_occupancy = np.array([tup[0] for tup in v.atom_site_occupancy])
+else:
+    v.basis_occupancy = np.ones([n_basis])
+
+# check for multiple occupancy on the same site
+tol = 0.000001  # tolerance for saying atoms are the same
+diff = v.basis_atom_position[:, None, :] - v.basis_atom_position[None, :, :]
+dist2 = np.sum(diff**2, axis=2)
+close = (dist2 <= tol**2) & (~np.eye(n_basis, dtype=bool))
+# basis_mult_occ has 0 if no shared occupancy, increasing numbers otherwise
+v.basis_mult_occ = np.zeros(n_basis, dtype=int)
+visited = np.zeros(n_basis, dtype=bool)
+group_id = 0
+for i in range(n_basis):
+    if visited[i]:
+        continue
+    stack = [i]  # Find all atoms at position i
+    cluster = []
+    while stack:
+        j = stack.pop()
+        if visited[j]:
+            continue
+        visited[j] = True
+        cluster.append(j)
+        neighbors = np.where(close[j])[0]
+        stack.extend(neighbors)
+    if len(cluster) > 1:
+        group_id += 1
+        v.basis_mult_occ[cluster] = group_id
 
 # Thermal displacement parameters, we work with u_ij
 if "atom_site_b_iso_or_equiv" in cif_dict:
@@ -164,12 +200,6 @@ if "atom_site_aniso_label" in cif_dict:
 
 # np.set_printoptions(precision=5, suppress=True)
 # print(f"Anisotropic ADPs: {v.basis_u_ij}")
-
-# occupancy, assume it's unity if not specified
-if v.atom_site_occupancy is not None:
-    v.basis_occupancy = np.array([tup[0] for tup in v.atom_site_occupancy])
-else:
-    v.basis_occupancy = np.ones([n_basis])
 
 # oxidation state
 if "atom_type_symbol" in cif_dict:
@@ -266,10 +296,6 @@ else:  # atom-specific refinements can be done simultaneously
     if 'B' in v.refine_mode:
         atm = 1
         print("Refining Atomic Coordinates, B")
-        # redefine the basis if necessary to allow coordinate refinement
-        v.basis_atom_position = px.preferred_basis(v.space_group_number,
-                                                   v.basis_atom_position,
-                                                   v.basis_wyckoff)
     if 'C' in v.refine_mode:
         atm = 1
         print("Refining Occupancies, C")

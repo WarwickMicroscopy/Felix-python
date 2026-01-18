@@ -11,9 +11,9 @@ _exptl_crystal_density_diffrn 5.33
 _citation_title
 
 loop_
-_cell_length_a 5.68043
-_cell_length_b 5.68043
-_cell_length_c 5.68043
+_cell_length_a 5.6414
+_cell_length_b 5.6414
+_cell_length_c 5.6414
 _cell_angle_alpha 90.
 _cell_angle_beta 90.
 _cell_angle_gamma 90.
@@ -230,6 +230,6 @@ _atom_site_fract_y
 _atom_site_fract_z
 _atom_site_U_iso_or_equiv
 _atom_site_occupancy
-Ge1 Ge0+ 8 a 0 0 0 0.0064 0.97
-Sn1 Sn0+ 8 a 0 0 0 0.0064 0.2
+Ge1 Ge0+ 8 a 0 0 0 0.00767 0.7
+Sn1 Sn0+ 8 a 0 0 0 0.00767 0.3
 #End of data
