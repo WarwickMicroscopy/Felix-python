@@ -14,6 +14,7 @@ from scipy.constants import c, h, e, m_e, angstrom
 from scipy.ndimage import gaussian_filter
 from skimage.registration import phase_cross_correlation
 from scipy.ndimage import fourier_shift
+from scipy.ndimage import shift
 from scipy.fft import fftn, ifftn
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
@@ -314,6 +315,49 @@ def zncc(img1, img2):
     return cc
 
 
+def phase_d_xy(A, B):
+    """
+    Sub-pixel shift to align B to A using Fourier phase correlation.
+
+    Returns dy, dx : float
+        Shift to apply to B so it aligns with A
+    """
+
+    A = A.astype(np.float64)
+    B = B.astype(np.float64)
+    FA = np.fft.fft2(A)
+    FB = np.fft.fft2(B)
+    # Cross power spectrum
+    R = FA * np.conj(FB)
+    R /= np.abs(R) + 1e-12   # normalize, avoid divide-by-zero
+    # Correlation surface
+    r = np.fft.ifft2(R)
+    r = np.abs(r)
+    # Integer peak
+    y0, x0 = np.unravel_index(np.argmax(r), r.shape)
+    # Wrap peak to signed coordinates
+    ny, nx = r.shape
+    if y0 > ny // 2:
+        y0 -= ny
+    if x0 > nx // 2:
+        x0 -= nx
+
+    # --- Sub-pixel refinement (parabolic fit) ---
+    def subpix(fm1, f0, fp1):
+        d = 2*f0 - fm1 - fp1
+        if d == 0:
+            return 0.0
+        return 0.5 * (fp1 - fm1) / d
+
+    # indices with wrap
+    ym1, yp1 = (y0 - 1) % ny, (y0 + 1) % ny
+    xm1, xp1 = (x0 - 1) % nx, (x0 + 1) % nx
+    dy = y0 + subpix(r[ym1, x0], r[y0, x0], r[yp1, x0])
+    dx = x0 + subpix(r[y0, xm1], r[y0, x0], r[y0, xp1])
+
+    return dy, dx
+
+
 def pcc(stack1, stack2):
     """ input: stack1, stack2 sets of n images, both of size [pix_x, pix_y, n]
     We correct for sub-pixel shits using fourier shifting
@@ -358,8 +402,9 @@ def figure_of_merit(v):
     the best thickness.  Could give a more sophisticated analysis..
     """
     # figure of merit - might need a NaN check? size [n_thick, n_out]
-    n_out = v.lacbed_expt.shape[2]  # ***is this in v? get rid if so
-    fom_array = np.ones([v.n_thickness, n_out])
+    fom_array = np.ones([v.n_thickness, v.n_out])
+    # difference images
+    diff_image = np.copy(v.lacbed_expt)
     # set up plot for blur optimisation
     if v.plot and v.image_processing == 2:
         fig, ax = plt.subplots(1, 1)
@@ -378,7 +423,7 @@ def figure_of_merit(v):
             b_fom = ([])  # mean fom for each blur
             for r in radii:
                 blacbed = np.copy(v.lacbed_sim[i, :, :, :])
-                for j in range(n_out):
+                for j in range(v.n_out):
                     blacbed[:, :, j] = gaussian_filter(blacbed[:, :, j],
                                                        sigma=r)
                 # b_fom.append(np.mean(1.0 - zncc(v.lacbed_expt, blacbed)))
@@ -387,7 +432,7 @@ def figure_of_merit(v):
                 plt.plot(radii, b_fom)
             v.blur_radius = radii[np.argmin(b_fom)]
         if v.image_processing != 0:
-            for j in range(n_out):
+            for j in range(v.n_out):
                 v.lacbed_sim[i, :, :, j] = gaussian_filter(v.lacbed_sim[i, :, :, j],
                                                            sigma=v.blur_radius)
         # figure of merit
@@ -399,6 +444,20 @@ def figure_of_merit(v):
                                         v.lacbed_sim[i, :, :, :])
         else:
             raise ValueError("Invalid correlation_type !(0 or 1) in felix.inp")
+
+        # difference plots
+        for j in range(v.n_out):
+            a0 = v.lacbed_sim[i, :, :, j]
+            b0 = v.lacbed_expt[:, :, j]
+
+            # zero mean normalise the images
+            a = (a0 - np.mean(a0))/np.std(a0)
+            b = (b0 - np.mean(b0))/np.std(b0)
+
+            dy, dx = phase_d_xy(a, b)
+            c = shift(b, shift=(dy, dx), order=3, mode="constant", cval=0)
+            c[c == 0] = a[c ==0]
+            diff_image[:, :, j]= a-c
 
     # plot of blur fit when v.image_processing == 2
     if v.plot and v.image_processing == 2:
@@ -421,7 +480,7 @@ def figure_of_merit(v):
         w_f = 10
         fig.set_size_inches(1.5*w_f, w_f)
         plt.plot(v.thickness/10, np.mean(fom_array, axis=1), 'ro', linewidth=2)
-        colours = plt.cm.gnuplot(np.linspace(0, 1, n_out))
+        colours = plt.cm.gnuplot(np.linspace(0, 1, v.n_out))
         # I have 99 styles but . ain't one
         styles = ['-', '-.', '--', ':', '-', '-.', '--', ':', '-', '-.', '--',
                   ':', '-', '-.', '--', ':', '-', '-.', '--', ':', '-', '-.',
@@ -432,7 +491,7 @@ def figure_of_merit(v):
                   '--', ':', '-', '-.', '--', ':', '-', '-.', '--', ':', '-',
                   '-.', '--', ':', '-', '-.', '--', ':', '-', '-.', '--', ':',
                   '-', '-.', '--', ':', '-', '-.', '--', ':', '-', '-.', '--']
-        for i in range(n_out):
+        for i in range(v.n_out):
             annotation = f"{v.hkl[v.g_output[i], 0]}{v.hkl[v.g_output[i], 1]}{v.hkl[v.g_output[i], 2]}"
             plt.plot(v.thickness/10, fom_array[:, i],
                      color=colours[i],
