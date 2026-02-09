@@ -18,6 +18,7 @@ from scipy.ndimage import shift
 from scipy.fft import fftn, ifftn
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
 from matplotlib.patheffects import withStroke
 from matplotlib.ticker import PercentFormatter
 import time
@@ -404,7 +405,7 @@ def figure_of_merit(v):
     # figure of merit - might need a NaN check? size [n_thick, n_out]
     fom_array = np.ones([v.n_thickness, v.n_out])
     # difference images
-    diff_image = np.copy(v.lacbed_expt)
+    v.diff_image = np.copy(v.lacbed_expt)
     # set up plot for blur optimisation
     if v.plot and v.image_processing == 2:
         fig, ax = plt.subplots(1, 1)
@@ -456,8 +457,9 @@ def figure_of_merit(v):
 
             dy, dx = phase_d_xy(a, b)
             c = shift(b, shift=(dy, dx), order=3, mode="constant", cval=0)
-            c[c == 0] = a[c ==0]
-            diff_image[:, :, j]= a-c
+            c[c == 0] = a[c == 0]
+            v.diff_image[:, :, j] = a-c
+        print_LACBED(v, 2)
 
     # plot of blur fit when v.image_processing == 2
     if v.plot and v.image_processing == 2:
@@ -636,44 +638,58 @@ def update_variables(v):
     return
 
 
-def print_LACBED(v):
+def print_montage(v, images, lut):
     '''
-    Plots all LACBED patterns in a montage
+    images[wid, wid, n] = array of n images each of size [wid, wid]
     '''
-    n = v.lacbed_sim.shape[3]  # actual size, if felix.hkl's missing
+    n = images.shape[2]
     w = int(np.ceil(np.sqrt(n)))
     h = int(np.ceil(n/w))
-    # only print all thicknesses for the first simulation
-    if v.iter_count == 1:
-        for j in range(v.n_thickness):
-            fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))
-            text_effect = withStroke(linewidth=3, foreground='black')
-            axes = axes.flatten()
-            for i in range(n):
-                axes[i].imshow(v.lacbed_sim[j, :, :, i], cmap='pink')
-                axes[i].axis('off')
-                annotation = f"{v.hkl[v.g_output[i], 0]}{v.hkl[v.g_output[i], 1]}{v.hkl[v.g_output[i], 2]}"
-                axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
-                                 size=30, color='w', path_effects=[text_effect])
-            for i in range(n, len(axes)):
-                axes[i].axis('off')
-            plt.tight_layout()
-            plt.show()
+    fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))
+    text_effect = withStroke(linewidth=3, foreground='black')
+    axes = axes.flatten()
+    for i in range(n):
+        img = images[:, :, i]
+        # difference or LACBED pattern
+        if lut == "diff":
+            cmap = LinearSegmentedColormap.from_list(
+                "two_color_black_center",
+                [(0.0, "c"), (0.5, "k"), (1.0, "orange")])
+            norm = TwoSlopeNorm(vmin=img.min(), vcenter=0.0, vmax=img.max())
+            axes[i].imshow(img, cmap=cmap, norm=norm)
+        else:
+            axes[i].imshow(img, cmap=lut)
+
+        axes[i].axis('off')
+        annotation = f"{v.hkl[v.g_output[i], 0]}{v.hkl[v.g_output[i], 1]}{v.hkl[v.g_output[i], 2]}"
+        axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
+                         size=30, color='w', path_effects=[text_effect])
+    for i in range(n, len(axes)):
+        axes[i].axis('off')
+    plt.tight_layout()
+    plt.show()
+
+
+def print_LACBED(v, image_type):
+    '''
+    Plots all LACBED patterns in a montage
+    image_type options 0=sim, 1=expt, 2=difference
+    '''
+    if image_type == 0:  # simulation output
+        # only print all thicknesses for the first simulation
+        if v.iter_count == 1:
+            for j in range(v.n_thickness):
+                out_image = v.lacbed_sim[j, :, :, :]
+                print_montage(v, out_image, 'pink')
+        else:
+            out_image = v.lacbed_sim[v.best_t, :, :, :]
+            print_montage(v, out_image, 'pink')
+    elif image_type == 1:  # experiment output
+        out_image = v.lacbed_expt
+        print_montage(v, out_image, 'grey')
     else:
-        j = v.best_t
-        fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))
-        text_effect = withStroke(linewidth=3, foreground='black')
-        axes = axes.flatten()
-        for i in range(v.n_out):
-            axes[i].imshow(v.lacbed_sim[j, :, :, i], cmap='pink')
-            axes[i].axis('off')
-            annotation = f"{v.hkl[v.g_output[i], 0]}{v.hkl[v.g_output[i], 1]}{v.hkl[v.g_output[i], 2]}"
-            axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
-                             size=30, color='w', path_effects=[text_effect])
-        for i in range(v.n_out, len(axes)):
-            axes[i].axis('off')
-        plt.tight_layout()
-        plt.show()
+        out_image = v.diff_image
+        print_montage(v, out_image, 'diff')
 
 
 def print_LACBED_pattern(i, j, v):
@@ -914,7 +930,7 @@ def refine_multi_variable(v, dydx, single=True):
         else:
             print("Point 1 of 3: previous best")  # no, use the best
         v.refined_variable = np.copy(v.best_var)
-        print_LACBED(v)
+        print_LACBED(v, 0)
         print("-a-----------------------------")  # {r3_var},{r3_fom}")
 
     # First point: best simulation
@@ -980,6 +996,6 @@ def refine_multi_variable(v, dydx, single=True):
     # we have taken the principal variable to a minimum
     dydx[j] = 0.0
     print(f"    ====Refined variable {j}====")
-    print_LACBED(v)
+    print_LACBED(v, 0)
 
     return dydx

@@ -574,6 +574,8 @@ print("-------------------------------")
 print("Baseline simulation:")
 # uses the whole v=Var class
 sim.simulate(v)
+# print_LACBED has options 0=sim, 1=expt, 2=difference
+sim.print_LACBED(v, 0)
 
 # %% read in experimental images
 if 'S' not in v.refine_mode:
@@ -600,11 +602,11 @@ if 'S' not in v.refine_mode:
                 if g_string in file_name:
                     file_path = os.path.join(dm3_folder, file_name)
                     v.lacbed_expt_raw[:, :, i] = px.read_dm3(file_path,
-                                                         2*v.image_radius,
-                                                         v.debug)
+                                                             2*v.image_radius,
+                                                             v.debug)
                     found = True
             if not found:
-                n_expt -= 1
+                n_expt -= 1  # *_* we don't actually do anything with this!
                 print(f"{g_string} not found")
 
         # sub-pixel shift of images for zncc
@@ -626,21 +628,8 @@ if 'S' not in v.refine_mode:
                 v.lacbed_expt[:, :, i] = c
                 
         # print experimental LACBED patterns
-        w = int(np.ceil(np.sqrt(v.n_out)))
-        h = int(np.ceil(v.n_out/w))
-        fig, axes = plt.subplots(w, h, figsize=(w*5, h*5))
-        text_effect = withStroke(linewidth=3, foreground='black')
-        axes = axes.flatten()
-        for i in range(v.n_out):
-            axes[i].imshow(v.lacbed_expt[:, :, i], cmap='pink')  #'gist_earth')
-            axes[i].axis('off')
-            annotation = f"{v.hkl[v.g_output[i], 0]}{v.hkl[v.g_output[i], 1]}{v.hkl[v.g_output[i], 2]}"
-            axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
-                             size=30, color='w', path_effects=[text_effect])
-        for i in range(v.n_out, len(axes)):
-            axes[i].axis('off')
-        plt.tight_layout()
-        plt.show()
+        # print_LACBED has options 0=sim, 1=expt, 2=difference
+        sim.print_LACBED(v, 1)
         # initialise correlation
         best_corr = np.ones(v.n_out)
     
@@ -648,12 +637,12 @@ if 'S' not in v.refine_mode:
 # output LACBED patterns and figure of merit
 if v.image_processing == 1:
     print(f"  Blur radius {v.blur_radius} pixels")
-sim.print_LACBED(v)
 if 'S' not in v.refine_mode:
     # figure of merit
     fom = sim.figure_of_merit(v)
     print(f"  Figure of merit {100*fom:.2f}%")
     print("-------------------------------")
+
 
 # %% start refinement loop *** needs work
 if 'S' not in v.refine_mode:
@@ -666,7 +655,7 @@ if 'S' not in v.refine_mode:
     dydx = np.ones(v.n_variables)
     r3_var = np.zeros(3)  # for parabolic minimum
     r3_fom = np.zeros(3)
-    # dunno what this is
+    # *_*dunno what this is
     independent_delta = 0.0
 
     # for a plot
@@ -744,7 +733,7 @@ if 'S' not in v.refine_mode:
     print(f"Refinement complete after {v.iter_count} simulations.  Refined values: {v.best_var}")
 
 # %% final print
-sim.print_LACBED(v)
+sim.print_LACBED(v, 0)
 total_time = time.time() - start
 print("-----------------------------------------------------------------")
 print(f"Total time {total_time:.1f} s")
