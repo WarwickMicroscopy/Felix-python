@@ -899,23 +899,33 @@ def refine_multi_variable(v, dydx, single=True):
     multidimensional refinement
     dydx: float array of gradients, generated in refine_single_variable
     Uses the whole variable space v, only:
+    v.refined_variable: array of variables to refine size [n_var]
     v.best_fit: best figure of merit so far
+    v.best_var: array of variables that gives best fit
+    
+    dydx = array of gradients size [n_var]
     '''
     # starting point is the current best set of variables
     last_fit = 1.0*v.best_fit
 
     n_var = np.count_nonzero(dydx)
-    print(f"Multidimensional refinement, {n_var} variable{'s' if n_var != 1 else ''}")
+    if n_var > 1:
+        print(f"Multidimensional refinement, {n_var} variables")
+        with np.printoptions(formatter={'float': lambda x: f"{x:.3f}"}):
+            print(f"    Refinement vector {dydx}")
+        p_mag = np.linalg.norm(dydx)
+        if np.isinf(p_mag) or np.isnan(p_mag):
+            raise ValueError("Infinite or NaN gradient!")
+        dydx = dydx / p_mag   # Normalized direction of max gradient
+    elif n_var == 1:
+        print("Single variable refinement")
+    else:
+        raise ValueError("No refinement variables defined!")
+    # index of principal variable
+    j = np.argmax(abs(dydx))
+    print(f"  Principal variable: {variable_message(v.refined_variable_type[j])}")
 
     # Check the gradient vector magnitude and initialize vector descent
-    p_mag = np.linalg.norm(dydx)
-    if np.isinf(p_mag) or np.isnan(p_mag):
-        raise ValueError(f"Infinite or NaN gradient! Refinement vector = {dydx}")
-    dydx = dydx / p_mag   # Normalized direction of max gradient
-    with np.printoptions(formatter={'float': lambda x: f"{x:.3f}"}):
-        print(f"    Refinement vector {dydx}")
-    j = np.argmax(abs(dydx))  # index of principal variable (largest gradient)
-    print(f"  Principal variable: {variable_message(v.refined_variable_type[j])}")
     if not single:
         print(f"    Extrapolation, should be better than {100*v.best_fit:.2f}%")
         # initial trial uses the predicted best set of variables
@@ -933,29 +943,29 @@ def refine_multi_variable(v, dydx, single=True):
         print_LACBED(v, 0)
         print("-a-----------------------------")  # {r3_var},{r3_fom}")
 
-    # First point: best simulation
+    # First point: incoming best simulation
     r3_var = np.zeros(3)
     r3_fom = np.zeros(3)
     r3_var[0] = 1.0*v.best_var[j]  # using principal variable
     r3_fom[0] = 1.0*v.best_fit
 
     # reset the refinement scale (last term reverses sign if we overshot)
-    delta = -v.best_var[j] * v.refinement_scale  # * (2*(fom < v.best_fit)-1)
+    delta = v.best_var[j] * v.refinement_scale  # * (2*(fom < v.best_fit)-1)
 
     # Second point
     print("Refining, point 2 of 3")
-    # NB vectors here, not individual variables
+    # Change the array of variables by a small amount
     v.refined_variable += dydx*delta  # point 2
-    fom = sim_fom(v, j)  # simulate
+    fom = sim_fom(v, j)  # simulate and get figure of merit
+    # check for no effect
+    if fom == v.best_fit:
+        raise ValueError(f"{variable_message(v.refined_variable_type[j])} has no effect!")
     r3_var[1] = 1.0*v.refined_variable[j]
     r3_fom[1] = 1.0*fom
     print("-b-----------------------------")  # {r3_var},{r3_fom}")
-    # if fom == v.best_fit:
-    #     raise ValueError(f"{variable_message(v.refined_variable_type[j])} has no effect!")
     if fom < v.best_fit:
         v.best_fit = fom*1.0
         v.best_var = np.copy(v.refined_variable)
-    # check for no effect
 
     # Third point
     print("Refining, point 3 of 3")

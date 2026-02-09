@@ -362,7 +362,7 @@ v.n_out = len(v.input_hkls)+1  # we expect 000 NOT to be in the hkl list
 # --------------------------------------------------------------------
 # Ug refinement is a special case, cannot do any other refinement alongside
 # We count the independent variables:
-# v.refined_variable = variable to be refined
+# v.refined_variable = array of variables to be refined
 # v.refined_variable_type = what kind of variable, as follows
 # 10 A1 = Ug amplitude *** NOT YET IMPLEMENTED ***
 # 11 A2 = Ug phase *** NOT YET IMPLEMENTED ***
@@ -664,8 +664,8 @@ if 'S' not in v.refine_mode:
     # Refinement loop
     df = 1.0
     while df >= v.exit_criteria:
-        # v.refined_variable is the working set of variables
-        # best_var is the running best fit during this refinement cycle
+        # v.refined_variable is the working array of variables
+        # best_var is the best array of variables during this refinement cycle
         v.best_var = np.copy(v.refined_variable)
         # next_var is the predicted next (best) point
         v.next_var = np.copy(v.refined_variable)
