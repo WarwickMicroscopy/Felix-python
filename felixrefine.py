@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Started August 2024
+Started August 2024, converted from MPI Fortran version
 
 @author: R.Beanland@warwick.ac.uk
 
@@ -429,7 +429,7 @@ if 'S' not in v.refine_mode:
                                      U[0, 1], U[0, 2], U[1, 2]])
             anisotypes = [23, 24, 25, 26, 27, 28]
             for param, t in zip(aniso_params, anisotypes):
-                if param > eps:
+                if abs(param) > eps:
                     v.refined_variable.append(param)
                     v.refined_variable_type.append(t)
                     v.atom_refine_flag.append(v.atomic_sites[i])
@@ -650,9 +650,6 @@ if 'S' not in v.refine_mode:
     fit0 = fom*1.0
     v.best_fit = fom*1.0
     last_fit = fom*1.0
-    # dydx is a vector along the gradient in n-dimensional space
-    # we initially set these as
-    dydx = np.ones(v.n_variables)
     r3_var = np.zeros(3)  # for parabolic minimum
     r3_fom = np.zeros(3)
     # *_*dunno what this is
@@ -672,9 +669,11 @@ if 'S' not in v.refine_mode:
 
         if v.refine_method == 0:
             print("Gradient descent, one parameter at a time")
+            # dydx is a vector along the gradient in n-dimensional space
             dydx = np.zeros(v.n_variables)
             for i in range(v.n_variables):
                 dydx[i] = 1.0
+                print(f"Refinement vector {dydx}")
                 # single is just multiparameter with one non-zero value
                 # v.next_var = v.best_var - dydx*v.refinement_scale
                 dydx = sim.refine_multi_variable(v, dydx)

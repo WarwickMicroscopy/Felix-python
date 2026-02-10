@@ -2038,41 +2038,43 @@ def parabo3(x, y):
     return x_v, y_v
 
 
-def convex(r3_x, r3_y):
-    # Checks the three points coming in to see if a parabolic fit for a
-    # minimum is possible.  If so, returns the predicted minimum (minny=True).
+def convex(x, y):
+    # Checks three points (v = variable, y = figure of merit) to see if a
+    # parabolic fit to a minimum is possible.  If so, returns the predicted
+    # minimum (minny=True).
     # If not, returns the next point to check (minny=False).
     tol = 1e-10
-    x_max = np.argmax(r3_x)  # index of lowest x
-    x_min = np.argmin(r3_x)  # index of highest x
-    if r3_x[x_max] - r3_x[x_min] > tol:
-        x_mid = 3 - x_max - x_min  # index of mid x
-        if r3_x[x_max] - r3_x[x_mid] > tol and r3_x[x_mid] - r3_x[x_min] > tol:
-            convexity_test = -abs(r3_y[x_max] - r3_y[x_min])
-            # convexity is y at the mid x
-            # if there was a straight line between lowest and highest x
-            convexity = r3_y[x_mid] - (
-                r3_y[x_min] + (r3_x[x_mid] - r3_x[x_min]) *
-                (r3_y[x_max] - r3_y[x_min]) /
-                (r3_x[x_max] - r3_x[x_min]))
-        else:
-            raise ValueError("Parabolic refinement failed")
+    hi = np.argmax(x)  # index of lowest x
+    lo = np.argmin(x)  # index of highest x
+    mid = 3 - hi - lo  # index of mid x
+    x_half = 0.5*(x[hi] + x[lo])   # half way x point
+    if x[mid] < x_half:  # central point is between lo and half
+        y_half = y[lo] + (y[mid] - y[lo]) * (x_half-x[lo])/(x[mid]-x[lo])
     else:
-        raise ValueError("Parabolic refinement failed")
-    if convexity > 0.1 * convexity_test:
+        y_half = y[hi] + (y[mid] - y[hi]) * (x[hi]-x_half)/(x[hi]-x[mid])
+
+    # check for no change in the figure of merit
+    if abs(y[hi] - y[lo]) < tol:
+        return x[mid], True
+
+    # convexity is the difference between y_half
+    # and a straight line between y[lo] and y[hi]
+    convexity = y_half - 0.5*(y[hi] + y[lo])
+
+    if convexity > 0.1 * abs(y[hi] - y[lo]):
         # find the size of the step between the two lowest y
-        y_max = np.argmax(r3_y)  # index of highest y
-        y_min = np.argmin(r3_y)  # index of lowest y
+        y_max = np.argmax(y)  # index of highest y
+        y_min = np.argmin(y)  # index of lowest y
         y_mid = 3 - y_max - y_min  # index of mid y
-        last_dx = r3_x[y_min] - r3_x[y_mid]
+        last_dx = x[y_min] - x[y_mid]
         # use exp to give an irrational step size and avoid going to the same
         # point twice, exp(0.75)~=2.12
-        next_x = r3_x[y_min] + np.exp(0.75) * last_dx
+        next_x = x[y_min] + np.exp(0.75) * last_dx
         minny = False
         print(f"Convex, will contine to {next_x:.5f}")
     else:
-        next_x, next_y = parabo3(r3_x, r3_y)
-        print(f"Concave, predict minimum at {next_x:.4f} with fit index {100*next_y:.2f}%")
+        next_x, next_y = parabo3(x, y)
+        print(f"Concave, predict minimum at {next_x:.5f} with fit index {100*next_y:.2f}%")
         minny = True
 
     return next_x, minny
