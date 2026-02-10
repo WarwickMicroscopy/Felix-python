@@ -900,8 +900,10 @@ def refine_multi_variable(v, dydx, single=True):
     dydx: float array of gradients, generated in refine_single_variable
     Uses the whole variable space v, only:
     v.refined_variable: array of variables to refine size [n_var]
+    v.refined_variable_type: what kind of variable (see felixrefine)
     v.best_fit: best figure of merit so far
     v.best_var: array of variables that gives best fit
+    v.refinement_scale: size of change in variable to obtain gradient
     
     dydx = array of gradients size [n_var]
     '''
@@ -949,20 +951,22 @@ def refine_multi_variable(v, dydx, single=True):
     r3_var[0] = 1.0*v.best_var[j]  # using principal variable
     r3_fom[0] = 1.0*v.best_fit
 
-    # reset the refinement scale (last term reverses sign if we overshot)
-    delta = v.best_var[j] * v.refinement_scale  # * (2*(fom < v.best_fit)-1)
+    # set the refinement scale
+    # if v.refined_variable_type[j] == 20:  # atomic coordinates, absolute value
+    delta = dydx * v.refinement_scale
+    # delta = v.best_var[j] * v.refinement_scale
 
     # Second point
     print("Refining, point 2 of 3")
     # Change the array of variables by a small amount
-    v.refined_variable += dydx*delta  # point 2
+    v.refined_variable += delta  # point 2
     fom = sim_fom(v, j)  # simulate and get figure of merit
     # check for no effect
     if fom == v.best_fit:
         raise ValueError(f"{variable_message(v.refined_variable_type[j])} has no effect!")
     r3_var[1] = 1.0*v.refined_variable[j]
     r3_fom[1] = 1.0*fom
-    print("-b-----------------------------")  # {r3_var},{r3_fom}")
+    print(f"-b-----------------------------{r3_var},{r3_fom}")
     if fom < v.best_fit:
         v.best_fit = fom*1.0
         v.best_var = np.copy(v.refined_variable)
@@ -970,14 +974,14 @@ def refine_multi_variable(v, dydx, single=True):
     # Third point
     print("Refining, point 3 of 3")
     if r3_fom[1] > r3_fom[0]:  # if second point is worse
-        delta = -delta  # Go in the opposite direction
-        v.refined_variable += np.exp(0.6)*dydx*delta
+        # Go in the opposite direction
+        v.refined_variable -= np.exp(0.8)*delta
     else:  # keep going
-        v.refined_variable += dydx*delta
+        v.refined_variable += np.exp(0.4)*delta
     fom = sim_fom(v, j)
     r3_var[2] = 1.0*v.refined_variable[j]
     r3_fom[2] = 1.0*fom
-    print("-c-----------------------------")  # {r3_var},{r3_fom}")
+    print(f"-c-----------------------------{r3_var},{r3_fom}")
     if fom < v.best_fit:
         v.best_fit = fom*1.0
         v.best_var = np.copy(v.refined_variable)
@@ -990,19 +994,20 @@ def refine_multi_variable(v, dydx, single=True):
         next_x, minny = px.convex(r3_var, r3_fom)
         v.refined_variable += dydx * (next_x-last_x) / dydx[j]
         fom = sim_fom(v, j)
+        # replace worst point with this one
+        i = np.argmax(r3_fom)
+        r3_var[i] = 1.0*v.refined_variable[j]
+        r3_fom[i] = 1.0*fom
         with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
-            print("-.-----------------------------")  #" {r3_var}: {r3_fom}")
+            print("-.-----------------------------{r3_var}: {r3_fom}")
         if (fom < v.best_fit):  # it's better, keep going
             v.best_fit = fom*1.0
             v.best_var = np.copy(v.refined_variable)
-            # replace worst point with this one
-            i = np.argmax(r3_fom)
-            r3_var[i] = 1.0*v.refined_variable[j]
-            r3_fom[i] = 1.0*fom
         else:
+            next_x, minny = px.convex(r3_var, r3_fom)
             v.refined_variable[j] = 1.0*next_x
             print(f"  Predict minimum at {next_x:.4f}")
-            minny = True
+            # minny = True
     # we have taken the principal variable to a minimum
     dydx[j] = 0.0
     print(f"    ====Refined variable {j}====")
