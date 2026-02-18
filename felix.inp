@@ -84,8 +84,8 @@ accelerating_voltage_kv   = 200.0
 acceptance_angle          = 0.0
 
 # Image output options
-initial_thickness         = 2050.0
-final_thickness           = 2351.0
+initial_thickness         = 2250.0
+final_thickness           = 2251.0
 delta_thickness           = 50.0
 precision                 = 0.00002
 # Refinement specific flags

@@ -2039,10 +2039,11 @@ def parabo3(x, y):
 
 
 def convex(x, y):
-    # Checks three points (v = variable, y = figure of merit) to see if a
+    # Checks three points (x = variable, y = figure of merit) to see if a
     # parabolic fit to a minimum is possible.  If so, returns the predicted
-    # minimum (minny=True).
-    # If not, returns the next point to check (minny=False).
+    # minimum. If not, returns the next x to check (both cases, minny=False).
+    # Looks to see if we have captured a minimum (minny=True).
+
     tol = 1e-10
     hi = np.argmax(x)  # index of lowest x
     lo = np.argmin(x)  # index of highest x
@@ -2057,11 +2058,16 @@ def convex(x, y):
     if abs(y[hi] - y[lo]) < tol:
         return x[mid], True
 
+    # check for mimimum capture
+    minny = False
+    if y[mid] < y[hi] and y[mid] < y[lo]:
+        minny = True
+
     # convexity is the difference between y_half
     # and a straight line between y[lo] and y[hi]
     convexity = y_half - 0.5*(y[hi] + y[lo])
 
-    if convexity > 0.1 * abs(y[hi] - y[lo]):
+    if convexity > -0.1 * abs(y[hi] - y[lo]):
         # find the size of the step between the two lowest y
         y_max = np.argmax(y)  # index of highest y
         y_min = np.argmin(y)  # index of lowest y
@@ -2070,12 +2076,10 @@ def convex(x, y):
         # use exp to give an irrational step size and avoid going to the same
         # point twice, exp(0.75)~=2.12
         next_x = x[y_min] + np.exp(0.75) * last_dx
-        minny = False
         print(f"Convex, will contine to {next_x:.5f}")
     else:
         next_x, next_y = parabo3(x, y)
         print(f"Concave, predict minimum at {next_x:.5f} with fit index {100*next_y:.2f}%")
-        minny = True
 
     return next_x, minny
 
