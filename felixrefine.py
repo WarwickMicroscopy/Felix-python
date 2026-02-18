@@ -349,10 +349,12 @@ else:  # atom-specific refinements can be done simultaneously
         print("Refining Accelerating Voltage, I")
 
     if v.correlation_type == 0:
-        print("  Using Pearson correlation, applying sub-pixel alignment")
-    if v.correlation_type == 1:
+        print("  Using Pearson correlation")
+    elif v.correlation_type == 1:
         print("  Using phase correlation")
-    
+    elif v.correlation_type == 2:
+        print("  Using Pearson correlation, applying sub-pixel alignment")
+
 
 # %% read felix.hkl
 v.input_hkls, v.i_obs, v.sigma_obs = px.read_hkl_file("felix.hkl")
@@ -614,21 +616,6 @@ if 'S' not in v.refine_mode:
 
         # sub-pixel shift of images for zncc (correlation type = 2)
         v.lacbed_expt = np.copy(v.lacbed_expt_raw)
-        for i in range(v.n_out):
-            # we only do this for zncc images that exist
-            if v.correlation_type == 2 and np.sum(v.lacbed_expt_raw[i]) != 0:
-                a0 = v.lacbed_sim[0, :, :, i]
-                b0 = v.lacbed_expt_raw[:, :, i]
-                # zero mean normalise the images
-                a = (a0 - np.mean(a0))/np.std(a0)
-                b = (b0 - np.mean(b0))/np.std(b0)
-                # the shift
-                dy, dx = sim.phase_d_xy(a, b)
-                c = shift(b, shift=(dy, dx), order=3, mode="constant", cval=0)
-                # replace empty experimental pixels with simulation
-                # (which )prevents them from contribution to the zncc)
-                c[c == 0] = a[c ==0]
-                v.lacbed_expt[:, :, i] = c
                 
         # print experimental LACBED patterns
         # print_LACBED has options 0=sim, 1=expt, 2=difference

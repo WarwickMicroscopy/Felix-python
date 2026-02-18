@@ -436,8 +436,26 @@ def figure_of_merit(v):
             for j in range(v.n_out):
                 v.lacbed_sim[i, :, :, j] = gaussian_filter(v.lacbed_sim[i, :, :, j],
                                                            sigma=v.blur_radius)
+        # sub-pixel shift for correlation if required
+        v.lacbed_expt = np.copy(v.lacbed_expt_raw)
+        for j in range(v.n_out):
+            # we only do this for zncc images that exist
+            if v.correlation_type == 2 and np.sum(v.lacbed_expt_raw[j]) != 0:
+                a0 = v.lacbed_sim[0, :, :, j]
+                b0 = v.lacbed_expt_raw[:, :, j]
+                # zero mean normalise the images
+                a = (a0 - np.mean(a0))/np.std(a0)
+                b = (b0 - np.mean(b0))/np.std(b0)
+                # the shift
+                dy, dx = phase_d_xy(a, b)
+                c = shift(b, shift=(dy, dx), order=3, mode="constant", cval=0)
+                # replace empty experimental pixels with simulation
+                # (which )prevents them from contribution to the zncc)
+                c[c == 0] = a[c == 0]
+                v.lacbed_expt[:, :, j] = c
+
         # figure of merit
-        if v.correlation_type == 0:
+        if v.correlation_type == 0 or 2:
             fom_array[i, :] = 1.0 - zncc(v.lacbed_expt,
                                          v.lacbed_sim[i, :, :, :])
         elif v.correlation_type == 1:
