@@ -332,7 +332,10 @@ else:  # atom-specific refinements can be done simultaneously
         # we just need a dictionary of the valence states of the atoms
         print("Refining valence electrons, K")
     if atm == 1:
+        # needs error check here is specified sites make no sense
         for i in range(len(v.atomic_sites)):
+            if v.atomic_sites[i] >= len(v.basis_atom_name):
+                raise ValueError(f"atomic_site {v.atomic_sites[i]} selected for refinement but does not exist")
             print(f"  Refining basis atom {v.atomic_sites[i]}, {v.basis_atom_name[v.atomic_sites[i]]}")
 
     # non atom-specific refinements
@@ -609,11 +612,11 @@ if 'S' not in v.refine_mode:
                 n_expt -= 1  # *_* we don't actually do anything with this!
                 print(f"{g_string} not found")
 
-        # sub-pixel shift of images for zncc
+        # sub-pixel shift of images for zncc (correlation type = 2)
         v.lacbed_expt = np.copy(v.lacbed_expt_raw)
         for i in range(v.n_out):
             # we only do this for zncc images that exist
-            if v.correlation_type == 0 and np.sum(v.lacbed_expt_raw[i]) != 0:
+            if v.correlation_type == 2 and np.sum(v.lacbed_expt_raw[i]) != 0:
                 a0 = v.lacbed_sim[0, :, :, i]
                 b0 = v.lacbed_expt_raw[:, :, i]
                 # zero mean normalise the images
@@ -725,9 +728,10 @@ if 'S' not in v.refine_mode:
         print(f"Improvement in fit {100*df:.2f}%, will stop at {100*v.exit_criteria:.2f}%")
         print(f"Step size reduced to {v.refinement_scale:.6f}")
         print("-------------------------------")
-        plt.plot(v.fit_log)
-        # plt.scatter(var_pl, fit_pl)
-        plt.show()
+        if v.plot >= 1: 
+            plt.plot(v.fit_log)
+            # plt.scatter(var_pl, fit_pl)
+            plt.show()
 
     print(f"Refinement complete after {v.iter_count} simulations.  Refined values: {v.best_var}")
 

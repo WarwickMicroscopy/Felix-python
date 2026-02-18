@@ -136,7 +136,7 @@ def simulate(v):
                        atom_position[:, 2, np.newaxis] * c_vec_m)
 
     # plot unit cell and save .xyz file
-    if v.iter_count == 0 and v.plot:
+    if v.iter_count == 0 and v.plot >= 1:
         atom_cvals = mcolors.Normalize(vmin=1, vmax=103)
         atom_cmap = plt.cm.prism
         atom_colours = atom_cmap(atom_cvals(atomic_number))
@@ -191,7 +191,7 @@ def simulate(v):
         #     print(f"{i},  {v.hkl[i]}")
 
     # plot beam pool
-    if v.iter_count == 0 and v.plot:
+    if v.iter_count == 0 and v.plot >= 1:
         xm = np.ceil(np.max(g_pool_mag/(2*np.pi)))
         fig, ax = plt.subplots(1, 1)
         w_f = 10
@@ -407,7 +407,7 @@ def figure_of_merit(v):
     # difference images
     v.diff_image = np.copy(v.lacbed_expt)
     # set up plot for blur optimisation
-    if v.plot and v.image_processing == 2:
+    if v.plot >= 2 and v.image_processing == 2:
         fig, ax = plt.subplots(1, 1)
         w_f = 10
         fig.set_size_inches(w_f, w_f)
@@ -429,8 +429,8 @@ def figure_of_merit(v):
                                                        sigma=r)
                 # b_fom.append(np.mean(1.0 - zncc(v.lacbed_expt, blacbed)))
                 b_fom.append(np.mean(1.0 - pcc(v.lacbed_expt, blacbed)))
-            if v.plot:
-                plt.plot(radii, b_fom)
+            # if v.plot >= 2:
+            #     plt.plot(radii, b_fom)
             v.blur_radius = radii[np.argmin(b_fom)]
         if v.image_processing != 0:
             for j in range(v.n_out):
@@ -462,7 +462,7 @@ def figure_of_merit(v):
         print_LACBED(v, 2)
 
     # plot of blur fit when v.image_processing == 2
-    if v.plot and v.image_processing == 2:
+    if v.plot >= 2 and v.image_processing == 2:
         plt.show()
     # print best values
     if v.image_processing == 2:
@@ -477,7 +477,7 @@ def figure_of_merit(v):
         fom = np.mean(fom_array[0])
 
     # plot FoM vs thickness for all LACBED patterns
-    if v.plot and v.n_thickness > 1:
+    if v.plot >= 2 and v.n_thickness > 1:
         fig, ax = plt.subplots(1, 1)
         w_f = 10
         fig.set_size_inches(1.5*w_f, w_f)
@@ -687,7 +687,7 @@ def print_LACBED(v, image_type):
     elif image_type == 1:  # experiment output
         out_image = v.lacbed_expt
         print_montage(v, out_image, 'grey')
-    else:
+    elif v.plot >= 3:
         out_image = v.diff_image
         print_montage(v, out_image, 'diff')
 
@@ -984,7 +984,7 @@ def refine_multi_variable(v, dydx, single=True):
         raise ValueError(f"{variable_message(t)} has no effect!")
     r3_var[1] = 1.0*v.refined_variable[j]
     r3_fom[1] = 1.0*fom
-    print(f"-b-----------------------------{r3_var},{r3_fom}")
+    print("-b-----------------------------")  # {r3_var},{r3_fom}")
     if fom < v.best_fit:
         v.best_fit = fom*1.0
         v.best_var = np.copy(v.refined_variable)
@@ -1003,7 +1003,7 @@ def refine_multi_variable(v, dydx, single=True):
     fom = sim_fom(v, j)
     r3_var[2] = 1.0*v.refined_variable[j]
     r3_fom[2] = 1.0*fom
-    print(f"-c-----------------------------{r3_var},{r3_fom}")
+    print("-c-----------------------------")  # {r3_var},{r3_fom}")
     if fom < v.best_fit:
         v.best_fit = fom*1.0
         v.best_var = np.copy(v.refined_variable)

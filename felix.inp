@@ -37,11 +37,18 @@ Refine method:
 Correlation type:
     Pearson (zncc), 0
     Phase (Fourier), 1
-    
+    Pearson (zncc) with sub-pixel alignment, 2
+
 Image processing:
     None, 0
     Gaussian blur, 1, given by blur radius
     Fitted gaussian blur 2, that which gives the best figure of merit
+
+Plot:
+    None, 0
+    Unit Cell, beam pool, montages, figure of merit, 1
+    As (1) + thickness plot, blur fit 2
+    As (2) + difference plots, 3
 # ------------------------------------
 
 # Control flags
@@ -56,11 +63,11 @@ Debye_model               = 1
 
 
 # Radius of the beam in pixels
-image_radius              = 42
+image_radius              = 50
 
 # Beam selection criteria
-min_reflection_pool       = 400
-min_strong_beams          = 100
+min_reflection_pool       = 300
+min_strong_beams          = 60
 min_weak_beams            = 0
 g_limit                   = 0.0
 
@@ -69,29 +76,29 @@ debye_waller_constant     = 0.0
 absorption_per            = 10.0
 
 # Microscope settings
-convergence_angle         = 0.7264
-incident_beam_direction   = [1, -1, 0]
-x_direction               = [0, 0, -1]
-normal_direction          = [1, -1, 0]
+convergence_angle         = 0.889
+incident_beam_direction   = [-1, 1, 0]
+x_direction               = [0, 0, 1]
+normal_direction          = [-1, 1, 0]
 accelerating_voltage_kv   = 200.0
 acceptance_angle          = 0.0
 
 # Image output options
-initial_thickness         = 1200.0
-final_thickness           = 1201.0
-delta_thickness           = 10.0
+initial_thickness         = 2050.0
+final_thickness           = 2351.0
+delta_thickness           = 50.0
 precision                 = 0.00002
 # Refinement specific flags
-refine_mode               = 'E'
+refine_mode               = 'D'
 weighting_flag            = 0
 refine_method             = 0
 correlation_type          = 0
 image_processing          = 1
-blur_radius               = 0.7
+blur_radius               = 0.5
 no_of_ugs                 = 40
-atomic_sites              = [1]
+atomic_sites              = [0]
 print_flag                = 0
-refinement_scale          = 0.001
+refinement_scale          = 0.02
 exit_criteria             = 0.00005
 debug                     = 0
-plot                      = 1
+plot                      = 2
