@@ -615,6 +615,7 @@ if 'S' not in v.refine_mode:
                 print(f"{g_string} not found")
                 
         # print experimental LACBED patterns
+        v.lacbed_expt = np.copy(v.lacbed_expt_raw)
         # print_LACBED has options 0=sim, 1=expt, 2=difference
         sim.print_LACBED(v, 1)
         # initialise correlation
