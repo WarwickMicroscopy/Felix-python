@@ -436,23 +436,25 @@ def figure_of_merit(v):
             for j in range(v.n_out):
                 v.lacbed_sim[i, :, :, j] = gaussian_filter(v.lacbed_sim[i, :, :, j],
                                                            sigma=v.blur_radius)
-        # sub-pixel shift for correlation if required
         v.lacbed_expt = np.copy(v.lacbed_expt_raw)
-        for j in range(v.n_out):
-            # we only do this for zncc images that exist
-            if v.correlation_type == 2 and np.sum(v.lacbed_expt_raw[j]) != 0:
-                a0 = v.lacbed_sim[0, :, :, j]
-                b0 = v.lacbed_expt_raw[:, :, j]
-                # zero mean normalise the images
-                a = (a0 - np.mean(a0))/np.std(a0)
-                b = (b0 - np.mean(b0))/np.std(b0)
-                # the shift
-                dy, dx = phase_d_xy(a, b)
-                c = shift(b, shift=(dy, dx), order=3, mode="constant", cval=0)
-                # replace empty experimental pixels with simulation
-                # (which )prevents them from contribution to the zncc)
-                c[c == 0] = a[c == 0]
-                v.lacbed_expt[:, :, j] = c
+        # sub-pixel shift for correlation if required
+        if v.correlation_type == 2:
+            for j in range(v.n_out):
+                # we only do this for zncc images that exist
+                if np.sum(v.lacbed_expt_raw[j]) != 0:
+                    a0 = v.lacbed_sim[i, :, :, j]
+                    b0 = v.lacbed_expt_raw[:, :, j]
+                    # zero mean normalise the images
+                    a = (a0 - np.mean(a0))/np.std(a0)
+                    b = (b0 - np.mean(b0))/np.std(b0)
+                    # the shift
+                    dy, dx = phase_d_xy(a, b)
+                    c = shift(b, shift=(dy, dx), order=3,
+                              mode="constant", cval=0)
+                    # replace empty experimental pixels with simulation
+                    # (which )prevents them from contribution to the zncc)
+                    c[c == 0] = a[c == 0]
+                    v.lacbed_expt[:, :, j] = c
 
         # figure of merit
         if v.correlation_type == 0 or 2:
@@ -656,7 +658,7 @@ def update_variables(v):
     return
 
 
-def print_montage(v, images, lut):
+def print_montage(v, images, lut, j=0):
     '''
     images[wid, wid, n] = array of n images each of size [wid, wid]
     '''
@@ -685,6 +687,9 @@ def print_montage(v, images, lut):
     for i in range(n, len(axes)):
         axes[i].axis('off')
     plt.tight_layout()
+    annotation = f"{v.thickness[j]/10:.0f} nm"
+    plt.annotate(annotation, xy=(0.105, 0.96), xycoords='figure fraction',
+                 size=30, color='c', path_effects=[text_effect])
     plt.show()
 
 
@@ -698,7 +703,7 @@ def print_LACBED(v, image_type):
         if v.iter_count == 1:
             for j in range(v.n_thickness):
                 out_image = v.lacbed_sim[j, :, :, :]
-                print_montage(v, out_image, 'pink')
+                print_montage(v, out_image, 'pink', j)
         else:
             out_image = v.lacbed_sim[v.best_t, :, :, :]
             print_montage(v, out_image, 'pink')
@@ -727,8 +732,9 @@ def save_LACBED(v):
     '''
     Saves all LACBED patterns in .npy and .png format
     '''
-    j = v.best_t
-
+    j = 0
+    # j = v.best_t
+    print(os.getcwd())
     if not os.path.isdir(v.chemical_formula_sum):
         os.mkdir(v.chemical_formula_sum)
     os.chdir(v.chemical_formula_sum)
@@ -737,7 +743,7 @@ def save_LACBED(v):
         fname = f"{v.chemical_formula_sum}_{signed_str}.bin"
         v.lacbed_sim[j, :, :, i].tofile(fname)
         fname = f"{v.chemical_formula_sum}_{signed_str}.png"
-        plt.imsave(fname, v.lacbed_sim[2, :, :, i], cmap='gray')
+        plt.imsave(fname, v.lacbed_sim[j, :, :, i], cmap='gray')
     os.chdir("..")
 
 

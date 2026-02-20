@@ -250,5 +250,5 @@ _atom_site_fract_y
 _atom_site_fract_z
 _atom_site_B_iso_or_equiv
 _atom_site_occupancy
-C1 C0+ 8 a 0 0 0 0.8 1.
+C1 C0+ 8 a 0 0 0 0.3 1.
 #End of TTdata_28858-ICSD

@@ -613,9 +613,6 @@ if 'S' not in v.refine_mode:
             if not found:
                 n_expt -= 1  # *_* we don't actually do anything with this!
                 print(f"{g_string} not found")
-
-        # sub-pixel shift of images for zncc (correlation type = 2)
-        v.lacbed_expt = np.copy(v.lacbed_expt_raw)
                 
         # print experimental LACBED patterns
         # print_LACBED has options 0=sim, 1=expt, 2=difference

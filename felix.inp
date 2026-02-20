@@ -71,14 +71,14 @@ g_limit                   = 0.0
 incident_beam_direction   = [1, -1, 0]
 x_direction               = [0, 0, -1]
 normal_direction          = [1, -1, 0]
-initial_thickness         = 2200.0
-final_thickness           = 2301.0
-delta_thickness           = 25.0
+initial_thickness         = 1400.0
+final_thickness           = 4501.0
+delta_thickness           = 20.0
 debye_waller_constant     = 0.0
 absorption_per            = 10.0
 
 # Microscope settings
-convergence_angle         = 0.889
+convergence_angle         = 0.8743
 accelerating_voltage_kv   = 200.0
 acceptance_angle          = 0.0
 
@@ -86,12 +86,12 @@ acceptance_angle          = 0.0
 image_radius              = 100
 plot                      = 3
 image_processing          = 1
-blur_radius               = 0.7
+blur_radius               = 1.1
 print_flag                = 0
 debug                     = 0
 
 # Refinement specific flags
-refine_mode               = 'H'
+refine_mode               = 'D'
 atomic_sites              = [0]
 refinement_scale          = 0.04
 correlation_type          = 0
