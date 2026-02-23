@@ -301,7 +301,7 @@ def simulate(v):
 
 
 def zncc(img1, img2):
-    """ input: img1, img2 sets of n images, both of size [pix_x, pix_y, n]
+    """ input: img1, img2 sets of n images, both of size [pix_x, pix_x, n]
     output is a numpy array of length n, giving zncc for each pair of images
     zncc is -1 = perfect anticorrelation, +1 = perfect correlation
     """
@@ -467,19 +467,16 @@ def figure_of_merit(v):
             raise ValueError("Invalid correlation_type !(0 or 1) in felix.inp")
 
         # difference plots
-        for j in range(v.n_out):
-            a0 = v.lacbed_sim[i, :, :, j]
-            b0 = v.lacbed_expt[:, :, j]
-
-            # zero mean normalise the images
-            a = (a0 - np.mean(a0))/np.std(a0)
-            b = (b0 - np.mean(b0))/np.std(b0)
-
-            dy, dx = phase_d_xy(a, b)
-            c = shift(b, shift=(dy, dx), order=3, mode="constant", cval=0)
-            c[c == 0] = a[c == 0]
-            v.diff_image[:, :, j] = a-c
-        print_LACBED(v, 2)
+        if v.plot ==3:
+            for j in range(v.n_out):
+                a0 = v.lacbed_sim[i, :, :, j]
+                b0 = v.lacbed_expt[:, :, j]
+    
+                # zero mean normalise the images
+                a = (a0 - np.mean(a0))/np.std(a0)
+                b = (b0 - np.mean(b0))/np.std(b0)
+                v.diff_image[:, :, j] = a-b
+            print_LACBED(v, 2)
 
     # plot of blur fit when v.image_processing == 2
     if v.plot >= 2 and v.image_processing == 2:
