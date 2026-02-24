@@ -234,7 +234,7 @@ if (v.final_thickness > v.initial_thickness + v.delta_thickness):
     v.n_thickness = len(v.thickness)
 else:
     # need np.array rather than float so wave_functions works for 1 or many t's
-    v.thickness = np.array(v.initial_thickness)
+    v.thickness = np.atleast_1d(v.initial_thickness)
     v.n_thickness = 1
 
 # convert arrays to numpy
