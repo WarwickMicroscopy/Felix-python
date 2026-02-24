@@ -397,7 +397,7 @@ def optimise_pool(v):
     gives a plot of intensity change to inform best pool size for a refinement
     """
     # baseline simulation = highest fidelity: pool 600 strong 250
-    poo = 600
+    poo = 400
     stro = 250
     strong = np.array([200, 150, 100, 75, 50, 25])
     n_strong = len(strong)
@@ -410,6 +410,7 @@ def optimise_pool(v):
     times.append(time.time()-t0)
     print_LACBED(v, 0)
     baseline = np.copy(v.lacbed_sim)
+    v.diff_image = np.copy(v.lacbed_sim)
     # subtract mean and divide by SD
     for i in range(v.n_thickness):
         for j in range(v.n_out):
