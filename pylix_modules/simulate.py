@@ -391,8 +391,76 @@ def pcc(stack1, stack2):
     return pcc  # , shifts
 
 
+def optimise_pool(v):
+    """
+    runs simulations with decreasing numbers of strong beams
+    gives a plot of intensity change to inform best pool size for a refinement
+    """
+    # baseline simulation = highest fidelity: pool 600 strong 250
+    poo = 600
+    stro = 250
+    v.min_reflection_pool = poo
+    v.min_strong_beams = stro
+    print(f"Baseline simulation: beam pool {poo}, {stro} strong beams")
+    simulate(v)
+    print_LACBED(v, 0)
+    baseline = np.copy(v.lacbed_sim)
+    # subtract mean and divide by SD
+    for i in range(v.n_thickness):
+        for j in range(v.n_out):
+            a0 = baseline[i, :, :, j]
+            a = (a0 - np.mean(a0))/np.std(a0)
+            baseline[i, :, :, j] = a
+    # now do decreasing beam pool size and compare against baseline
+    strong = np.array([200, 150, 100, 75, 50, 25])
+    n_strong = len(strong)
+    diff_max = np.zeros([n_strong, v.n_thickness, v.n_out])  # max difference
+    diff_mean = np.zeros([n_strong, v.n_thickness, v.n_out])  # mean difference
+    for k in range(n_strong):
+        v.min_strong_beams = strong[i]
+        print("-------------------------------")
+        print(f"Simulation: beam pool {poo}, {strong[i]} strong beams")
+        simulate(v)
+        for i in range(v.n_thickness):
+            for j in range(v.n_out):
+                a0 = v.lacbed_sim[i, :, :, j]
+                a = (a0 - np.mean(a0))/np.std(a0)
+                b = baseline[i, :, :, j]
+                pcc = b-a
+                v.diff_image[:, :, j] = pcc
+                diff_max[k, i, j] = np.max(abs(pcc))
+                diff_mean[k, i, j] = np.mean(abs(pcc))
+            print_LACBED(v, 2)
+    # make some plots
+    fig, ax = plt.subplots(1, 1)
+    w_f = 10
+    fig.set_size_inches(w_f, w_f)
+    for i in range(v.n_thickness):
+        max_ = np.sum(diff_max, axis=2)  # max[strong, thickness]
+        plt.scatter(strong, max_[:, i])
+    ax.set_xlabel('Strong beams', size=24)
+    ax.set_ylabel('Max difference', size=24)
+    plt.xticks(fontsize=22)
+    plt.yticks(fontsize=22)
+    plt.show()
+    
+    fig, ax = plt.subplots(1, 1)
+    w_f = 10
+    fig.set_size_inches(w_f, w_f)
+    for i in range(v.n_thickness):
+        mean_ = np.sum(diff_mean, axis=2)  # max[strong, thickness]
+        plt.scatter(strong, max_[:, i])
+    ax.set_xlabel('Strong beams', size=24)
+    ax.set_ylabel('Max difference', size=24)
+    plt.xticks(fontsize=22)
+    plt.yticks(fontsize=22)
+    plt.show()
+
+    return diff_max, diff_mean
+
+
 def figure_of_merit(v):
-    """ needs fleshing out with image processing & correlation options
+    """
     takes as an input v.lacbed_sim, shape [v.n_thickness, pix_x, pix_y, n_out]
     applies image processing if required
     image processing = 0 -> no Gaussian blur (applied with radius 0)
@@ -466,7 +534,7 @@ def figure_of_merit(v):
         else:
             raise ValueError("Invalid correlation_type !(0 or 1) in felix.inp")
 
-        # difference plots
+        # difference images
         if v.plot ==3:
             for j in range(v.n_out):
                 a0 = v.lacbed_sim[i, :, :, j]

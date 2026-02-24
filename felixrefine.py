@@ -23,8 +23,6 @@ Started August 2024, converted from MPI Fortran version
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.patheffects import withStroke
-from scipy.ndimage import shift
 import time
 
 # felix modules
@@ -165,18 +163,18 @@ for i in range(n_basis):
         v.basis_mult_occ[cluster] = group_id
 
 # Thermal displacement parameters, we work with u_ij
+# ADP tensor Uij with isotropic components on the diagonal
+v.basis_u_ij = np.zeros((n_basis, 3, 3))
+idx = np.arange(3)
 if "atom_site_b_iso_or_equiv" in cif_dict:
     v.basis_B_iso = np.array([tup[0] for tup in v.atom_site_b_iso_or_equiv])
     v.basis_u_iso = v.basis_B_iso/(8 * np.pi**2)
+    v.basis_u_ij[:, idx, idx] = v.basis_u_iso[:, None]
 elif "atom_site_u_iso_or_equiv" in cif_dict:
     v.basis_u_iso = np.array([tup[0] for tup in
                               v.atom_site_u_iso_or_equiv])
     v.basis_B_iso = v.basis_u_iso * 8 * np.pi**2  # *** TO BE DELETED ***
-
-# ADP tensor Uij with isotropic components on the diagonal
-v.basis_u_ij = np.zeros((n_basis, 3, 3))
-idx = np.arange(3)
-v.basis_u_ij[:, idx, idx] = v.basis_u_iso[:, None]
+    v.basis_u_ij[:, idx, idx] = v.basis_u_iso[:, None]
 
 # check for anisotropic displacement parameters
 # and if they exist match them with the correct basis atom
@@ -347,6 +345,8 @@ else:  # atom-specific refinements can be done simultaneously
         print("Refining Convergence Angle, H")
     if 'I' in v.refine_mode:
         print("Refining Accelerating Voltage, I")
+    if 'O' in v.refine_mode:
+        print("Beam pool optimisation, O")
 
     if v.correlation_type == 0:
         print("  Using Pearson correlation")
@@ -440,7 +440,6 @@ if 'S' not in v.refine_mode:
                     v.atom_refine_flag.append(v.atomic_sites[i])
                     v.atom_refine_vec.append(nullvec)  # no atom movement
 
-
     if 'F' in v.refine_mode:  # Lattice parameters
         # variable_type first digit=6 indicates lattice parameter
         # second digit=1,2,3 indicates a,b,c
@@ -501,9 +500,9 @@ if 'S' not in v.refine_mode:
 
     # Total number of independent variables
     v.n_variables = len(v.refined_variable)
-    if v.n_variables == 0:
+    if v.n_variables == 0 and v.refine_mode != 'O':
         raise ValueError("No refinement variables! \
-        Check refine_mode flag in felix.v. \
+        Check refine_mode flag in felix.inp. \
             Valid refine modes are A,B,C,D,F,H,S")
     if v.n_variables == 1:
         print("Only one independent variable")
@@ -574,13 +573,16 @@ if 'S' not in v.refine_mode:
 #         j += 1
 
 
-# %% baseline simulation
+# %% baseline simulation or beam pool optimisation
 print("-------------------------------")
-print("Baseline simulation:")
-# uses the whole v=Var class
-sim.simulate(v)
-# print_LACBED has options 0=sim, 1=expt, 2=difference
-sim.print_LACBED(v, 0)
+if 'O' in v.refine_mode:
+    diff_max, diff_mean = sim.optimise_pool(v)
+else:
+    print("Baseline simulation:")
+    # uses the whole v=Var class
+    sim.simulate(v)
+    # print_LACBED has options 0=sim, 1=expt, 2=difference
+    sim.print_LACBED(v, 0)
 
 # %% read in experimental images
 if 'S' not in v.refine_mode:
@@ -711,9 +713,10 @@ if 'S' not in v.refine_mode:
         # reduce refinement scale for next round
         v.refinement_scale *= (1 - 1 / (1 + v.n_variables))
         print(f"Improvement in fit {100*df:.2f}%, will stop at {100*v.exit_criteria:.2f}%")
-        print(f"Step size reduced to {v.refinement_scale:.6f}")
+        if df >= v.exit_criteria:
+            print(f"Step size reduced to {v.refinement_scale:.6f}")
         print("-------------------------------")
-        if v.plot >= 1: 
+        if v.plot >= 1:
             plt.plot(v.fit_log)
             # plt.scatter(var_pl, fit_pl)
             plt.show()

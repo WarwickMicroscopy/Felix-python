@@ -1598,7 +1598,6 @@ def xray_form_factor_core(r,rho,S,pc):
         integrand =  4*np.pi*rho * r**2 * np.sinc(2*s*r)  # np.sinc(x) = sin(pi x)/(pi x)
         fQ.append(np.trapz(integrand, r))
     return pc*np.array(fQ)
-    
 """
 
 
@@ -1766,17 +1765,18 @@ def convert_x(Z, f_x, q):
     return f_e
 
 
-# need to carefully look through and fix scaling of function
-# close but not quite
 def kappa_factors(g, Z, pv, kappa):
+    # need to carefully look through and fix scaling of function
+    # close but not quite
     orig_shape = g.shape
     g_flat = g.flatten()
     S = g_flat / (2*np.pi)
     f_out = np.zeros_like(g_flat, dtype=float)
     f_out = convert_x(Z, calc_scattering_amplitudes(S, Z, pv, kappa), S)
+    # should handle values below 0.5 Q using kirkland values
+    # or some type of extrapolation
 
     return f_out.reshape(orig_shape)
-# should handle values below 0.5 Q using kirkland values or some type of extrapolation
 
 
 def four_gauss(s, a):
@@ -1793,10 +1793,6 @@ def four_gauss(s, a):
          a[..., 6] * np.exp(-np.abs(a[..., 7]) * s**2) +
          a[..., 8])
     return f
-
-    # f = (a[..., 0]*np.exp(-abs(a[..., 1])*s[..., 0]**2) +
-    #     a[..., 2]*np.exp(-abs(a[..., 3])*s[..., 1]**2) +
-    #     a[..., 4]*np.exp(-abs(a[..., 5])*s[..., 2]**2) +
 
 
 def f_thomas(g, B, Z, v):
