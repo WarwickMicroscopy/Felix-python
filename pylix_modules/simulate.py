@@ -421,7 +421,7 @@ def optimise_pool(v):
     diff_max = np.zeros([n_strong, v.n_thickness, v.n_out])  # max difference
     diff_mean = np.zeros([n_strong, v.n_thickness, v.n_out])  # mean difference
     for k in range(n_strong):
-        v.min_strong_beams = strong[i]
+        v.min_strong_beams = strong[k]
         print("-------------------------------")
         print(f"Simulation: beam pool {poo}, {strong[i]} strong beams")
         t0 = time.time()
