@@ -725,6 +725,7 @@ if 'S' not in v.refine_mode:
 
 # %% final print
 sim.print_LACBED(v, 0)
+sim.save_LACBED(v)
 total_time = time.time() - start
 print("-----------------------------------------------------------------")
 print(f"Total time {total_time:.1f} s")
