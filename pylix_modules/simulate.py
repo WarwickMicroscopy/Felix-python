@@ -815,18 +815,20 @@ def save_LACBED(v):
     '''
     Saves all LACBED patterns in .npy and .png format
     '''
-    j = 0
-    # j = v.best_t
     print(os.getcwd())
     if not os.path.isdir(v.chemical_formula_sum):
         os.mkdir(v.chemical_formula_sum)
     os.chdir(v.chemical_formula_sum)
-    for i in range(v.lacbed_sim.shape[3]):
-        signed_str = "".join(f"{x:+d}" for x in v.hkl[v.g_output[i], :])
-        fname = f"{v.chemical_formula_sum}_{signed_str}.bin"
-        v.lacbed_sim[j, :, :, i].tofile(fname)
-        fname = f"{v.chemical_formula_sum}_{signed_str}.png"
-        plt.imsave(fname, v.lacbed_sim[j, :, :, i], cmap='gray')
+    j = 0
+    # j = v.best_t
+    for j in range(v.n_thickness):
+        t = int(v.thickness[j]/10)
+        for i in range(v.lacbed_sim.shape[3]):
+            signed_str = "".join(f"{x:+d}" for x in v.hkl[v.g_output[i], :])
+            fname = f"{v.chemical_formula_sum}_{signed_str}_{t}nm.bin"
+            v.lacbed_sim[j, :, :, i].tofile(fname)
+            fname = f"{v.chemical_formula_sum}_{signed_str}_{t}nm.png"
+            plt.imsave(fname, v.lacbed_sim[j, :, :, i], cmap='gray')
     os.chdir("..")
 
 
