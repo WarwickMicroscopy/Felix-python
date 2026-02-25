@@ -576,7 +576,7 @@ if 'S' not in v.refine_mode:
 # %% baseline simulation or beam pool optimisation
 print("-------------------------------")
 if 'O' in v.refine_mode:
-    diff_max, diff_mean = sim.optimise_pool(v)
+    diff_max, diff_mean, times = sim.optimise_pool(v)
 else:
     print("Baseline simulation:")
     # uses the whole v=Var class

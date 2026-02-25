@@ -397,14 +397,13 @@ def optimise_pool(v):
     gives a plot of intensity change to inform best pool size for a refinement
     """
     # baseline simulation = highest fidelity: pool 600 strong 250
-    poo = 200
-    stro = 100
-    strong = np.array([80, 60, 40, 20])
+    poo = 400
+    strong = np.array([300, 200, 150, 100, 50])
     n_strong = len(strong)
     times = []
     v.min_reflection_pool = poo
-    v.min_strong_beams = stro
-    print(f"Baseline simulation: beam pool {poo}, {stro} strong beams")
+    v.min_strong_beams = strong[0]
+    print(f"Baseline simulation: beam pool {poo}, {strong[0]} strong beams")
     t0 = time.time()
     simulate(v)
     times.append(time.time()-t0)
@@ -420,7 +419,7 @@ def optimise_pool(v):
     # now do decreasing beam pool size and compare against baseline
     diff_max = np.zeros([n_strong, v.n_thickness, v.n_out])  # max difference
     diff_mean = np.zeros([n_strong, v.n_thickness, v.n_out])  # mean difference
-    for k in range(n_strong):
+    for k in range(1, n_strong):
         v.min_strong_beams = strong[k]
         print("-------------------------------")
         print(f"Simulation: beam pool {poo}, {strong[i]} strong beams")
@@ -444,7 +443,7 @@ def optimise_pool(v):
     fig.set_size_inches(w_f, w_f)
     for i in range(v.n_thickness):
         max_ = np.sum(diff_max, axis=2)  # max[strong, thickness]
-        plt.scatter(strong, max_[:, i])
+        ax.semilogy(strong, max_[:, i])
     ax.set_xlabel('Strong beams', size=24)
     ax.set_ylabel('Max difference', size=24)
     plt.xticks(fontsize=22)
@@ -456,9 +455,9 @@ def optimise_pool(v):
     fig.set_size_inches(w_f, w_f)
     for i in range(v.n_thickness):
         mean_ = np.sum(diff_mean, axis=2)  # mean[strong, thickness]
-        plt.scatter(strong, mean_[:, i])
+        ax.semilogy(strong, mean_[:, i])
     ax.set_xlabel('Strong beams', size=24)
-    ax.set_ylabel('Max difference', size=24)
+    ax.set_ylabel('Mean difference', size=24)
     plt.xticks(fontsize=22)
     plt.yticks(fontsize=22)
     plt.show()
@@ -469,7 +468,7 @@ def optimise_pool(v):
     for i in range(v.n_thickness):
         plt.scatter(strong, times)
     ax.set_xlabel('Strong beams', size=24)
-    ax.set_ylabel('Max difference', size=24)
+    ax.set_ylabel('Time (s)', size=24)
     plt.xticks(fontsize=22)
     plt.yticks(fontsize=22)
     plt.show()
