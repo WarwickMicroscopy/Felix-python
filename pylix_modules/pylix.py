@@ -4,7 +4,7 @@ import sympy as sp
 import subprocess
 import numpy as np
 from scipy.constants import c
-from scipy.linalg import eig, inv
+from scipy.linalg import eig, inv, solve
 from CifFile import CifFile
 import struct
 from pylix_modules import pylix_dicts as fu
@@ -1328,6 +1328,7 @@ def bloch(g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl,
     gamma, eigenvecs = eig(structure_matrix)
     # Invert using LU decomposition (similar to ZGETRI in Fortran)
     inv_eigenvecs = inv(eigenvecs)
+    # inv_eigenvecs = eigenvecs  # *** placeholder while testing
 
     # if debug:
     #     np.set_printoptions(precision=3, suppress=True)
@@ -1354,40 +1355,27 @@ def wave_functions(g_output, s_g_pix, ug_matrix, min_strong_beams,
     psi0 = np.zeros(n_beams, dtype=np.complex128)
     psi0[0] = 1.0 + 0j
 
-    # surface normal correction part 2
-    m_ii = np.sqrt(1 + g_dot_norm[strong_beam_indices] / k_dot_n_pix)
-    inverted_m = np.diag(m_ii)
-    m_matrix = np.diag(1/m_ii)
+    # calculate wave function including surface normal correction
+    # M @ eigenvecs @ gamma @ eigenvecs^-1 @ M^-1 @ psi0
+    # M is a diagonal matrix made from vector of (1+g.n/k.n)**0.5
+    inv_m_ii = np.sqrt(1 + g_dot_norm[strong_beam_indices] / k_dot_n_pix)
+    m_ii = 1.0/inv_m_ii
+    # but we don't need to make the matrix as M^-1 @ psi0 can be
+    # calculated as a vector multiplication
+    u = inv_m_ii * psi0
+    # we can also avoid eigenvecs @ gamma @ eigenvecs^-1
+    # by solving for the eigenvectors
+    y = solve(eigenvecs, u)
 
-    # evaluate for the range of thicknesses
-    wave_function = ([])
-    if thickness.ndim == 0:  # just one thickness
-        gamma_t = np.diag(np.exp(1j * thickness * gamma))
-        wave_function.append(m_matrix @ eigenvecs @ gamma_t
-                             @ inv_eigenvecs @ inverted_m @ psi0)
-    else:  # multiple thicknesses
-        for t in thickness:
-            gamma_t = np.diag(np.exp(1j * t * gamma))
-            # calculate wave functions
-            wave_function.append(m_matrix @ eigenvecs @ gamma_t
-                                 @ inv_eigenvecs @ inverted_m @ psi0)
+    # phase factors for all thicknesses
+    phase = np.exp(1j * np.outer(gamma, thickness))
+    # apply phase to all thicknesses
+    y_t = y[:, None] * phase
+    z = eigenvecs @ y_t
+    wave_function = m_ii[:, None] * z
 
-    # ... or, for all thicknesses at once! not working, boo
-    # would avoid the type change when making wave_functions a numpy array
-    # thickness = thickness[:, np.newaxis]
-    # gamma_t = np.array([np.diag(np.exp(1j * t * gamma))
-    #                          for t in thickness.flatten()])
-    # wave_functions = np.einsum(
-    #     'ij,jk,tkm,mn,nl,l->ti',
-    #     m_matrix,
-    #     eigenvecs,
-    #     gamma_t,
-    #     inv_eigenvecs,
-    #     inverted_m,
-    #     psi0
-    # )
-
-    return np.array(wave_function)
+    # we expect an output shape [n_thickness, n_beams] so need to transpose
+    return np.array(wave_function.T)
 
 
 def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list,
