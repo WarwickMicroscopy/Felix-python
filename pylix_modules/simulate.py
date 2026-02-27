@@ -61,26 +61,17 @@ def simulate(v):
     # print (v.atom_site_type_symbol)
 
     atom_position, atom_label, atom_type, atom_name, u_ij, occupancy, \
-        pv, kappas = \
+        pv, kappas, r2 = \
         px.unique_atom_positions(
             v.symmetry_matrix, v.symmetry_vector, v.basis_atom_label,
             v.atom_site_type_symbol, v.basis_atom_name, v.basis_atom_position,
             v.basis_u_ij, v.basis_occupancy, v.basis_pv,
-            v.basis_kappa, v.debug)
+            v.basis_kappa, v.basis_r2, v.debug)
 
     # Generate atomic numbers based on the elemental symbols
     atomic_number = np.array([fu.atomic_number_map[na] for na in atom_name])
     atomic_number_basis = np.array([fu.atomic_number_map[s]
                                     for s in v.basis_atom_name])
-
-    if v.scatter_factor_method == 4:
-        print("Precomputing atom core and valence densities")
-        for i in range(len(atomic_number_basis)):
-            px.precompute_densities(atomic_number_basis[i],
-                                    v.basis_kappa[i], v.basis_pv[i])
-
-        print(v.basis_kappa)
-        print(v.basis_pv)
 
     n_atoms = len(atom_label)
     if v.iter_count == 0:
@@ -237,8 +228,7 @@ def simulate(v):
         px.Fg_matrix(n_hkl, v.scatter_factor_method, v.basis_atom_label,
                      atom_label, atom_coordinate, atomic_number, occupancy,
                      u_ij, g_matrix, v.absorption_method, v.absorption_per,
-                     electron_velocity, kappas, pv, v.Debye_model,
-                     v.model_flag, v.debug)
+                     electron_velocity, kappas, pv, r2, v.debug)
     # matrix of dot products with the surface normal
     g_dot_norm = np.dot(g_pool, norm_dir_m)
     if v.iter_count == 0:

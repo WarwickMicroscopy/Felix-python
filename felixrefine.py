@@ -263,6 +263,24 @@ elif v.scatter_factor_method == 3:
     print("  Using Doyle & Turner scattering factors")
 elif v.scatter_factor_method == 4:
     print("  Using orbital Hartree-Fock scattering factors with Kappa")
+    print("    Precomputing atom core and valence densities")
+    # initialise pv, kappa and r2
+    v.basis_pv = np.zeros(n_basis, dtype=float)
+    # initial kappa is 1.0 for a neutral atom
+    v.basis_kappa = np.ones(n_basis, dtype=float)
+    # number of points in the core/valence calculation
+    n_points = 1000
+    v.basis_core =  np.zeros([n_basis, n_points], dtype=float)
+    v.basis_valence =  np.zeros([n_basis, n_points], dtype=float)
+    v.basis_r2 = np.zeros(n_basis, dtype=float)
+    for i in range(n_basis):
+        Z = fu.atomic_number_map[v.basis_atom_name[i]]
+        orbi = px.orb(Z)
+        v.basis_pv[i] = orbi["pv"]
+        v.basis_core[i, :], v.basis_valence[i, :], v.basis_r2[i] = \
+            px.precompute_densities(Z, v.basis_kappa[i], v.basis_pv[i])
+    print(f"    kappa = {v.basis_kappa}")
+    print(f"    pv = {v.basis_pv}")
 else:
     raise ValueError("No scattering factors chosen in felix.inp")
 
@@ -274,11 +292,6 @@ elif v.absorption_method == 2:
     print("  Bird and King absorption model, with Thomas parameterisation")
 else:
     raise ValueError("Invalid absorption method (0,1,2) chosen in felix.inp")
-
-# initialise pv and kappa
-v.basis_pv = np.zeros(n_basis, dtype=float)
-v.basis_kappa = np.ones(n_basis, dtype=float)
-
 
 if 'S' in v.refine_mode:
     print("Simulation only, S")
@@ -309,10 +322,6 @@ else:  # atom-specific refinements can be done simultaneously
         print("Refining Kappa, J")
     if 'K' in v.refine_mode:
         atm = 1
-        atomic_number = np.array([fu.atomic_number_map[na]
-                                  for na in v.basis_atom_name])
-        for i in range(n_basis):
-            v.basis_pv[i] = fu.elements_info[atomic_number[i]]["pv"]
         # v.basis_pv[0]= 0.9994
         # v.basis_pv[1] = 4.997
         # v.basis_pv[2]= 5.985
@@ -330,7 +339,7 @@ else:  # atom-specific refinements can be done simultaneously
         # we just need a dictionary of the valence states of the atoms
         print("Refining valence electrons, K")
     if atm == 1:
-        # needs error check here is specified sites make no sense
+        # error check - do specified atom sites make sense
         for i in range(len(v.atomic_sites)):
             if v.atomic_sites[i] >= len(v.basis_atom_name):
                 raise ValueError(f"atomic_site {v.atomic_sites[i]} selected for refinement but does not exist")

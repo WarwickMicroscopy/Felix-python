@@ -294,7 +294,7 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
                           basis_atom_type_label, basis_atom_name,
                           basis_atom_position, basis_u_ij,
                           basis_occupancy, basis_pv,
-                          basis_kappa, debug=False):
+                          basis_kappa, basis_r2, debug=False):
     """
     Fills the unit cell by applying symmetry operations to the basis
 
@@ -334,6 +334,7 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
     all_occupancy = np.tile(basis_occupancy, n_symmetry_operations)
     all_kappa = np.tile(basis_kappa, n_symmetry_operations)
     all_pv = np.tile(basis_pv, n_symmetry_operations)
+    all_r2 = np.tile(basis_r2, n_symmetry_operations)
 
     # Generate all equivalent positions by applying symmetry
     symmetry_applied = \
@@ -377,13 +378,14 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
     u_ij = all_u_ij[i]
     kappa = all_kappa[i]
     pv = all_pv[i]
+    r2 = all_r2[i]
     if debug:
         np.set_printoptions(precision=5, suppress=True)
         for i in range(3):
             print(f"Anisotropic u_ij [{i}]")
             print(f"{u_ij[i, :5, :5]}")
 
-    return atom_position, atom_label,atom_type, atom_name, u_ij, occupancy, pv, kappa
+    return atom_position, atom_label,atom_type, atom_name, u_ij, occupancy, pv, kappa, r2
 
 
 def reference_frames(cell_a, cell_b, cell_c, cell_alpha, cell_beta, cell_gamma,
@@ -1099,7 +1101,7 @@ def hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k, lattice_type,
 def Fg_matrix(n_hkl, scatter_factor_method, basis_atom_label, atom_label,
               atom_coordinate, atomic_number, occupancy, u_ij, g_matrix,
               absorption_method, absorption_per, electron_velocity, kappas, pv,
-              Debye, model, debug):
+              r2, debug):
     """
     Parameters
     ----------
@@ -1117,8 +1119,7 @@ def Fg_matrix(n_hkl, scatter_factor_method, basis_atom_label, atom_label,
     electron_velocity : float
     kappas : TYPE DESCRIPTION.
     pv : TYPE DESCRIPTION.
-    Debye : TYPE DESCRIPTION.
-    model : TYPE DESCRIPTION.
+    r2 : TYPE DESCRIPTION.
 
     Raises
     ------
@@ -1178,7 +1179,7 @@ def Fg_matrix(n_hkl, scatter_factor_method, basis_atom_label, atom_label,
         elif scatter_factor_method == 4:
             print(f"Calculating kappa factor for atom {i+1}/{n_cell}")
             f_g_basis[i, :, :] = kappa_factors(g_magnitude, atomic_number[i],
-                                          pv[i], kappas[i])
+                                          pv[i], kappas[i], r2[i])
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
 
@@ -1432,6 +1433,54 @@ def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list,
     return
 
 
+def electron_configuration(Z):
+    # electron occupation of orbitals for element number Z
+    occ = {}
+    remaining = Z
+    for orb in fu.orbital_order:
+        if remaining <= 0:
+            break
+        cap = fu.orbital_capacity[orb[-1]]
+        n = min(cap, remaining)
+        occ[orb] = n
+        remaining -= n
+
+    return occ
+
+
+def core_valence(occ, Z):
+    # identifies core vs valence orbitals
+    orbitals = list(occ.keys())
+    max_n = max(int(o[0]) for o in orbitals)
+    # Main group
+    if Z <= 20 or Z >= 31 and Z <= 36 or Z >= 49 and Z <= 54 or Z >= 81:
+        valence = [o for o in orbitals if int(o[0]) == max_n]
+    else:
+        # Transition / f-block
+        valence = [o for o in orbitals
+                   if int(o[0]) == max_n or int(o[0]) == max_n - 1]
+    core = [o for o in orbitals if o not in valence]
+
+    return core, valence
+
+
+def orb(Z):
+    # gives lists of orbitals, core and valence, pc and pv
+    occ = electron_configuration(Z)
+    core, valence = core_valence(occ, Z)
+    pc = sum(occ[o] for o in core)
+    pv = sum(occ[o] for o in valence)
+    orb = {
+        'orbitals': list(occ.keys()),
+        'core_orbitals': core,
+        'valence_orbitals': valence,
+        'occupation': occ,
+        'pc': pc,
+        'pv': pv
+    }
+    return orb
+
+
 def f_kirkland(z, g_magnitude):
     """
     calculates atomic scattering factor using the Kirkland model.
@@ -1446,18 +1495,15 @@ def f_kirkland(z, g_magnitude):
     Returns:
     ndarray: The calculated Kirkland scattering factor.
     """
-    
     q = g_magnitude / (2*np.pi)
     # coefficients in shape (3, 1, 1) for broadcasting
     a = fu.kirkland[z-1, 0:6:2].reshape(-1, 1, 1)
     b = fu.kirkland[z-1, 1:7:2].reshape(-1, 1, 1)
     c = fu.kirkland[z-1, 6:11:2].reshape(-1, 1, 1)
     d = fu.kirkland[z-1, 7:12:2].reshape(-1, 1, 1)
-   
-    f_g =   np.sum(a/(q**2+b), axis=0) + np.sum(c*np.exp(-(d*q**2)), axis=0)
-    return f_g
 
-# calc scattering factors for core density and valence density seperately
+    f_g = np.sum(a/(q**2+b), axis=0) + np.sum(c*np.exp(-(d*q**2)), axis=0)
+    return f_g
 
 
 def f_doyle_turner(z, g_magnitude):
@@ -1567,28 +1613,6 @@ def calc_slater_orbitals(z, orbital, r):
     return R_total
 
 
-"""
-def xray_form_factor_valence(r, rho, S,pv,k):
-    # rho = electron density at r, Q = array of Q values
-    #S= Q/2*np.pi
-    #not vectorized currently 
-    fQ = []
-    for s in S:
-        integrand =  4*np.pi*(k**3)*rho * r**2 * np.sinc(2*s*r)  # np.sinc(x) = sin(pi x)/(pi x)
-        fQ.append(np.trapz(integrand, r))
-    return pv*np.array(fQ)   #scale by number of electrons in valence
-
-
-
-def xray_form_factor_core(r,rho,S,pc):
-    fQ = []
-    for s in S:
-        integrand =  4*np.pi*rho * r**2 * np.sinc(2*s*r)  # np.sinc(x) = sin(pi x)/(pi x)
-        fQ.append(np.trapz(integrand, r))
-    return pc*np.array(fQ)
-"""
-
-
 @njit(fastmath=True)
 def _sinc_numba(x):
     if x == 0.0:
@@ -1613,7 +1637,6 @@ def _form_factor_kernel(r, rho, S, scale):
         base[j] = 4.0 * math.pi * rho[j] * (r[j] * r[j])
 
     out = np.zeros(Ns, dtype=np.float64)
-
     # Parallel loop over S
     for i in prange(Ns):
         s = S[i]
@@ -1623,10 +1646,8 @@ def _form_factor_kernel(r, rho, S, scale):
         for j in range(Nr - 1):
             x1 = 2.0 * s * r[j]
             x2 = 2.0 * s * r[j+1]
-
-            f1 = base[j]   * _sinc_numba(x1)
+            f1 = base[j] * _sinc_numba(x1)
             f2 = base[j+1] * _sinc_numba(x2)
-
             dr = r[j+1] - r[j]
             acc += 0.5 * (f1 + f2) * dr
 
@@ -1658,50 +1679,52 @@ def precompute_densities(Z, kappa, pv):
     n_points = 1000
     r = np.linspace(1e-6, r_max, n_points)
 
-    core_orbitals = fu.elements_info[Z]['core_orbitals']
-    valence_orbitals = fu.elements_info[Z]['valence_orbitals']
+    # core_orbitals = fu.elements_info[Z]['core_orbitals']
+    # valence_orbitals = fu.elements_info[Z]['valence_orbitals']
+    orbi = orb(Z)
+    core_orbitals = orbi['core_orbitals']
+    valence_orbitals = orbi['valence_orbitals']
     core_density = 0
     valence_density = 0
-
     n_e_core = 0
-    for orbital in core_orbitals:
-        n_e_core += fu.elements_info[Z]['occupation'][orbital]
-        R = calc_slater_orbitals(Z, orbital, r)
+
+    for i in core_orbitals:
+        n_e_core += orbi['occupation'][i]
+        R = calc_slater_orbitals(Z, i, r)
         core_density += (R**2)
     core_density /= (4*np.pi)
     core_density_n = core_density / np.trapz(4*np.pi*r**2*core_density, r)
-    for orbital in valence_orbitals:
-        R = calc_slater_orbitals(Z, orbital, r*kappa)
+
+    for i in valence_orbitals:
+        R = calc_slater_orbitals(Z, i, r*kappa)
         valence_density += (R**2)
     valence_density /= (4*np.pi)
     # need to normalize to 1 electron then scale by pv after
     valence_density_n = valence_density / np.trapz(4*np.pi*r**2*valence_density, r) 
 
-    # N_core =  (4*np.pi * np.trapz(r**2 * core_density, r))
-    # N_valence = (4*np.pi * np.trapz(r**2 * valence_density, r))
-    #core_density = (1/(4*np.pi))*(R_core**2)  # this will depend on n,l if multipolar is considered so its more complicate than this , just using this as an example 
-    #valence_density = (1/(4*np.pi))*(R_valence**2)# wavefucniton = R(r)Y_l^m(theta,phi)
-
-    pc = fu.elements_info[Z]['pc']
+    # pc = fu.elements_info[Z]['pc']
+    pc = orbi['pc']
     # p_atom(r) in kappa formalism
     density_total = pc*core_density_n + pv*kappa**3*valence_density_n
     integrand = density_total*np.pi*r**2
     # mean square radius of electrons in the atom
     r2_expect = np.trapz(r**2*integrand, x=r)/np.trapz(integrand, x=r)
-    fu.elements_info[Z]["r2"] = r2_expect
-    fu.precomputed_densities[Z] = {
-        "r": r.copy(),
-        "core": core_density_n.copy(),
-        "valence": valence_density_n.copy(),
-        "r2": r2_expect
-        }
 
-    return -1
+    # fu.elements_info[Z]["r2"] = r2_expect # *** surely we shouldn't change this?
+    # why put this in a library, not just in variable space v
+    # fu.precomputed_densities[Z] = {
+    #     "r": r.copy(),
+    #     "core": core_density_n.copy(),
+    #     "valence": valence_density_n.copy(),
+    #     "r2": r2_expect
+    #     }
+
+    return core_density_n, valence_density_n, r2_expect
 
 
 def calc_scattering_amplitudes(q, Z, pv, kappa):
     """
-    Parameters
+    Needs to be changed to account for the basis rather than Z
     ----------
     q : TYPE
         DESCRIPTION.
@@ -1753,18 +1776,37 @@ def convert_x(Z, f_x, q):
     return f_e
 
 
-def kappa_factors(g, Z, pv, kappa):
-    # need to carefully look through and fix scaling of function
-    # close but not quite
+def kappa_factors(g, Z, pv, kappa, r2):
+    # includes the convert_x subroutine
+    Bohr = 0.52917721067  # in angstrom
     orig_shape = g.shape
     g_flat = g.flatten()
     S = g_flat / (2*np.pi)
+    q = np.asarray(S)
+    f_x = np.asarray(calc_scattering_amplitudes(S, Z, pv, kappa))
     f_out = np.zeros_like(g_flat, dtype=float)
-    f_out = convert_x(Z, calc_scattering_amplitudes(S, Z, pv, kappa), S)
-    # should handle values below 0.5 Q using kirkland values
-    # or some type of extrapolation
+
+    # Mask where q == 0
+    mask0 = (q == 0)
+    maskN = ~mask0  # q ≠ 0
+    # Special case for q = 0 (Ibers correction)
+    f_out[mask0] = (Z * r2) / (3 * Bohr)
+    # Mott–Bethe formula
+    f_out[maskN] = (Z - f_x[maskN]) / (2 * np.pi**2 * Bohr * q[maskN]**2)
 
     return f_out.reshape(orig_shape)
+
+    # previous version
+    # def kappa_factors(g, Z, pv, kappa):
+    #     # need to carefully look through and fix scaling of function
+    #     # close but not quite
+    #     orig_shape = g.shape
+    #     g_flat = g.flatten()
+    #     S = g_flat / (2*np.pi)
+    #     f_out = np.zeros_like(g_flat, dtype=float)
+    #     f_out = convert_x(Z, calc_scattering_amplitudes(S, Z, pv, kappa), S)
+    
+    #     return f_out.reshape(orig_shape)
 
 
 def four_gauss(s, a):

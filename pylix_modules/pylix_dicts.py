@@ -8,7 +8,37 @@ contains scattering factors kirkland, peng, doyle_turner, lobato, turner
 """
 import numpy as np
 
-elements_info = {
+orbital_order = [
+    '1s',
+    '2s', '2p',
+    '3s', '3p',
+    '4s', '3d', '4p',
+    '5s', '4d', '5p',
+    '6s', '4f', '5d', '6p',
+    '7s', '5f', '6d', '7p'
+]
+
+orbital_capacity = {
+    's': 2,
+    'p': 6,
+    'd': 10,
+    'f': 14
+}
+
+elements_info = {  # ***aim to make this redundant with pylix subroutines***
+
+    1: {  # Hydrogen
+        'symbol': 'H',
+        'orbitals': ['1s'],
+        'core_orbitals': [],      # no core electrons
+        'valence_orbitals': ['1s'],
+        'occupation': {
+            '1s': 1
+        },
+        'pc': 0,   # core electrons
+        'pv': 1    # valence electrons
+    },
+
     3: {  # Lithium
         'symbol': 'Li',
         'orbitals': ['1s', '2s'],
@@ -20,6 +50,20 @@ elements_info = {
         },
         'pc': 2,
         'pv': 1
+    },
+
+    6: {  # Carbon
+        'symbol': 'C',
+        'orbitals': ['1s', '2s', '2p'],
+        'core_orbitals': ['1s'],
+        'valence_orbitals': ['2s', '2p'],
+        'occupation': {
+            '1s': 2,
+            '2s': 2,
+            '2p': 2
+        },
+        'pc': 2,   # core electrons
+        'pv': 4    # valence electrons
     },
 
     8: {  # Oxygen
@@ -59,9 +103,45 @@ elements_info = {
 }
 
 neutral_valence_states = {
- "Li": 1,
- "Nb": 5,
- "O": 6
+    # Period 1
+    "H": 1,  "He": 2,
+
+    # Period 2
+    "Li": 1, "Be": 2, "B": 3, "C": 4, "N": 5, "O": 6, "F": 7, "Ne": 8,
+
+    # Period 3
+    "Na": 1, "Mg": 2, "Al": 3, "Si": 4, "P": 5, "S": 6, "Cl": 7, "Ar": 8,
+
+    # Period 4
+    "K": 1,  "Ca": 2,
+    "Sc": 3, "Ti": 4, "V": 5, "Cr": 6, "Mn": 7, "Fe": 8, "Co": 9, "Ni": 10,
+    "Cu": 11, "Zn": 12,
+    "Ga": 3, "Ge": 4, "As": 5, "Se": 6, "Br": 7, "Kr": 8,
+
+    # Period 5
+    "Rb": 1, "Sr": 2,
+    "Y": 3,  "Zr": 4, "Nb": 5, "Mo": 6, "Tc": 7, "Ru": 8, "Rh": 9, "Pd": 10,
+    "Ag": 11, "Cd": 12,
+    "In": 3, "Sn": 4, "Sb": 5, "Te": 6, "I": 7, "Xe": 8,
+
+    # Period 6
+    "Cs": 1, "Ba": 2,
+    "La": 3,
+    # Lanthanides
+    "Ce": 3, "Pr": 3, "Nd": 3, "Pm": 3, "Sm": 3, "Eu": 3, "Gd": 3,
+    "Tb": 3, "Dy": 3, "Ho": 3, "Er": 3, "Tm": 3, "Yb": 3, "Lu": 3,
+    # Transition metals
+    "Hf": 4, "Ta": 5, "W": 6, "Re": 7, "Os": 8, "Ir": 9, "Pt": 10,
+    "Au": 11, "Hg": 12,
+    # Main group
+    "Tl": 3, "Pb": 4, "Bi": 5, "Po": 6, "At": 7, "Rn": 8,
+
+    # Period 7
+    "Fr": 1, "Ra": 2,
+    "Ac": 3,
+    # Actinides
+    "Th": 3, "Pa": 3, "U": 3, "Np": 3, "Pu": 3, "Am": 3, "Cm": 3,
+    "Bk": 3, "Cf": 3, "Es": 3, "Fm": 3, "Md": 3, "No": 3, "Lr": 3,
 }
 
 slater_coefficients = {
@@ -75,6 +155,26 @@ slater_coefficients = {
             'delta': [4.3069, 2.4573, 6.7850, 7.4527, 18504, 0.7667, 0.6364],
             'coeff': [-0.022416, -0.135791, 0.000389, -0.000068, -0.076544,
                       0.340542, 0.715708]
+        }
+    },
+
+    6: {  # Carbon
+        '1s': {
+            'delta': [8.4936, 4.8788, 15.4660, 7.0500, 2.2640, 1.4747, 1.1639],
+            'coeff': [0.352872, 0.473621, -0.001199, 0.210887, 0.000886,
+                      0.000465, -0.000119],
+            'n': [1, 1, 3, 2, 2, 2, 2]
+        },
+        '2s': {
+            'delta': [8.4936, 4.8788, 15.4660, 7.0500, 2.2640, 1.4747, 1.1639],
+            'coeff': [-0.071727, 0.438307, -0.000383, -0.091194, -0.393105,
+                      -0.579121, -0.126067],
+            'n': [1, 1, 3, 2, 2, 2, 2]
+        },
+        '2p': {
+            'delta': [7.0500, 3.2275, 2.1908, 1.4413, 1.0242],
+            'coeff': [0.006977, 0.070877, 0.230802, 0.411931, 0.350701],
+            'n': [2, 2, 2, 2, 2]
         }
     },
 
