@@ -1178,8 +1178,7 @@ def Fg_matrix(n_hkl, scatter_factor_method, basis_atom_label, atom_label,
             f_g_basis[i, :, :] = f_doyle_turner(atomic_number[i], g_magnitude)
         elif scatter_factor_method == 4:
             print(f"Calculating kappa factor for atom {i+1}/{n_cell}")
-            f_g_basis[i, :, :] = kappa_factors(g_magnitude, atomic_number[i],
-                                          pv[i], kappas[i], r2[i])
+            f_g_basis[i, :, :] = kappa_factors(g_magnitude, i, r2[i])
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
 
@@ -1675,7 +1674,7 @@ def xray_form_factor_core(r, rho, S, pc):
 
 
 def precompute_densities(Z, kappa, pv):
-    r_max = 20  # in angstrom
+    r_max = 20  # Angstroms
     n_points = 1000
     r = np.linspace(1e-6, r_max, n_points)
 
@@ -1722,34 +1721,35 @@ def precompute_densities(Z, kappa, pv):
     return core_density_n, valence_density_n, r2_expect
 
 
-def calc_scattering_amplitudes(q, Z, pv, kappa):
+def calc_scattering_amplitudes(v, q, i):
     """
     Needs to be changed to account for the basis rather than Z
     ----------
-    q : TYPE
-        DESCRIPTION.
-    Z : TYPE
-        DESCRIPTION.
-    pv : TYPE
-        DESCRIPTION.
-    kappa : TYPE
-        DESCRIPTION.
-
-    Returns
-    -------
-    f_x_total : TYPE
-        DESCRIPTION.
-
+    v : global variable space
+    i : int, index of atom in the basis
+    Returns f_x_total : DESCRIPTION.
     """
-    rho_core = fu.precomputed_densities[Z]["core"]
-    rho_val = fu.precomputed_densities[Z]["valence"]
-    r = fu.precomputed_densities[Z]["r"]
-    pc = fu.elements_info[Z]['pc']
+    rho_core = v.basis_core[i]
+    rho_val = v.basis_valence[i]
+    r = np.linspace(1e-6, v.r_max, v.n_points)
+    pc = v.basis_pv[i]
     # precomputed densities
     f_valence = xray_form_factor_valence(r, rho_val, q, pv, kappa)
     f_core = xray_form_factor_core(r, rho_core, q, pc)
     # fourier transform of the calculated radial funciton in 3d from 0 to inf
     f_x_total = f_core + f_valence
+
+    # old version
+    # def calc_scattering_amplitudes(q, Z, pv, kappa):
+    #     rho_core = fu.precomputed_densities[Z]["core"]
+    #     rho_val = fu.precomputed_densities[Z]["valence"]
+    #     r = fu.precomputed_densities[Z]["r"]
+    #     pc = fu.elements_info[Z]['pc']
+    #     # precomputed densities
+    #     f_valence = xray_form_factor_valence(r, rho_val, q, pv, kappa)
+    #     f_core = xray_form_factor_core(r, rho_core, q, pc)
+    #     # fourier transform of the calculated radial func in 3d from 0 to inf
+    #     f_x_total = f_core + f_valence
 
     return f_x_total
 
@@ -1776,23 +1776,24 @@ def convert_x(Z, f_x, q):
     return f_e
 
 
-def kappa_factors(g, Z, pv, kappa, r2):
-    # includes the convert_x subroutine
+def kappa_factors(v, g, i):
+    # now includes the convert_x subroutine
     Bohr = 0.52917721067  # in angstrom
     orig_shape = g.shape
     g_flat = g.flatten()
     S = g_flat / (2*np.pi)
     q = np.asarray(S)
-    f_x = np.asarray(calc_scattering_amplitudes(S, Z, pv, kappa))
+    f_x = np.asarray(calc_scattering_amplitudes(v, S, i))
     f_out = np.zeros_like(g_flat, dtype=float)
 
     # Mask where q == 0
     mask0 = (q == 0)
     maskN = ~mask0  # q ≠ 0
     # Special case for q = 0 (Ibers correction)
-    f_out[mask0] = (Z * r2) / (3 * Bohr)
+    f_out[mask0] = (v.basis_atomic_number[i] * v.basis_r2[i]) / (3 * Bohr)
     # Mott–Bethe formula
-    f_out[maskN] = (Z - f_x[maskN]) / (2 * np.pi**2 * Bohr * q[maskN]**2)
+    f_out[maskN] = (v.basis_atomic_number[i] - f_x[maskN]) \
+        / (2 * np.pi**2 * Bohr * q[maskN]**2)
 
     return f_out.reshape(orig_shape)
 

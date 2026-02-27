@@ -70,8 +70,6 @@ def simulate(v):
 
     # Generate atomic numbers based on the elemental symbols
     atomic_number = np.array([fu.atomic_number_map[na] for na in atom_name])
-    atomic_number_basis = np.array([fu.atomic_number_map[s]
-                                    for s in v.basis_atom_name])
 
     n_atoms = len(atom_label)
     if v.iter_count == 0:
