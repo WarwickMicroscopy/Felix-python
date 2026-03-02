@@ -19,6 +19,7 @@ class Inp:
     scatter_factor_method = None
     holz_flag = None
     absorption_method = None
+    absorption_per = None
     Debye_model = None
     accelerating_voltage_kv = None
     convergence_angle = None
@@ -41,7 +42,6 @@ class Inp:
     final_thickness = None
     delta_thickness = None
     debye_waller_constant = None
-    absorption_per = None
 
     # microscope
     convergence_angle = None
@@ -101,6 +101,8 @@ class RunControl:
 # variables used in the Bloch wave calculation
 @dataclass
 class Bloch:
+    electron_velocity: float = 0.0
+    relativistic_correction: float = 0.0
     big_k: NDArray[np.floating] | None = None
     big_k_mag: float = 0.0
     hkl: NDArray[np.integer] | None = None
@@ -116,7 +118,13 @@ class Bloch:
     tilted_k: NDArray[np.floating] | None = None
     k_dot_n: NDArray[np.floating] | None = None
     k_dot_n_pix: NDArray[np.floating] | None = None
-    wave_functions: NDArray[np.floating] | None = None
+    wave_function: NDArray[np.complex128] | None = None
+    strong_beam: NDArray[np.integer] | None = None
+    gamma: NDArray[np.complex128] | None = None
+    eigenvecs: NDArray[np.complex128] | None = None
+    # inv_eigenvecs: NDArray[np.floating] | None = None
+    n_beams: int = 0
+    strong_beam_indices: NDArray[np.integer] | None = None
 
 
 # ----------------------------------------------------------------------------
@@ -199,6 +207,7 @@ class Crystal:
     cell_alpha: float = 0.0
     cell_beta: float = 0.0
     cell_gamma: float = 0.0
+    cell_volume: float = 0.0
     a_vec_m: NDArray[np.floating] | None = None
     b_vec_m: NDArray[np.floating] | None = None
     c_vec_m: NDArray[np.floating] | None = None
@@ -219,11 +228,13 @@ class Basis:
     atom_position: NDArray[np.floating] | None = None
     occupancy: NDArray[np.floating] | None = None
     mult_occ: NDArray[np.integer] | None = None
-    u_ij: NDArray[np.floating] | None = None
+    u_aniso: NDArray[np.floating] | None = None
     u_iso: NDArray[np.floating] | None = None
     B_iso: NDArray[np.floating] | None = None
     oxno: NDArray[np.integer] | None = None
     atom_delta: NDArray[np.floating] | None = None
+    f_g: NDArray[np.complex128] | None = None
+    f_g_prime: NDArray[np.complex128] | None = None
 
 
 @dataclass
@@ -237,11 +248,12 @@ class Cell:
     atom_coordinate: NDArray[np.floating] | None = None  # in microscope frame
     occupancy: NDArray[np.floating] | None = None
     mult_occ: NDArray[np.integer] | None = None
-    u_ij: NDArray[np.floating] | None = None
+    u_aniso: NDArray[np.floating] | None = None
     u_iso: NDArray[np.floating] | None = None
     B_iso: NDArray[np.floating] | None = None
     oxno: NDArray[np.integer] | None = None
     atom_delta: NDArray[np.floating] | None = None
+    f_g: NDArray[np.complex128] | None = None
 
 
 # -----------------------------------------------

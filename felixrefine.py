@@ -165,16 +165,16 @@ for i in range(basis.n_atoms):
 
 # Thermal displacement parameters, we work with u_ij
 # ADP tensor Uij with isotropic components on the diagonal
-basis.u_ij = np.zeros((basis.n_atoms, 3, 3))
+basis.u_aniso = np.zeros((basis.n_atoms, 3, 3))
 idx = np.arange(3)
 if "atom_site_b_iso_or_equiv" in cif_dict:
     basis.B_iso = np.array([tup[0] for tup in cif.atom_site_b_iso_or_equiv])
     basis.u_iso = basis.B_iso/(8 * np.pi**2)
-    basis.u_ij[:, idx, idx] = basis.u_iso[:, None]
+    basis.u_aniso[:, idx, idx] = basis.u_iso[:, None]
 elif "atom_site_u_iso_or_equiv" in cif_dict:
     basis.u_iso = np.array([tup[0] for tup in cif.atom_site_u_iso_or_equiv])
     basis.B_iso = basis.u_iso * 8 * np.pi**2  # *** TO BE DELETED? ***
-    basis.u_ij[:, idx, idx] = basis.u_iso[:, None]
+    basis.u_aniso[:, idx, idx] = basis.u_iso[:, None]
 
 # check for anisotropic displacement parameters
 # and if they exist match them with the correct basis atom
@@ -187,18 +187,18 @@ if "atom_site_aniso_label" in cif_dict:
             if cif.atom_site_aniso_label[j] == basis.atom_label[i]:
                 print(f"  Using anisotropic atomic displacement parameters for atom {i}")
                 # the data is in 2-tuples (second value is the error)
-                basis.u_ij[i, 0, 0] = cif.atom_site_aniso_u_11[j][0]
-                basis.u_ij[i, 1, 1] = cif.atom_site_aniso_u_22[j][0]
-                basis.u_ij[i, 2, 2] = cif.atom_site_aniso_u_33[j][0]
-                basis.u_ij[i, 0, 1] = cif.atom_site_aniso_u_12[j][0]
-                basis.u_ij[i, 1, 0] = cif.atom_site_aniso_u_12[j][0]
-                basis.u_ij[i, 0, 2] = cif.atom_site_aniso_u_13[j][0]
-                basis.u_ij[i, 2, 0] = cif.atom_site_aniso_u_13[j][0]
-                basis.u_ij[i, 1, 2] = cif.atom_site_aniso_u_23[j][0]
-                basis.u_ij[i, 2, 1] = cif.atom_site_aniso_u_23[j][0]
+                basis.u_aniso[i, 0, 0] = cif.atom_site_aniso_u_11[j][0]
+                basis.u_aniso[i, 1, 1] = cif.atom_site_aniso_u_22[j][0]
+                basis.u_aniso[i, 2, 2] = cif.atom_site_aniso_u_33[j][0]
+                basis.u_aniso[i, 0, 1] = cif.atom_site_aniso_u_12[j][0]
+                basis.u_aniso[i, 1, 0] = cif.atom_site_aniso_u_12[j][0]
+                basis.u_aniso[i, 0, 2] = cif.atom_site_aniso_u_13[j][0]
+                basis.u_aniso[i, 2, 0] = cif.atom_site_aniso_u_13[j][0]
+                basis.u_aniso[i, 1, 2] = cif.atom_site_aniso_u_23[j][0]
+                basis.u_aniso[i, 2, 1] = cif.atom_site_aniso_u_23[j][0]
 
 # np.set_printoptions(precision=5, suppress=True)
-# print(f"Anisotropic ADPs: {basis.u_ij}")
+# print(f"Anisotropic ADPs: {basis.u_aniso}")
 
 # oxidation state
 if "atom_type_symbol" in cif_dict:

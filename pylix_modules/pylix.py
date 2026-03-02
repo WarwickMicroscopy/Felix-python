@@ -290,7 +290,7 @@ def symop_convert(symop_xyz):
     return mat, vec
 
 
-def unique_atom_positions(xtal, basis, cell, debug=False):
+def unique_atom_positions(xtal, basis, cell, inp):
     """
     Fills the unit cell by applying symmetry operations to the basis
 
@@ -300,7 +300,7 @@ def unique_atom_positions(xtal, basis, cell, debug=False):
     basis.atom_label (str): a label for each basis atom
     basis.atom_name (str): element symbol for each basis atom
     basis.atom_position float(basis.n_atoms x 3): fractional coordinates
-    basis.u_ij float(basis.n_atoms, 3, 3): anisotropic displacement parameter tensor
+    basis.u_aniso float(basis.n_atoms, 3, 3): anisotropic displacement parameter tensor
     basis.occupancy float(basis.n_atoms): occupancy for each basis atom
 
     Returns:
@@ -311,11 +311,11 @@ def unique_atom_positions(xtal, basis, cell, debug=False):
     # Determine the size of the all_atom_position array
     n_symops = xtal.symmetry_vector.shape[0]
     total_atoms = n_symops * basis.n_atoms
-    if debug:
+    if inp.debug:
         np.set_printoptions(precision=5, suppress=True)
         for i in range(basis.n_atoms):
-            print(f"Basis anisotropic u_ij [{i}]")
-            print(f"{basis.u_ij[i, :5, :5]}")
+            print(f"Basis anisotropic u_aniso [{i}]")
+            print(f"{basis.u_aniso[i, :5, :5]}")
 
 
     # Initialize arrays to store all atom positions, including duplicates
@@ -323,9 +323,10 @@ def unique_atom_positions(xtal, basis, cell, debug=False):
     all_atom_name = np.tile(basis.atom_name, n_symops)
     # print(all_atom_name)
     all_occupancy = np.tile(basis.occupancy, n_symops)
-    all_kappa = np.tile(basis.kappa, n_symops)
-    all_pv = np.tile(basis.pv, n_symops)
-    all_r2 = np.tile(basis.r2, n_symops)
+    if inp.scatter_factor_method == 4:
+        all_kappa = np.tile(basis.kappa, n_symops)
+        all_pv = np.tile(basis.pv, n_symops)
+        all_r2 = np.tile(basis.r2, n_symops)
 
     # Generate all equivalent positions by applying symmetry
     symmetry_applied = \
@@ -334,15 +335,15 @@ def unique_atom_positions(xtal, basis, cell, debug=False):
     all_atom_position = symmetry_applied.reshape(total_atoms, 3)
 
     # Anisotropic Displacement Parameters, ADPs
-    # apply symops to u_ij's, size [n_symops, basis.n_atoms, 3, 3]
-    tmp = np.matmul(xtal.symmetry_matrix[:, None], basis.u_ij[None, :])
+    # apply symops to u_aniso's, size [n_symops, basis.n_atoms, 3, 3]
+    tmp = np.matmul(xtal.symmetry_matrix[:, None], basis.u_aniso[None, :])
     # array of inverse operations, size [n_symops, 3, 3]
     # NB we can't use the transpose as symops are not always orthonormal
     Minv = np.linalg.inv(xtal.symmetry_matrix)
     # finsh the calculation, size [n_symops, basis.n_atoms, 3, 3]
-    all_u_ij = np.matmul(tmp, Minv[:, None])
+    all_u_aniso = np.matmul(tmp, Minv[:, None])
     # reshape, size [n_symops*basis.n_atoms, 3, 3]
-    all_u_ij = all_u_ij.reshape(-1, 3, 3)
+    all_u_aniso = all_u_aniso.reshape(-1, 3, 3)
 
     # Normalize positions to be within [0, 1]
     all_atom_position %= 1.0
@@ -365,17 +366,18 @@ def unique_atom_positions(xtal, basis, cell, debug=False):
     cell.atom_label = all_atom_label[i]
     cell.atom_name = all_atom_name[i]
     cell.occupancy = all_occupancy[i]
-    cell.u_ij = all_u_ij[i]
-    cell.kappa = all_kappa[i]
-    cell.pv = all_pv[i]
-    cell.r2 = all_r2[i]
+    cell.u_aniso = all_u_aniso[i]
+    if inp.scatter_factor_method == 4:
+        cell.kappa = all_kappa[i]
+        cell.pv = all_pv[i]
+        cell.r2 = all_r2[i]
     cell.n_atoms = len(cell.atom_name)
-    if debug:
+    if inp.debug:
         np.set_printoptions(precision=5, suppress=True)
         for i in range(3):
-            print(f"Anisotropic u_ij [{i}]")
-            print(f"{cell.u_ij[i, :5, :5]}")
-    # return atom_position, atom_label,atom_type, atom_name, u_ij,
+            print(f"Anisotropic u_aniso [{i}]")
+            print(f"{cell.u_aniso[i, :5, :5]}")
+    # return atom_position, atom_label,atom_type, atom_name, u_aniso,
     # occupancy, pv, kappa, r2
     return
 
@@ -1105,9 +1107,9 @@ def hkl_make(xtal, inp, hkl, bloch):
     return
 
 
-def Fg_matrix(xtal, inp, cell, bloch):
+def Fg_matrix(xtal, inp, basis, cell, bloch):
 # def Fg_matrix(n_hkl, scatter_factor_method, basis_atom_label, atom_label,
-#               atom_coordinate, atomic_number, occupancy, u_ij, g_matrix,
+#               atom_coordinate, atomic_number, occupancy, u_aniso, g_matrix,
 #               absorption_method, absorption_per, electron_velocity, kappas, pv,
 #               r2, debug):
     """
@@ -1120,7 +1122,7 @@ def Fg_matrix(xtal, inp, cell, bloch):
     atom_coordinate : float, fractional atom coordinates, size [n_cell, 3]
     atomic_number : int, size [n_cell], number of atoms in the cell
     occupancy : float, size [n_cell]
-    u_ij : float array of ADPs, size [n_cell,3,3]
+    u_aniso : float array of ADPs, size [n_cell,3,3]
     bloch.g_matrix : array of g-vectors in the microscope frame, size [n_hkl,n_hkl]
     absorption_method : int, flag for absorption calculation
     absorption_per : float, % absorption, if that method is used
@@ -1139,7 +1141,7 @@ def Fg_matrix(xtal, inp, cell, bloch):
     """
     # n_basis = len(basis_atom_label)
     # n_cell = len(atom_label)
-    # calculate g.r for all g-vectors and atom posns [n_hkl, n_hkl, cell.n_atoms]
+    # calculate g.r for all g-vectors and atoms [n_hkl, n_hkl, cell.n_atoms]
     g_dot_r = np.einsum('ijk,lk->ijl', bloch.g_matrix, cell.atom_coordinate)
     # exp(i g.r) [n_hkl, n_hkl, cell.n_atoms]
     phase = np.exp(-1j * g_dot_r)
@@ -1152,17 +1154,19 @@ def Fg_matrix(xtal, inp, cell, bloch):
     # replaced by bloch.g_pool_mag
 
     # anisotropic DP U*g[i]*g[j], size [cell.n_atoms, n_hkl, n_hkl]
-    Ugg = np.einsum('ijm, a mn, ij n -> aij', g_matrix, u_ij, g_matrix)
+    Ugg = np.einsum('ijm, a mn, ij n -> aij', bloch.g_matrix,
+                    cell.u_aniso, bloch.g_matrix)
     # equivalent anisotropic B, size [cell.n_atoms, n_hkl, n_hkl]
-    B_aniso = np.divide(Ugg, np.square(bloch.g_pool_mag), out=np.zeros_like(Ugg),
+    B_aniso = np.divide(Ugg, np.square(bloch.g_pool_mag),
+                        out=np.zeros_like(Ugg),
                         where=(bloch.g_pool_mag != 0)) * 8 * np.pi**2
-    if debug:
+    if inp.debug:
         np.set_printoptions(precision=3, suppress=True)
         print("g_magnitudes")
         print(bloch.g_pool_mag[:5, :5])
         print("  ")
         for i in range(basis.n_atoms):
-            print(f"Anisotropic u_ij*g[i]*g[j] [{i}]")
+            print(f"Anisotropic u_aniso*g[i]*g[j] [{i}]")
             print(f"{Ugg[i, :5, :5]}")
         print("  ")
         for i in range(basis.n_atoms):
@@ -1171,56 +1175,70 @@ def Fg_matrix(xtal, inp, cell, bloch):
         print("  ")
 
     # scattering factors, atom by atom in the basis and applied to cell
-    f_g_basis = np.zeros([basis.n_atoms, n_hkl, n_hkl], dtype=np.complex128)
-    f_g_basis_prime = np.zeros([basis.n_atoms, n_hkl, n_hkl], dtype=np.complex128)
-    f_g = np.zeros([cell.n_atoms, n_hkl, n_hkl], dtype=np.complex128)
-    f_g_prime = np.zeros([cell.n_atoms, n_hkl, n_hkl], dtype=np.complex128)
+    basis.f_g = np.zeros([basis.n_atoms, bloch.n_hkl, bloch.n_hkl],
+                         dtype=np.complex128)
+    basis.f_g_prime = np.zeros([basis.n_atoms, bloch.n_hkl, bloch.n_hkl],
+                               dtype=np.complex128)
+    cell.f_g = np.zeros([cell.n_atoms, bloch.n_hkl, bloch.n_hkl],
+                   dtype=np.complex128)
+    cell.f_g_prime = np.zeros([cell.n_atoms, bloch.n_hkl, bloch.n_hkl],
+                         dtype=np.complex128)
     for i in range(basis.n_atoms):
-        # get the scattering factor for the basis f_g_basis
-        if scatter_factor_method == 0:
-            f_g_basis[i, :, :] = f_kirkland(atomic_number[i], bloch.g_pool_mag)
-        elif scatter_factor_method == 1:
-            f_g_basis[i, :, :] = f_lobato(atomic_number[i], bloch.g_pool_mag)
-        elif scatter_factor_method == 2:
-            f_g_basis[i, :, :] = f_peng(atomic_number[i], bloch.g_pool_mag)
-        elif scatter_factor_method == 3:
-            f_g_basis[i, :, :] = f_doyle_turner(atomic_number[i], bloch.g_pool_mag)
-        elif scatter_factor_method == 4:
+        # get the scattering factor for the basis basis.f_g
+        if inp.scatter_factor_method == 0:
+            basis.f_g[i, :, :] = f_kirkland(basis.atomic_number[i],
+                                            bloch.g_pool_mag)
+        elif inp.scatter_factor_method == 1:
+            basis.f_g[i, :, :] = f_lobato(basis.atomic_number[i],
+                                          bloch.g_pool_mag)
+        elif inp.scatter_factor_method == 2:
+            basis.f_g[i, :, :] = f_peng(basis.atomic_number[i],
+                                        bloch.g_pool_mag)
+        elif inp.scatter_factor_method == 3:
+            basis.f_g[i, :, :] = f_doyle_turner(basis.atomic_number[i],
+                                                bloch.g_pool_mag)
+        elif inp.scatter_factor_method == 4:
             print(f"Calculating kappa factor for atom {i+1}/{cell.n_atoms}")
-            f_g_basis[i, :, :] = kappa_factors(bloch.g_pool_mag, i, r2[i])
+            basis.f_g[i, :, :] = kappa_factors(bloch.g_pool_mag,
+                                               i, basis.r2[i])
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
 
-        # get the absorptive scattering factor for the basis f_g_basis_prime
-        if absorption_method == 0:  # no absorption
-            f_g_basis_prime[i, :, :] = np.zeros_like(f_g)
-        elif absorption_method == 1:  # proportional model
-            f_g_basis_prime[i, :, :] = 1j * f_g * absorption_per/100.0
-        elif absorption_method == 2:  # Bird & King, Thomas (Acta Cryst 2023)
-            f_g_basis_prime[i, :, :] = 1j * f_thomas(bloch.g_pool_mag, B_aniso[i, :, :],
-                                      atomic_number[i], electron_velocity)
-        if debug:
-            print(f"f_g_basis [{i}]")
-            print(f"{f_g_basis[i, :5, :5]}")
+        # get the absorptive scattering factor for the basis basis.f_g_prime
+        if inp.absorption_method == 0:  # no absorption
+            basis.f_g_prime[i, :, :] = np.zeros_like(basis.f_g)
+        elif inp.absorption_method == 1:  # proportional model
+            basis.f_g_prime[i, :, :] = 0.01j * basis.f_g * inp.absorption_per
+        elif inp.absorption_method == 2:  # Bird & King, Thomas
+            basis.f_g_prime[i, :, :] = 1j * f_thomas(bloch.g_pool_mag,
+                                                     B_aniso[i, :, :],
+                                                     basis.atomic_number[i],
+                                                     bloch.electron_velocity)
+        if inp.debug:
+            print(f"basis.f_g [{i}]")
+            print(f"{basis.f_g[i, :5, :5]}")
             print("  ")
-            print(f"f_g_basis_prime [{i}]")
-            print(f"{f_g_basis_prime[i, :5, :5]}")
+            print(f"basis.f_g_prime [{i}]")
+            print(f"{basis.f_g_prime[i, :5, :5]}")
 
         # put into the unit cell
         for j in range(cell.n_atoms):
-            if atom_label[j] == basis_atom_label[i]:
-                f_g[j, :, :] = f_g_basis[i, :, :]
+            if cell.atom_label[j] == basis.atom_label[i]:
+                cell.f_g[j, :, :] = basis.f_g[i, :, :]
 
     # now make up the full matrix
-    Fg_matrix = np.zeros([n_hkl, n_hkl], dtype=np.complex128)
+    Fg_matrix = np.zeros([bloch.n_hkl, bloch.n_hkl], dtype=np.complex128)
     for i in range(cell.n_atoms):
         # The Structure Factor Equation
-        Fg_matrix = Fg_matrix+((f_g[i, :, :] + f_g_prime[i, :, :])
+        Fg_matrix = Fg_matrix+((cell.f_g[i, :, :] + cell.f_g_prime[i, :, :])
                                * phase[:, :, i]
-                               * occupancy[i]
+                               * cell.occupancy[i]
                                # np.exp(-B_aniso[i, :, :] * (bloch.g_pool_mag**2) /
                                # (16*np.pi**2)))
                                * np.exp(-Ugg[i, :, :] / 2))
+    # Conversion factor from F_g to U_g
+    Fg_to_Ug = bloch.relativistic_correction / (np.pi * xtal.cell_volume)
+    bloch.ug_matrix = Fg_to_Ug * Fg_matrix
 
     return Fg_matrix
 
@@ -1241,7 +1259,7 @@ def deviation_parameter(inp, bloch):
     k_x, k_y = np.meshgrid(x_pix * delta_K, y_pix * delta_K)
 
     # k-vector for all pixels k'
-    k_z = np.sqrt(big_k_mag**2 - k_x**2 - k_y**2)
+    k_z = np.sqrt(bloch.big_k_mag**2 - k_x**2 - k_y**2)
     bloch.tilted_k = np.stack([k_x, k_y, k_z], axis=-1)
 
     # g excuding g_pool[0], which is always [000]
@@ -1249,16 +1267,16 @@ def deviation_parameter(inp, bloch):
     g_pool_mag1 = bloch.g_pool_mag[1:]  # shape: (n_hkl-1)
     # Components of k_0
     k_0_0 = -g_pool_mag1 / 2
-    k_0_2 = np.sqrt(big_k_mag**2 - k_0_0**2)
+    k_0_2 = np.sqrt(bloch.big_k_mag**2 - k_0_0**2)
     # Components of k_prime
     k_prime_0 = np.einsum('ijk,lk->ijl', bloch.tilted_k, g_pool1) / g_pool_mag1
-    k_prime_2 = np.sqrt(big_k_mag**2 - k_prime_0**2)
+    k_prime_2 = np.sqrt(bloch.big_k_mag**2 - k_prime_0**2)
 
     k_0_dot_k_prime = (k_0_0[None, None, :] * k_prime_0 +
                        k_0_2[None, None, :] * k_prime_2)
     pm = -np.sign(2*k_prime_0 + g_pool_mag1)
-    s_g = pm * np.sqrt(2*abs(big_k_mag**2 - k_0_dot_k_prime)) * \
-        (g_pool_mag1/big_k_mag)
+    s_g = pm * np.sqrt(2*abs(bloch.big_k_mag**2 - k_0_dot_k_prime)) * \
+        (g_pool_mag1/bloch.big_k_mag)
 
     # add in 000
     s_0 = np.expand_dims(np.zeros_like(k_x), axis=-1)
@@ -1268,11 +1286,12 @@ def deviation_parameter(inp, bloch):
     return
 
 
-def strong_beams(s_g_pix, ug_matrix, min_strong_beams):
+def strong_beams(inp, bloch):
+    # def strong_beams(s_g_pix, ug_matrix, min_strong_beams):
     """
     returns a list of strong beams according to their perturbation strength
-    NB s_g_pix here is a 1D array of values for a given pixel, and is different
-    to the s_g in the main code which is for all pixels & g-vectors
+    NB bloch.s_g_pix here is a 1D array of values for a given pixel,
+    and is different to bloch.s_g which is for all pixels & g-vectors
 
     Perturbation Strength Eq. 8 Zuo Ultramicroscopy 57 (1995) 375, |Ug/2KSg|
     Here use |Ug/Sg| since 2K is a constant
@@ -1280,51 +1299,59 @@ def strong_beams(s_g_pix, ug_matrix, min_strong_beams):
     """
 
     # Perturbation strength |Ug/Sg|, put 100 where we have s_g=0
-    u_g = np.abs(ug_matrix[:, 0])
-    pert = np.divide(u_g, np.abs(s_g_pix),
-                     out=np.full_like(s_g_pix, 100.0), where=s_g_pix != 0)
+    u_g = np.abs(bloch.ug_matrix[:, 0])
+    pert = np.divide(u_g, np.abs(bloch.s_g_pix),
+                     out=np.full_like(bloch.s_g_pix, 100.0),
+                     where=bloch.s_g_pix != 0)
     # deviation parameter and perturbation thresholds for strong beams
     max_sg = 0.001
 
     # Determine strong beams: Increase max_sg until enough beams are found
-    strong = np.zeros_like(s_g_pix, dtype=int)
-    while np.sum(strong) < min_strong_beams:
+    strong = np.zeros_like(bloch.s_g_pix, dtype=int)
+    while np.sum(strong) < inp.min_strong_beams:
         min_pert_strong = 0.025 / max_sg
-        strong = np.where((np.abs(s_g_pix) < max_sg)
+        strong = np.where((np.abs(bloch.s_g_pix) < max_sg)
                           | (pert >= min_pert_strong), 1, 0)
         max_sg += 0.001
 
     # Create strong beam list
-    return np.flatnonzero(strong)
+    bloch.strong_beam = np.flatnonzero(strong)
+    # return np.flatnonzero(strong)
+    return
 
 
-def blochwave(g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl,
-          big_k_mag, g_dot_norm, k_dot_n_pix, debug):
+def blochwave(inp, bloch):
+# def blochwave(g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl,
+#           big_k_mag, g_dot_norm, k_dot_n_pix, debug):
 
     # strong_beam_indices gives the index of a strong beam in the beam pool
     # Use Sg and perturbation strength to define strong beams
-    strong_beam = strong_beams(s_g_pix, ug_matrix, min_strong_beams)
+    # strong_beam = strong_beams(s_g_pix, ug_matrix, min_strong_beams)
+    strong_beams(inp, bloch)
+    # print(f"spoink {bloch.strong_beam}")
     # which ones are new (i.e. not already in the output list)
-    strong_new = np.setdiff1d(strong_beam, g_output)
+    strong_new = np.setdiff1d(bloch.strong_beam, bloch.hkl_output)
     # make the structure matrix for this pixel, outputs top of the list
-    strong_beam_indices = np.concatenate((g_output, strong_new))
-    n_beams = len(strong_beam_indices)
+    bloch.strong_beam_indices = np.concatenate((bloch.hkl_output, strong_new))
+    bloch.n_beams = len(bloch.strong_beam_indices)
 
     # Make a Ug matrix for this pixel by selecting only strong beams
-    beam_projection_matrix = np.zeros((n_beams, n_hkl), dtype=np.complex128)
-    beam_projection_matrix[np.arange(n_beams), strong_beam_indices] = 1+0j
+    beam_projection_matrix = np.zeros((bloch.n_beams, bloch.n_hkl),
+                                      dtype=np.complex128)
+    beam_projection_matrix[np.arange(bloch.n_beams),
+                           bloch.strong_beam_indices] = 1+0j
     # reduce the matrix using some nifty matrix multiplication
     beam_transpose = beam_projection_matrix.T
-    ug_matrix_partial = np.dot(ug_matrix, beam_transpose)
+    ug_matrix_partial = np.dot(bloch.ug_matrix, beam_transpose)
     ug_sg_matrix = np.dot(beam_projection_matrix, ug_matrix_partial)
 
     # Final normalization of the matrix
     # off-diagonal elements are Ug/2K, diagonal elements are Sg
     # Spence's (1990) 'Structure matrix'
-    ug_sg_matrix = 2.0*np.pi**2 * ug_sg_matrix / big_k_mag
+    ug_sg_matrix = 2.0*np.pi**2 * ug_sg_matrix / bloch.big_k_mag
     # replace the diagonal with strong beam deviation parameters
-    ug_sg_matrix[np.arange(n_beams), np.arange(n_beams)] = \
-        s_g_pix[strong_beam_indices]
+    ug_sg_matrix[np.arange(bloch.n_beams), np.arange(bloch.n_beams)] = \
+        bloch.s_g_pix[bloch.strong_beam_indices]
 
     # weak beam correction (NOT WORKING)
     # px.weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_indices,
@@ -1332,13 +1359,14 @@ def blochwave(g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl,
 
     # surface normal correction part 1
     structure_matrix = np.zeros_like(ug_sg_matrix)
-    norm_factor = np.sqrt(1 + g_dot_norm[strong_beam_indices]/k_dot_n_pix)
+    norm_factor = np.sqrt(1 + bloch.g_dot_norm[bloch.strong_beam_indices] /
+                          bloch.k_dot_n_pix)
     structure_matrix = ug_sg_matrix / np.outer(norm_factor, norm_factor)
 
     # get eigenvalues (gamma), eigenvecs
-    gamma, eigenvecs = eig(structure_matrix)
+    bloch.gamma, bloch.eigenvecs = eig(structure_matrix)
     # Invert using LU decomposition (similar to ZGETRI in Fortran)
-    inv_eigenvecs = inv(eigenvecs)
+    # bloch.inv_eigenvecs = inv(eigenvecs)
     # inv_eigenvecs = eigenvecs  # *** placeholder while testing
 
     # if debug:
@@ -1346,10 +1374,11 @@ def blochwave(g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl,
     #     print("eigenvectors")
     #     print(eigenvecs[:5, :5])
 
-    return n_beams, strong_beam_indices, gamma, eigenvecs, inv_eigenvecs
+    # return n_beams, strong_beam_indices, gamma, eigenvecs, inv_eigenvecs
+    return
 
 
-def wave_functions(bloch, inp):
+def wave_functions(inp, bloch, rc):
 # def wave_functions(g_output, s_g_pix, ug_matrix, min_strong_beams,
 #                    n_hkl, big_k_mag, g_dot_norm,
 #                    k_dot_n_pix, thickness, debug):
@@ -1357,37 +1386,40 @@ def wave_functions(bloch, inp):
     # subroutine to get the eigenvector matrices
     # and evaluating for a range of thicknesses
 
-    n_beams, strong_beam_indices, gamma, eigenvecs, inv_eigenvecs = blochwave(
-        g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl, big_k_mag,
-        g_dot_norm, k_dot_n_pix, debug)
+    # n_beams, strong_beam_indices, gamma, eigenvecs, inv_eigenvecs = blochwave(
+    #     g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl, big_k_mag,
+    #     g_dot_norm, k_dot_n_pix, debug)
+    blochwave(inp, bloch)
     # calculate intensities
 
     # Initialize incident (complex) wave function psi0
     # all zeros except 000 beam which is 1
-    psi0 = np.zeros(n_beams, dtype=np.complex128)
+    psi0 = np.zeros(bloch.n_beams, dtype=np.complex128)
     psi0[0] = 1.0 + 0j
 
     # calculate wave function including surface normal correction
     # M @ eigenvecs @ gamma @ eigenvecs^-1 @ M^-1 @ psi0
     # M is a diagonal matrix made from vector of (1+g.n/k.n)**0.5
-    inv_m_ii = np.sqrt(1 + g_dot_norm[strong_beam_indices] / k_dot_n_pix)
+    inv_m_ii = np.sqrt(1 + bloch.g_dot_norm[bloch.strong_beam_indices]
+                       / bloch.k_dot_n_pix)
     m_ii = 1.0/inv_m_ii
     # but we don't need to make the matrix as M^-1 @ psi0 can be
     # calculated as a vector multiplication
     u = inv_m_ii * psi0
     # we can also avoid eigenvecs @ gamma @ eigenvecs^-1
     # by solving for the eigenvectors
-    y = solve(eigenvecs, u)
+    y = solve(bloch.eigenvecs, u)
 
     # phase factors for all thicknesses
-    phase = np.exp(1j * np.outer(gamma, thickness))
+    phase = np.exp(1j * np.outer(bloch.gamma, rc.thickness))
     # apply phase to all thicknesses
     y_t = y[:, None] * phase
-    z = eigenvecs @ y_t
-    wave_function = m_ii[:, None] * z
-
+    z = bloch.eigenvecs @ y_t
+    wave_funct = m_ii[:, None] * z
+    bloch.wave_function = np.array(wave_funct.T)
     # we expect an output shape [n_thickness, n_beams] so need to transpose
-    return np.array(wave_function.T)
+    # return np.array(wave_function.T)
+    return
 
 
 def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list,
@@ -1397,7 +1429,7 @@ def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list,
     strength. We start with all non-strong beams in the list.
     We then raise the threshold perturbation strength until we have fewer than
     min_weak_beams in the list.  These are the strongest beams not included
-    in strong_beam_list.
+    in strong_beam_list
     """
 
     # Perturbation strength |Ug/Sg|, put 100 where we have s_g=0
@@ -1492,7 +1524,7 @@ def orb(Z):
     return orb
 
 
-def f_kirkland(z, bloch.g_pool_mag):
+def f_kirkland(z, g_pool_mag):
     """
     calculates atomic scattering factor using the Kirkland model.
     From Appendix C of "Advanced Computing in Electron Microscopy", 2nd ed.
@@ -1506,7 +1538,7 @@ def f_kirkland(z, bloch.g_pool_mag):
     Returns:
     ndarray: The calculated Kirkland scattering factor.
     """
-    q = bloch.g_pool_mag / (2*np.pi)
+    q = g_pool_mag / (2*np.pi)
     # coefficients in shape (3, 1, 1) for broadcasting
     a = fu.kirkland[z-1, 0:6:2].reshape(-1, 1, 1)
     b = fu.kirkland[z-1, 1:7:2].reshape(-1, 1, 1)
@@ -1517,7 +1549,7 @@ def f_kirkland(z, bloch.g_pool_mag):
     return f_g
 
 
-def f_doyle_turner(z, bloch.g_pool_mag):
+def f_doyle_turner(z, g_pool_mag):
     """
     calculates atomic scattering factor using the Doyle & Turner model.
 
@@ -1531,7 +1563,7 @@ def f_doyle_turner(z, bloch.g_pool_mag):
     ndarray: The calculated Doyle & Turner scattering factor.
     """
     # Convert g to s
-    s = bloch.g_pool_mag / (2*np.pi)
+    s = g_pool_mag / (2*np.pi)
 
     a = fu.doyle_turner[z-1, 0:8:2].reshape(-1, 1, 1)
     b = fu.doyle_turner[z-1, 1:8:2].reshape(-1, 1, 1)
@@ -1541,7 +1573,7 @@ def f_doyle_turner(z, bloch.g_pool_mag):
     return f_g
 
 
-def f_lobato(z, bloch.g_pool_mag):
+def f_lobato(z, g_pool_mag):
     """
     calculates atomic scattering factor using the Lobato model.
     Lobato & van Dyck Acta Cryst A70, 636 (2014)
@@ -1555,7 +1587,7 @@ def f_lobato(z, bloch.g_pool_mag):
     ndarray: The calculated Lobato scattering factor.
     """
     # Convert physics to crystallography convention
-    g = bloch.g_pool_mag / (2*np.pi)
+    g = g_pool_mag / (2*np.pi)
 
     a = fu.lobato[z-1, 0:5].reshape(-1, 1, 1)
     b = fu.lobato[z-1, 5:10].reshape(-1, 1, 1)
@@ -1565,12 +1597,12 @@ def f_lobato(z, bloch.g_pool_mag):
     return f_g
 
 
-def f_peng(z, bloch.g_pool_mag):
+def f_peng(z, g_pool_mag):
     """
     calculates atomic scattering factor using the Peng model.
     Peng, Micron 30, 625 (1999)
     Parameters:
-    bloch.g_pool_mag (ndarray): Magnitude of the scattering vector in 1/Å.
+    g_pool_mag (ndarray): Magnitude of the scattering vector in 1/Å.
     (NB exp(-i*g.r), physics negative convention)
     z (int): Atomic number, used to index scattering factors.
     peng (np.ndarray): Array of scattering factors from pylix_dicts
@@ -1579,7 +1611,7 @@ def f_peng(z, bloch.g_pool_mag):
     ndarray: The calculated Peng scattering factor.
     """
     # Convert g to s
-    s = g_magnitude / (4*np.pi)
+    s = g_pool_mag / (4*np.pi)
 
     a = fu.peng[z-1, 0:4].reshape(-1, 1, 1)
     b = fu.peng[z-1, 4:8].reshape(-1, 1, 1)
@@ -1746,7 +1778,7 @@ def calc_scattering_amplitudes(v, q, i):
     r = np.linspace(1e-6, v.r_max, v.n_points)
     pc = v.basis_pv[i]
     # precomputed densities
-    f_valence = xray_form_factor_valence(r, rho_val, q, pv, kappa)
+    f_valence = xray_form_factor_valence(r, rho_val, q, v.pv, v.kappa)
     f_core = xray_form_factor_core(r, rho_core, q, pc)
     # fourier transform of the calculated radial funciton in 3d from 0 to inf
     f_x_total = f_core + f_valence

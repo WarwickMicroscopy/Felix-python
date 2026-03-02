@@ -35,7 +35,7 @@ def simulate(xtal, basis, inp, hkl, rc):
 
     # some setup calculations
     # Electron velocity in metres per second
-    electron_velocity = (c * np.sqrt(1.0 - ((m_e * c**2) /
+    bloch.electron_velocity = (c * np.sqrt(1.0 - ((m_e * c**2) /
                          (e * inp.accelerating_voltage_kv*1000.0 +
                           m_e * c**2))**2))
     # Electron wavelength in Angstroms
@@ -46,17 +46,18 @@ def simulate(xtal, basis, inp, hkl, rc):
     # Wavevector magnitude k
     electron_wave_vector_magnitude = 2.0 * np.pi / electron_wavelength
     # Relativistic correction
-    relativistic_correction = 1.0 / np.sqrt(1.0 - (electron_velocity / c)**2)
+    bloch.relativistic_correction = 1.0 / np.sqrt(1.0 - (bloch.electron_velocity / c)**2)
     # Cell volume
-    cell_volume = (xtal.cell_a*xtal.cell_b*xtal.cell_c
+    xtal.cell_volume = (xtal.cell_a*xtal.cell_b*xtal.cell_c
                    * np.sqrt(1.-np.cos(xtal.cell_alpha)**2
                              - np.cos(xtal.cell_beta)**2
                              - np.cos(xtal.cell_gamma)**2
                              + 2.0*np.cos(xtal.cell_alpha)
                              * np.cos(xtal.cell_beta) * np.cos(xtal.cell_gamma)))
     # Conversion from scattering factor to volts
-    scatt_fac_to_volts = ((h**2) /
-                          (2.0*np.pi * m_e * e * cell_volume * (angstrom**2)))
+    scatt_fac_to_volts = (h**2 /
+                          (2.0*np.pi * m_e * e * xtal.cell_volume *
+                           angstrom**2))
 
     # ===============================================
     # added unique APD tensors u_ij
@@ -72,7 +73,7 @@ def simulate(xtal, basis, inp, hkl, rc):
     #         v.atom_site_type_symbol, basis.atom_name, basis.atom_position,
     #         basis.u_ij, basis.occupancy, basis.pv,
     #         basis.kappa, basis.r2, v.debug)
-    px.unique_atom_positions(xtal, basis, cell, inp.debug)
+    px.unique_atom_positions(xtal, basis, cell, inp)
 
 
     # Generate atomic numbers based on the elemental symbols
@@ -192,7 +193,7 @@ def simulate(xtal, basis, inp, hkl, rc):
         #     print(f"{i},  {v.hkl[i]}")
 
     # plot beam pool
-    if pc.iter_count == 0 and inp.plot >= 1:
+    if rc.iter_count == 0 and inp.plot >= 1:
         xm = np.ceil(np.max(bloch.g_pool_mag/(2*np.pi)))
         fig, ax = plt.subplots(1, 1)
         w_f = 10
@@ -230,8 +231,6 @@ def simulate(xtal, basis, inp, hkl, rc):
     bloch.g_matrix = bloch.g_pool[:, np.newaxis, :] \
         - bloch.g_pool[np.newaxis, :, :]
 
-    # Conversion factor from F_g to U_g
-    Fg_to_Ug = relativistic_correction / (np.pi * cell_volume)
 
     # now make the Ug matrix, i.e. calculate the structure factor Fg for all
     # g-vectors in g_matrix and convert using the above factor
@@ -240,7 +239,7 @@ def simulate(xtal, basis, inp, hkl, rc):
     #                  atom_label, atom_coordinate, atomic_number, occupancy,
     #                  u_ij, g_matrix, v.absorption_method, v.absorption_per,
     #                  electron_velocity, kappas, pv, r2, v.debug)
-    px.Fg_matrix(xtal, inp, cell, bloch)
+    px.Fg_matrix(xtal, inp, basis, cell, bloch)
 
     # matrix of dot products with the surface normal
     bloch.g_dot_norm = np.dot(bloch.g_pool, xtal.norm_dir_m)
@@ -290,23 +289,23 @@ def simulate(xtal, basis, inp, hkl, rc):
             # wave_functions = px.wave_functions(
             #     bloch.hkl_output, s_g_pix, ug_matrix, v.min_strong_beams, n_hkl,
             #     big_k_mag, g_dot_norm, k_dot_n_pix, v.thickness, v.debug)
-            px.wave_functions(bloch, inp)
+            px.wave_functions(inp, bloch, rc)
 
-            intensity = np.abs(wave_functions)**2
+            intensity = np.abs(bloch.wave_function)**2
 
             # Map diffracted intensity to required output g vectors
             # note x and y swapped!
-            v.lacbed_sim[:, -pix_y, pix_x, :] = intensity[:, :len(bloch.hkl_output)]
+            out.lacbed_sim[:, -pix_y, pix_x, :] = intensity[:, :len(bloch.hkl_output)]
 
     # timings
     setup = mid-strt
     bwc = time.time()-mid
     print(f"\rBloch wave calculation... done in {bwc:.1f}s")  # " (beam pool setup {setup:.1f} s)")
-    if v.iter_count == 0: 
-        print(f"    {1000*(bwc)/(4*v.image_radius**2):.2f} ms/pixel")
+    if rc.iter_count == 0: 
+        print(f"    {1000*(bwc)/(4*inp.image_radius**2):.2f} ms/pixel")
 
     # increment iteration counter
-    v.iter_count += 1
+    rc.iter_count += 1
 
     return
 
