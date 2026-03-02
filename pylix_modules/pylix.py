@@ -48,14 +48,14 @@ def read_inp_file(filename):
     return inp_dict
 
 
-def read_hkl_file(filename):
+def read_hkl_file(hkl, filename):
     """
     Reads in the file felix.hkl and returns the list of reflexions to output
 
     Parameters:
     filename (str): The path to the input file.
     Returns:
-    inp_dict: A dictionary with variable names and values.
+    hkl.input_hkls, hkl.i_obs, hkl.sigma_obs altered in place
     """
     input_hkls = []
     i_obs = []
@@ -90,11 +90,11 @@ def read_hkl_file(filename):
     input_hkls = np.array(input_hkls, dtype=int)
     # remove [0,0,0] if it is present
     mask = ~np.all(input_hkls == 0, axis=1)
-    input_hkls = input_hkls[mask]
-    i_obs = np.array(i_obs) if cRED else None
-    sigma_obs = np.array(sigma_obs) if cRED else None
+    hkl.input_hkls = input_hkls[mask]
+    hkl.i_obs = np.array(i_obs) if cRED else None
+    hkl.sigma_obs = np.array(sigma_obs) if cRED else None
 
-    return input_hkls, i_obs, sigma_obs
+    return
 
 
 def extract_cif_parameter(item):
@@ -290,67 +290,58 @@ def symop_convert(symop_xyz):
     return mat, vec
 
 
-def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
-                          basis_atom_type_label, basis_atom_name,
-                          basis_atom_position, basis_u_ij,
-                          basis_occupancy, basis_pv,
-                          basis_kappa, basis_r2, debug=False):
+def unique_atom_positions(xtal, basis, cell, debug=False):
     """
     Fills the unit cell by applying symmetry operations to the basis
 
     Parameters:
-    symmetry_matrix float(n_symmetry_operations x 3x3): n_symmetry_operations
-    symmetry_vector float(n_symmetry_operations x 3):  associated translations
-    basis_atom_label (str): a label for each basis atom
-    basis_atom_name (str): element symbol for each basis atom
-    basis_atom_position float(n_basis_atoms x 3): fractional coordinates
-    basis_u_ij float(n_basis_atoms, 3, 3): anisotropic displacement parameter tensor for each basis atom
-    basis_occupancy float(n_basis_atoms): occupancy for each basis atom
+    xtal.symmetry_matrix float(n_symops x 3x3): n_symops
+    xtal.symmetry_vector float(n_symops x 3):  associated translations
+    basis.atom_label (str): a label for each basis atom
+    basis.atom_name (str): element symbol for each basis atom
+    basis.atom_position float(basis.n_atoms x 3): fractional coordinates
+    basis.u_ij float(basis.n_atoms, 3, 3): anisotropic displacement parameter tensor
+    basis.occupancy float(basis.n_atoms): occupancy for each basis atom
 
     Returns:
-    atom_position, atom_label, atom_name, B_iso, occupancy
+    cell.atom_position, cell.atom_label, cell.atom_name, etc
     """
     # tolerance in fractional coordinates to consider atoms to be the same
     tol = 0.000001
     # Determine the size of the all_atom_position array
-    n_symmetry_operations = symmetry_vector.shape[0]
-    n_basis_atoms = basis_atom_position.shape[0]
-    total_atoms = n_symmetry_operations * n_basis_atoms
+    n_symops = xtal.symmetry_vector.shape[0]
+    total_atoms = n_symops * basis.n_atoms
     if debug:
         np.set_printoptions(precision=5, suppress=True)
-        for i in range(n_basis_atoms):
+        for i in range(basis.n_atoms):
             print(f"Basis anisotropic u_ij [{i}]")
-            print(f"{basis_u_ij[i, :5, :5]}")
+            print(f"{basis.u_ij[i, :5, :5]}")
 
 
     # Initialize arrays to store all atom positions, including duplicates
-    all_atom_label = np.tile(basis_atom_label, n_symmetry_operations)
-    # print (basis_atom_type_label)
-
-    all_atom_type_label = np.tile(basis_atom_type_label, n_symmetry_operations)
-
-    all_atom_name = np.tile(basis_atom_name, n_symmetry_operations)
+    all_atom_label = np.tile(basis.atom_label, n_symops)
+    all_atom_name = np.tile(basis.atom_name, n_symops)
     # print(all_atom_name)
-    all_occupancy = np.tile(basis_occupancy, n_symmetry_operations)
-    all_kappa = np.tile(basis_kappa, n_symmetry_operations)
-    all_pv = np.tile(basis_pv, n_symmetry_operations)
-    all_r2 = np.tile(basis_r2, n_symmetry_operations)
+    all_occupancy = np.tile(basis.occupancy, n_symops)
+    all_kappa = np.tile(basis.kappa, n_symops)
+    all_pv = np.tile(basis.pv, n_symops)
+    all_r2 = np.tile(basis.r2, n_symops)
 
     # Generate all equivalent positions by applying symmetry
     symmetry_applied = \
-        np.einsum('ijk,lk->ilj', symmetry_matrix, basis_atom_position) +\
-        symmetry_vector[:, np.newaxis, :]
+        np.einsum('ijk,lk->ilj', xtal.symmetry_matrix, basis.atom_position) +\
+        xtal.symmetry_vector[:, np.newaxis, :]
     all_atom_position = symmetry_applied.reshape(total_atoms, 3)
 
     # Anisotropic Displacement Parameters, ADPs
-    # apply symops to u_ij's, size [n_symmetry_operations, n_basis_atoms, 3, 3]
-    tmp = np.matmul(symmetry_matrix[:, None], basis_u_ij[None, :])
-    # array of inverse operations, size [n_symmetry_operations, 3, 3]
+    # apply symops to u_ij's, size [n_symops, basis.n_atoms, 3, 3]
+    tmp = np.matmul(xtal.symmetry_matrix[:, None], basis.u_ij[None, :])
+    # array of inverse operations, size [n_symops, 3, 3]
     # NB we can't use the transpose as symops are not always orthonormal
-    Minv = np.linalg.inv(symmetry_matrix)
-    # finsh the calculation, size [n_symmetry_operations, n_basis_atoms, 3, 3]
+    Minv = np.linalg.inv(xtal.symmetry_matrix)
+    # finsh the calculation, size [n_symops, basis.n_atoms, 3, 3]
     all_u_ij = np.matmul(tmp, Minv[:, None])
-    # reshape, size [n_symmetry_operations*n_basis_atoms, 3, 3]
+    # reshape, size [n_symops*basis.n_atoms, 3, 3]
     all_u_ij = all_u_ij.reshape(-1, 3, 3)
 
     # Normalize positions to be within [0, 1]
@@ -370,60 +361,62 @@ def unique_atom_positions(symmetry_matrix, symmetry_vector, basis_atom_label,
             unique_mask &= (dist_matrix[j] > tol)
 
     # Apply the same reduction to the labels, names, occupancies, and B_iso
-    atom_position = all_atom_position[i]
-    atom_label = all_atom_label[i]
-    atom_type = all_atom_type_label[i]
-    atom_name = all_atom_name[i]
-    occupancy = all_occupancy[i]
-    u_ij = all_u_ij[i]
-    kappa = all_kappa[i]
-    pv = all_pv[i]
-    r2 = all_r2[i]
+    cell.atom_position = all_atom_position[i]
+    cell.atom_label = all_atom_label[i]
+    cell.atom_name = all_atom_name[i]
+    cell.occupancy = all_occupancy[i]
+    cell.u_ij = all_u_ij[i]
+    cell.kappa = all_kappa[i]
+    cell.pv = all_pv[i]
+    cell.r2 = all_r2[i]
+    cell.n_atoms = len(cell.atom_name)
     if debug:
         np.set_printoptions(precision=5, suppress=True)
         for i in range(3):
             print(f"Anisotropic u_ij [{i}]")
-            print(f"{u_ij[i, :5, :5]}")
+            print(f"{cell.u_ij[i, :5, :5]}")
+    # return atom_position, atom_label,atom_type, atom_name, u_ij,
+    # occupancy, pv, kappa, r2
+    return
 
-    return atom_position, atom_label,atom_type, atom_name, u_ij, occupancy, pv, kappa, r2
 
-
-def reference_frames(cell_a, cell_b, cell_c, cell_alpha, cell_beta, cell_gamma,
-                     space_group, x_dir_c, z_dir_c, norm_dir_c, debug):
+def reference_frames(xtal, inp):
+# def reference_frames(cell_a, xtal.cell_b, xtal.cell_c, xtal.cell_alpha, xtal.cell_beta, xtal.cell_gamma,
+#                      space_group, inp.x_direction, inp.z_direction, norm_dir_c, debug):
     """
     Produces reciprocal lattice vectors and related parameters
 
     Parameters:
     space_group : str
         Space group name (will be modified in some cases).
-    cell_alpha, cell_beta, cell_gamma : float
+    xtal.cell_alpha, xtal.cell_beta, cell_gamma : float
         Lattice angles in radians.
-    cell_a, cell_b, cell_c : float
+    xtal.cell_a, xtal.cell_b, xtal.cell_c : float
         Lattice lengths in Angstroms.
-    z_dir_c : ndarray
+    inp.incident_beam_direction : ndarray
         Direct lattice vector that defines the beam direction.
-    x_dir_c : ndarray
+    inp.x_direction : ndarray
         Reciprocal lattice vector that defines the x-axis of the diffraction
         pattern.
-    norm_dir_c : ndarray
+    inp.normal : ndarray
         Normal direction in the crystal reference frame.
     """
 
     tiny = 1e-10
 
     # Direct lattice vectors in an orthogonal reference frame, Angstrom units
-    a_vec_o = np.array([cell_a, 0.0, 0.0])  # x_o is // to a
-    b_vec_o = np.array([cell_b * np.cos(cell_gamma),
-                        cell_b * np.sin(cell_gamma), 0.0])
+    a_vec_o = np.array([xtal.cell_a, 0.0, 0.0])  # x_o is // to a
+    b_vec_o = np.array([xtal.cell_b * np.cos(xtal.cell_gamma),
+                        xtal.cell_b * np.sin(xtal.cell_gamma), 0.0])
     c_vec_o = np.array([
-        cell_c * np.cos(cell_beta),
-        cell_c * (np.cos(cell_alpha) - np.cos(cell_beta) *
-                  np.cos(cell_gamma)) / np.sin(cell_gamma),
-        cell_c * np.sqrt(1.0 - np.cos(cell_alpha)**2 -
-                         np.cos(cell_beta)**2 - np.cos(cell_gamma)**2 +
-                         2.0 * np.cos(cell_alpha) *
-                         np.cos(cell_beta) * np.cos(cell_gamma)) /
-        np.sin(cell_gamma)])
+        xtal.cell_c * np.cos(xtal.cell_beta),
+        xtal.cell_c * (np.cos(xtal.cell_alpha) - np.cos(xtal.cell_beta) *
+                  np.cos(xtal.cell_gamma)) / np.sin(xtal.cell_gamma),
+        xtal.cell_c * np.sqrt(1.0 - np.cos(xtal.cell_alpha)**2 -
+                         np.cos(xtal.cell_beta)**2 - np.cos(xtal.cell_gamma)**2 +
+                         2.0 * np.cos(xtal.cell_alpha) *
+                         np.cos(xtal.cell_beta) * np.cos(xtal.cell_gamma)) /
+        np.sin(xtal.cell_gamma)])
 
     # Some checks for rhombohedral cells
     # if diffraction_flag == 0:
@@ -456,48 +449,48 @@ def reference_frames(cell_a, cell_b, cell_c, cell_alpha, cell_beta, cell_gamma,
     cr_vec_o[np.abs(cr_vec_o) < tiny] = 0.0
 
     # Transformation matrix from crystal to orthogonal reference frame
-    t_mat_c2o = np.column_stack((a_vec_o, b_vec_o, c_vec_o))
+    xtal.t_mat_c2o = np.column_stack((a_vec_o, b_vec_o, c_vec_o))
     # And the same for reciprocal frames
     t_mat_cr2or = np.column_stack((ar_vec_o, br_vec_o, cr_vec_o))
 
     # Unit reciprocal lattice vectors in orthogonal frame
-    x_dir_o = t_mat_cr2or @ x_dir_c
+    x_dir_o = t_mat_cr2or @ inp.x_direction
     x_dir_o /= np.linalg.norm(x_dir_o)
-    z_dir_o = t_mat_c2o @ z_dir_c
+    z_dir_o = xtal.t_mat_c2o @ inp.incident_beam_direction
     z_dir_o /= np.linalg.norm(z_dir_o)
     y_dir_o = np.cross(z_dir_o, x_dir_o)
 
     # Transformation matrix from orthogonal to microscope reference frame
-    t_mat_o2m = np.column_stack((x_dir_o, y_dir_o, z_dir_o)).T
+    xtal.t_mat_o2m = np.column_stack((x_dir_o, y_dir_o, z_dir_o)).T
 
     # Unit normal to the specimen in microscope frame
-    norm_dir_m = t_mat_o2m @ t_mat_c2o @ norm_dir_c
-    norm_dir_m /= np.linalg.norm(norm_dir_m)
+    xtal.norm_dir_m = xtal.t_mat_o2m @ xtal.t_mat_c2o @ inp.normal
+    xtal.norm_dir_m /= np.linalg.norm(xtal.norm_dir_m)
 
     # Transform from crystal reference frame to microscope frame
-    a_vec_m = t_mat_o2m @ a_vec_o
-    b_vec_m = t_mat_o2m @ b_vec_o
-    c_vec_m = t_mat_o2m @ c_vec_o
+    xtal.a_vec_m = xtal.t_mat_o2m @ a_vec_o
+    xtal.b_vec_m = xtal.t_mat_o2m @ b_vec_o
+    xtal.c_vec_m = xtal.t_mat_o2m @ c_vec_o
 
     # Reciprocal lattice vectors: microscope frame in 1/Angstrom units
-    ar_vec_m = (2.0*np.pi * np.cross(b_vec_m, c_vec_m) /
-                np.dot(a_vec_m, np.cross(b_vec_m, c_vec_m)))
-    br_vec_m = (2.0*np.pi * np.cross(c_vec_m, a_vec_m) /
-                np.dot(b_vec_m, np.cross(c_vec_m, a_vec_m)))
-    cr_vec_m = (2.0*np.pi * np.cross(a_vec_m, b_vec_m) /
-                np.dot(c_vec_m, np.cross(a_vec_m, b_vec_m)))
+    xtal.ar_vec_m = (2.0*np.pi * np.cross(xtal.b_vec_m, xtal.c_vec_m) /
+                np.dot(xtal.a_vec_m, np.cross(xtal.b_vec_m, xtal.c_vec_m)))
+    xtal.br_vec_m = (2.0*np.pi * np.cross(xtal.c_vec_m, xtal.a_vec_m) /
+                np.dot(xtal.b_vec_m, np.cross(xtal.c_vec_m, xtal.a_vec_m)))
+    xtal.cr_vec_m = (2.0*np.pi * np.cross(xtal.a_vec_m, xtal.b_vec_m) /
+                np.dot(xtal.c_vec_m, np.cross(xtal.a_vec_m, xtal.b_vec_m)))
 
     # Output to check
-    if debug:
+    if inp.debug:
         print(" ")
         np.set_printoptions(precision=5, suppress=True)
-        print(f"a = {cell_a}, b = {cell_b}, c = {cell_c}")
-        print(f"alpha = {cell_alpha*180.0/np.pi:.2f}, beta = {cell_beta*180.0/np.pi:.2f}, gamma = {cell_gamma*180.0/np.pi:.2f}")
-        print(f"X = {x_dir_c} (reciprocal space)")
-        print(f"Z = {z_dir_c} (direct space)")
+        print(f"a = {xtal.cell_a}, b = {xtal.cell_b}, c = {xtal.cell_c}")
+        print(f"alpha = {xtal.cell_alpha*180.0/np.pi:.2f}, beta = {xtal.cell_beta*180.0/np.pi:.2f}, gamma = {xtal.cell_gamma*180.0/np.pi:.2f}")
+        print(f"X = {inp.x_direction} (reciprocal space)")
+        print(f"Z = {inp.incident_beam_direction} (direct space)")
         print(" ")
         print("Transformation crystal to orthogonal (O) frame:")
-        print(t_mat_c2o)
+        print(xtal.t_mat_c2o)
         print(t_mat_cr2or)
         print("O frame:")
         print(f" a = {a_vec_o}")
@@ -512,20 +505,21 @@ def reference_frames(cell_a, cell_b, cell_c, cell_alpha, cell_beta, cell_gamma,
         print(f" Z = {z_dir_o}")
         print(" ")
         print("Transformation orthogonal to microscope frame:")
-        print(t_mat_o2m)
+        print(xtal.t_mat_o2m)
         print("Microscope frame:")
-        print(f" a = {a_vec_m}")
-        print(f" b = {b_vec_m}")
-        print(f" c = {c_vec_m}")
-        print(f" a* = {ar_vec_m}")
-        print(f" b* = {br_vec_m}")
-        print(f" c* = {cr_vec_m}")
-        print(f"Specimen surface normal = {norm_dir_m}")
+        print(f" a = {xtal.a_vec_m}")
+        print(f" b = {xtal.b_vec_m}")
+        print(f" c = {xtal.c_vec_m}")
+        print(f" a* = {xtal.ar_vec_m}")
+        print(f" b* = {xtal.br_vec_m}")
+        print(f" c* = {xtal.cr_vec_m}")
+        print(f"Specimen surface normal = {xtal.norm_dir_m}")
 
-    return a_vec_m, b_vec_m, c_vec_m, ar_vec_m, br_vec_m, cr_vec_m, norm_dir_m, t_mat_o2m, t_mat_c2o
+    # return a_vec_m, b_vec_m, c_vec_m, ar_vec_m, br_vec_m, cr_vec_m, norm_dir_m, t_mat_o2m, t_mat_c2o
+    return
 
 
-def change_origin(space_group, basis_atom_position, basis_wyckoff):
+def change_origin(basis, space_group):
     """
     Change to the preferred origin for a given space group.
 
@@ -533,10 +527,9 @@ def change_origin(space_group, basis_atom_position, basis_wyckoff):
     space_group (int): The space group number.
 
     Returns:
-    basis_atom_position (ndarray): the updated basis atom fractional coords.
+    xtal.basis.basis_atom_position is mutated in place
     """
     change_flag = 0
-    n_basis_atoms = basis_atom_position.shape[0]  # Number of basis atoms
 
     # Only needed for space group #142 (I41/acd) so far
     # will be needed for others with origin choices!!!
@@ -544,32 +537,41 @@ def change_origin(space_group, basis_atom_position, basis_wyckoff):
         # Change from choice 1 (origin -4 at [0,0,0])
         # to choice 2 (origin -1 at [0,0,0])
         # Look for an 'a' site incompatible with choice 2
-        for i in range(n_basis_atoms):
+        for i in range(basis.n_atoms):
             # 'a' is -4 at [000],[0,1/2,1/2],[0,1/2,1/4],[1/2,0,1/4] in 1
             # and [0,1/4,3/8], [0,3/4,5/8], [1/2,1/4,5/8], [1/2,3/4,5/8] in 2
-            if basis_wyckoff[i] == 'a':
+            if basis.basis_wyckoff[i] == 'a':
                 # Check for origin 1
                 # by multiplying by 4 and checking if it is an integer
-                if np.mod(4 * basis_atom_position[i, 2], 1.0) < 1e-10:
+                if np.mod(4 * basis.basis_atom_position[i, 2], 1.0) < 1e-10:
                     change_flag = 1
         # add [0,1/4,3/8] if change_flag is set
         if change_flag == 1:
-            basis_atom_position[:, 1] = np.mod(basis_atom_position[:, 1]
+            basis.atom_position[:, 1] = np.mod(basis.atom_position[:, 1]
                                                + 0.25, 1.0)
-            basis_atom_position[:, 2] = np.mod(basis_atom_position[:, 2]
+            basis.atom_position[:, 2] = np.mod(basis.atom_position[:, 2]
                                                + 0.375, 1.0)
-    return basis_atom_position
+    return
 
 
-def preferred_basis(space_group, basis_atom_position, basis_wyckoff):
+def preferred_basis(basis, space_group):
+    """
+    Change to the preferred origin for a given space group, depending on each
+    atom's wyckoff symbol.  This is necesaary for coordinate refinement to work
+    correctly
 
-    n_basis_atoms = len(basis_atom_position)
-    basis_atom_position = change_origin(space_group, basis_atom_position,
-                                        basis_wyckoff)
+    Parameters:
+    space_group (int): The space group number.
+
+    Returns:
+    basis.atom_position is mutated in place
+    """
+
+    change_origin(basis, space_group)
 
     # Loop over basis atoms
-    for i in range(n_basis_atoms):
-        wyckoff_symbol = basis_wyckoff[i]
+    for i in range(basis.n_atoms):
+        wyckoff_symbol = basis.wyckoff[i]
 
         if space_group == 1:  # P1
             if wyckoff_symbol != 'a':
@@ -696,17 +698,17 @@ def preferred_basis(space_group, basis_atom_position, basis_wyckoff):
                 pass  # no reassignment needed
             elif wyckoff_symbol == 'd':
                 # Change equivalent coordinate [x,-x,z] to [x,x,z]
-                basis_atom_position[i, 1] = basis_atom_position[i, 0]
+                basis.atom_position[i, 1] = basis.atom_position[i, 0]
             elif wyckoff_symbol == 'e':
                 # Change equivalent coordinate [0,x,z] to [x,0,z]
-                if abs(basis_atom_position[i, 0]) < 1e-10:
-                    basis_atom_position[i, 0] = basis_atom_position[i, 1]
-                    basis_atom_position[i, 1] = 0.0
+                if abs(basis.atom_position[i, 0]) < 1e-10:
+                    basis.atom_position[i, 0] = basis.atom_position[i, 1]
+                    basis.atom_position[i, 1] = 0.0
             elif wyckoff_symbol == 'f':
                 # Change equivalent coordinate [1/2,x,z] to [x,1/2,z]
-                if abs(basis_atom_position[i, 0] - 0.5) < 1e-10:
-                    basis_atom_position[i, 0] = basis_atom_position[i, 1]
-                    basis_atom_position[i, 1] = 0.5
+                if abs(basis.atom_position[i, 0] - 0.5) < 1e-10:
+                    basis.atom_position[i, 0] = basis.atom_position[i, 1]
+                    basis.atom_position[i, 1] = 0.5
             else:
                 raise ValueError("Wyckoff Symbol for P 4 m m not recognised")
 # 100
@@ -753,28 +755,28 @@ def preferred_basis(space_group, basis_atom_position, basis_wyckoff):
                 pass  # no reassignment needed
             elif wyckoff_symbol == 'h':
                 # Change to [x,x,0]
-                basis_atom_position[i, 1] = basis_atom_position[i, 0]
+                basis.atom_position[i, 1] = basis.atom_position[i, 0]
             elif wyckoff_symbol == 'i':
                 # Change equivalent coordinate [0,y,0]
-                if abs(basis_atom_position[i, 0]) < 1e-10:
-                    basis_atom_position[i, 0] = basis_atom_position[i, 1]
-                    basis_atom_position[i, 1] = 0.0
+                if abs(basis.atom_position[i, 0]) < 1e-10:
+                    basis.atom_position[i, 0] = basis.atom_position[i, 1]
+                    basis.atom_position[i, 1] = 0.0
             elif wyckoff_symbol == 'j':
                 # Change equivalent coordinate [1/2,y,0]
-                if abs(basis_atom_position[i, 0] - 0.5) < 1e-10:
-                    basis_atom_position[i, 0] = basis_atom_position[i, 1]
-                    basis_atom_position[i, 1] = 0.5
+                if abs(basis.atom_position[i, 0] - 0.5) < 1e-10:
+                    basis.atom_position[i, 0] = basis.atom_position[i, 1]
+                    basis.atom_position[i, 1] = 0.5
             elif wyckoff_symbol == 'k':
                 # Change to [x,1/2+x,1/4]
-                basis_atom_position[i, 1] = basis_atom_position[i, 0] + 0.5
+                basis.atom_position[i, 1] = basis.atom_position[i, 0] + 0.5
             elif wyckoff_symbol == 'm':
                 # Change to [x,x,z]
-                basis_atom_position[i, 1] = basis_atom_position[i, 0]
+                basis.atom_position[i, 1] = basis.atom_position[i, 0]
             elif wyckoff_symbol == 'n':
                 # Change equivalent coordinate [0,y,z]
-                if abs(basis_atom_position[i, 0]) < 1e-10:
-                    basis_atom_position[i, 0] = basis_atom_position[i, 1]
-                    basis_atom_position[i, 1] = 0.0
+                if abs(basis.atom_position[i, 0]) < 1e-10:
+                    basis.atom_position[i, 0] = basis.atom_position[i, 1]
+                    basis.atom_position[i, 1] = 0.0
             else:
                 raise ValueError("Wyckoff Symbol for I4/m m m not recognised")
 # 140
@@ -783,22 +785,22 @@ def preferred_basis(space_group, basis_atom_position, basis_wyckoff):
             if wyckoff_symbol in ['a', 'b', 'c', 'd', 'g']:
                 pass  # no reassignment needed
             elif wyckoff_symbol == 'e':
-                if abs(basis_atom_position[i, 2]) < 1e-10:
-                    if abs(basis_atom_position[i, 0] - 0.25) < 1e-10:
-                        basis_atom_position[i, 0] = 0.25 - basis_atom_position[i, 1]
-                        basis_atom_position[i, 1] = 0.0
-                        basis_atom_position[i, 2] = 0.25
-                    elif abs(basis_atom_position[i, 0] - 0.75) < 1e-10:
-                        basis_atom_position[i, 0] = basis_atom_position[i, 1] - 0.25
-                        basis_atom_position[i, 1] = 0.0
-                        basis_atom_position[i, 2] = 0.25
+                if abs(basis.atom_position[i, 2]) < 1e-10:
+                    if abs(basis.atom_position[i, 0] - 0.25) < 1e-10:
+                        basis.atom_position[i, 0] = 0.25 - basis.atom_position[i, 1]
+                        basis.atom_position[i, 1] = 0.0
+                        basis.atom_position[i, 2] = 0.25
+                    elif abs(basis.atom_position[i, 0] - 0.75) < 1e-10:
+                        basis.atom_position[i, 0] = basis.atom_position[i, 1] - 0.25
+                        basis.atom_position[i, 1] = 0.0
+                        basis.atom_position[i, 2] = 0.25
             elif wyckoff_symbol == 'f':
-                if abs(basis_atom_position[i, 2] - 0.375) < 1e-10:
-                    basis_atom_position[i, 1] = basis_atom_position[i, 0] + 0.25
-                    basis_atom_position[i, 2] = 0.125
-                elif abs(basis_atom_position[i, 2] - 0.625) < 1e-10:
-                    basis_atom_position[i, 1] = basis_atom_position[i, 0] + 0.25
-                    basis_atom_position[i, 2] = 0.125
+                if abs(basis.atom_position[i, 2] - 0.375) < 1e-10:
+                    basis.atom_position[i, 1] = basis.atom_position[i, 0] + 0.25
+                    basis.atom_position[i, 2] = 0.125
+                elif abs(basis.atom_position[i, 2] - 0.625) < 1e-10:
+                    basis.atom_position[i, 1] = basis.atom_position[i, 0] + 0.25
+                    basis.atom_position[i, 2] = 0.125
             else:
                 raise ValueError("Wyckoff Symbol for 142, I41/a c d not recognised")
 # 143
@@ -857,17 +859,17 @@ def preferred_basis(space_group, basis_atom_position, basis_wyckoff):
             if wyckoff_symbol in ['a', 'd', 'g']:
                 pass  # no reassignment needed
             elif wyckoff_symbol == 'b':
-                if abs(basis_atom_position[i, 0]) < 1e-10:
-                    basis_atom_position[i, 0] = basis_atom_position[i, 1]
-                    basis_atom_position[i, 1] = 0.0
+                if abs(basis.atom_position[i, 0]) < 1e-10:
+                    basis.atom_position[i, 0] = basis.atom_position[i, 1]
+                    basis.atom_position[i, 1] = 0.0
             elif wyckoff_symbol == 'c':
-                basis_atom_position[i, 1] = basis_atom_position[i, 0]
+                basis.atom_position[i, 1] = basis.atom_position[i, 0]
             elif wyckoff_symbol == 'e':
-                if abs(basis_atom_position[i, 0] - 0.5) < 1e-10:
-                    basis_atom_position[i, 0] = basis_atom_position[i, 1]
-                    basis_atom_position[i, 1] = 0.5
+                if abs(basis.atom_position[i, 0] - 0.5) < 1e-10:
+                    basis.atom_position[i, 0] = basis.atom_position[i, 1]
+                    basis.atom_position[i, 1] = 0.5
             elif wyckoff_symbol == 'f':
-                basis_atom_position[i, 1] = basis_atom_position[i, 0]
+                basis.atom_position[i, 1] = basis.atom_position[i, 0]
             else:
                 raise ValueError("Wyckoff Symbol for P6mm not recognised")
 # 192
@@ -877,29 +879,29 @@ def preferred_basis(space_group, basis_atom_position, basis_wyckoff):
                                   'f', 'g', 'h', 'm', 'r']:
                 pass  # no reassignment needed
             elif wyckoff_symbol == 'i':
-                basis_atom_position[i, 1] = basis_atom_position[i, 0]
+                basis.atom_position[i, 1] = basis.atom_position[i, 0]
             elif wyckoff_symbol == 'j':
-                if abs(basis_atom_position[i, 0]) < 1e-10:
-                    basis_atom_position[i, 0] = basis_atom_position[i, 1]
-                    basis_atom_position[i, 1] = 0.0
+                if abs(basis.atom_position[i, 0]) < 1e-10:
+                    basis.atom_position[i, 0] = basis.atom_position[i, 1]
+                    basis.atom_position[i, 1] = 0.0
             elif wyckoff_symbol == 'k':
-                if abs(basis_atom_position[i, 0] - 0.5) < 1e-10:
-                    basis_atom_position[i, 0] = basis_atom_position[i, 1]
-                    basis_atom_position[i, 1] = 0.5
+                if abs(basis.atom_position[i, 0] - 0.5) < 1e-10:
+                    basis.atom_position[i, 0] = basis.atom_position[i, 1]
+                    basis.atom_position[i, 1] = 0.5
             elif wyckoff_symbol == 'l':
-                basis_atom_position[i, 1] = basis_atom_position[i, 0]
+                basis.atom_position[i, 1] = basis.atom_position[i, 0]
             elif wyckoff_symbol == 'n':
-                basis_atom_position[i, 1] = basis_atom_position[i, 0]
+                basis.atom_position[i, 1] = basis.atom_position[i, 0]
             elif wyckoff_symbol == 'o':
-                if abs(basis_atom_position[i, 0]) < 1e-10:
-                    basis_atom_position[i, 0] = basis_atom_position[i, 1]
-                    basis_atom_position[i, 1] = 0.0
+                if abs(basis.atom_position[i, 0]) < 1e-10:
+                    basis.atom_position[i, 0] = basis.atom_position[i, 1]
+                    basis.atom_position[i, 1] = 0.0
             elif wyckoff_symbol == 'p':
-                if abs(basis_atom_position[i, 0] - 0.5) < 1e-10:
-                    basis_atom_position[i, 0] = basis_atom_position[i, 1]
-                    basis_atom_position[i, 1] = 0.5
+                if abs(basis.atom_position[i, 0] - 0.5) < 1e-10:
+                    basis.atom_position[i, 0] = basis.atom_position[i, 1]
+                    basis.atom_position[i, 1] = 0.5
             elif wyckoff_symbol == 'q':
-                basis_atom_position[i, 1] = basis_atom_position[i, 0]
+                basis.atom_position[i, 1] = basis.atom_position[i, 0]
             else:
                 raise ValueError("Wyckoff Symbol for P6/mmm not recognised")
 # 195
@@ -932,28 +934,28 @@ def preferred_basis(space_group, basis_atom_position, basis_wyckoff):
             if wyckoff_symbol in ['a', 'b', 'c', 'd', 'e', 'f', 'm']:
                 pass  # no reassignment needed
             elif wyckoff_symbol == 'g':
-                basis_atom_position[i, 1] = basis_atom_position[i, 0]
-                basis_atom_position[i, 2] = 0.0
+                basis.atom_position[i, 1] = basis.atom_position[i, 0]
+                basis.atom_position[i, 2] = 0.0
             elif wyckoff_symbol == 'h':
-                if abs(basis_atom_position[i, 0]) < 1e-10:
-                    basis_atom_position[i, 0] = basis_atom_position[i, 1]
-                    basis_atom_position[i, 1] = 0.0
-                basis_atom_position[i, 2] = 0.0
+                if abs(basis.atom_position[i, 0]) < 1e-10:
+                    basis.atom_position[i, 0] = basis.atom_position[i, 1]
+                    basis.atom_position[i, 1] = 0.0
+                basis.atom_position[i, 2] = 0.0
             elif wyckoff_symbol == 'i':
-                if abs(basis_atom_position[i, 0] - 0.5) < 1e-10:
-                    basis_atom_position[i, 0] = basis_atom_position[i, 1]
-                    basis_atom_position[i, 1] = 0.5
-                basis_atom_position[i, 2] = 0.0
+                if abs(basis.atom_position[i, 0] - 0.5) < 1e-10:
+                    basis.atom_position[i, 0] = basis.atom_position[i, 1]
+                    basis.atom_position[i, 1] = 0.5
+                basis.atom_position[i, 2] = 0.0
             elif wyckoff_symbol == 'j':
-                basis_atom_position[i, 1] = basis_atom_position[i, 0]
+                basis.atom_position[i, 1] = basis.atom_position[i, 0]
             elif wyckoff_symbol == 'k':
-                if abs(basis_atom_position[i, 0]) < 1e-10:
-                    basis_atom_position[i, 0] = basis_atom_position[i, 1]
-                    basis_atom_position[i, 1] = 0.0
+                if abs(basis.atom_position[i, 0]) < 1e-10:
+                    basis.atom_position[i, 0] = basis.atom_position[i, 1]
+                    basis.atom_position[i, 1] = 0.0
             elif wyckoff_symbol == 'l':
-                if abs(basis_atom_position[i, 0] - 0.5) < 1e-10:
-                    basis_atom_position[i, 0] = basis_atom_position[i, 1]
-                    basis_atom_position[i, 1] = 0.5
+                if abs(basis.atom_position[i, 0] - 0.5) < 1e-10:
+                    basis.atom_position[i, 0] = basis.atom_position[i, 1]
+                    basis.atom_position[i, 1] = 0.5
             else:
                 raise ValueError("Wyckoff Symbol for Pm-3m not recognised")
 # 222
@@ -973,50 +975,51 @@ def preferred_basis(space_group, basis_atom_position, basis_wyckoff):
         else:
             raise ValueError("Space group not implemented")
 
-        return basis_atom_position
+        return
 
 
-def hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k, lattice_type,
-             min_reflection_pool, min_strong_beams, g_limit, input_hkls,
-             electron_wave_vector_magnitude):
+def hkl_make(xtal, inp, hkl, bloch):
+# def hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k, lattice_type,
+#              min_reflection_pool, min_strong_beams, inp.g_limit, input_hkls,
+#              electron_wave_vector_magnitude):
     """
     Generates Miller indices that satisfy the selection rules for a given
     lattice type and are close to the Bragg condition.
 
     Parameters:
-    ar_vec_m (ndarray): Reciprocal lattice vector a
-    br_vec_m (ndarray): Reciprocal lattice vector b
-    cr_vec_m (ndarray): Reciprocal lattice vector c
-    lattice_type (str): Lattice type (from space group name)
-    min_strong_beams (int): Minimum number of strong beams required
-    g_limit (float): Upper limit for g-vector magnitude
-    electron_wave_vector_magnitude (float):
+    xtal.ar_vec_m (ndarray): Reciprocal lattice vector a
+    xtal.br_vec_m (ndarray): Reciprocal lattice vector b
+    xtal.cr_vec_m (ndarray): Reciprocal lattice vector c
+    xtal.lattice_type (str): Lattice type (from space group name)
+    inp.min_strong_beams (int): Minimum number of strong beams required
+    inp.g_limit (float): Upper limit for g-vector magnitude
+    bloch.big_k (ndarray): vector K along Z in microscope frame (=[001])
+    bloch.big_k_mag (float): magnitude of K
 
     Returns:
-    hkl (ndarray): Miller indices close to the Bragg condition
+    hkl_indices (ndarray): Miller indices close to the Bragg condition
     g_pool (ndarray): in the microscope reference frame
     g_magnitudes (ndarray): their magnitudes
     """
-
     # Calculate the magnitude of reciprocal lattice basis vectors
-    ar_mag = np.linalg.norm(ar_vec_m)
-    br_mag = np.linalg.norm(br_vec_m)
-    cr_mag = np.linalg.norm(cr_vec_m)
+    ar_mag = np.linalg.norm(xtal.ar_vec_m)
+    br_mag = np.linalg.norm(xtal.br_vec_m)
+    cr_mag = np.linalg.norm(xtal.cr_vec_m)
 
     # Determine shell size (smallest basis vector)
     shell = min(ar_mag, br_mag, cr_mag)
 
-    if g_limit < 1e-10:
+    if inp.g_limit < 1e-10:
         # Use default value and set min_reflection_pool as cutoff
-        g_limit = 10.0 * 2 * np.pi
+        inp.g_limit = 10.0 * 2 * np.pi
     else:
-        # Make min_reflection_pool large and use g_limit as the cutoff
-        min_reflection_pool = 6666
+        # Make min_reflection_pool large and use inp.g_limit as the cutoff
+        inp.min_reflection_pool = 6666
 
-    # Maximum indices to consider based on g_limit
-    max_h = int(np.ceil(g_limit / ar_mag))
-    max_k = int(np.ceil(g_limit / br_mag))
-    max_l = int(np.ceil(g_limit / cr_mag))
+    # Maximum indices to consider based on inp.inp.g_limit
+    max_h = int(np.ceil(inp.g_limit / ar_mag))
+    max_k = int(np.ceil(inp.g_limit / br_mag))
+    max_l = int(np.ceil(inp.g_limit / cr_mag))
 
     # Generate grid of h, k, l values
     h_range = np.arange(-max_h, max_h + 1)
@@ -1026,30 +1029,30 @@ def hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k, lattice_type,
     hkl_pool = np.stack((h_.ravel(), k_.ravel(), l_.ravel()), axis=-1)
 
     # Apply selection rules using a mask
-    if lattice_type == "F":
+    if xtal.lattice_type == "F":
         mask = (hkl_pool[:, 0] + hkl_pool[:, 1]) % 2 == 0
         mask &= (hkl_pool[:, 1] + hkl_pool[:, 2]) % 2 == 0
         mask &= (hkl_pool[:, 2] + hkl_pool[:, 0]) % 2 == 0
-    elif lattice_type == "I":
+    elif xtal.lattice_type == "I":
         mask = (hkl_pool.sum(axis=1) % 2) == 0
-    elif lattice_type == "A":
+    elif xtal.lattice_type == "A":
         mask = (hkl_pool[:, 1] + hkl_pool[:, 2]) % 2 == 0
-    elif lattice_type == "B":
+    elif xtal.lattice_type == "B":
         mask = (hkl_pool[:, 0] + hkl_pool[:, 2]) % 2 == 0
-    elif lattice_type == "C":
+    elif xtal.lattice_type == "C":
         mask = (hkl_pool[:, 0] + hkl_pool[:, 1]) % 2 == 0
-    elif lattice_type == "R":
+    elif xtal.lattice_type == "R":
         mask = (hkl_pool[:, 0] - hkl_pool[:, 1] + hkl_pool[:, 2]) % 3 == 0
-    elif lattice_type == "V":
+    elif xtal.lattice_type == "V":
         mask = (-hkl_pool[:, 0] + hkl_pool[:, 1] + hkl_pool[:, 2]) % 3 == 0
-    elif lattice_type == "P":
+    elif xtal.lattice_type == "P":
         mask = np.ones(len(hkl_pool), dtype=bool)
     else:
         raise ValueError("Space group not recognised")
     hkl_pool = hkl_pool[mask]
 
     # Calculate g-vectors and their magnitudes
-    g_pool = hkl_pool @ np.array([ar_vec_m, br_vec_m, cr_vec_m])
+    g_pool = hkl_pool @ np.array([xtal.ar_vec_m, xtal.br_vec_m, xtal.cr_vec_m])
     g_mag = np.linalg.norm(g_pool, axis=1) + 1.0e-12
     sorter = np.argsort(g_mag)
     g_pool = g_pool[sorter]
@@ -1057,51 +1060,56 @@ def hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k, lattice_type,
     g_mag = np.linalg.norm(g_pool, axis=1) + 1.0e-12
 
     # Calculate deviation from Bragg condition
-    g_plus_k = g_pool + big_k
-    deviations = np.abs(electron_wave_vector_magnitude -
+    g_plus_k = g_pool + bloch.big_k
+    deviations = np.abs(bloch.big_k_mag -
                         np.linalg.norm(g_plus_k, axis=1)) / g_mag
     deviations[0] = 0  # 000 beam
-    
+
     # we choose reflections by increasing the radius of reciprocal space
     # explored until we have enough
-    # (limited by g_limit or min_reflection_pool, whichever is smallest)
+    # (limited by inp.g_limit or min_reflection_pool, whichever is smallest)
 
     # first shell
     lnd = 1.0  # Number of the shell
     current_g_limit = shell*lnd
     mask = (g_mag <= current_g_limit) & (deviations < 0.08)
-    hkl = hkl_pool[mask]
+    hkl_indices = hkl_pool[mask]
     # expand until we have enough
-    while (len(hkl) < min_reflection_pool) and (lnd * shell < g_limit):
+    while (len(hkl_indices) < inp.min_reflection_pool) and (lnd * shell < inp.g_limit):
         lnd += 1.0
         current_g_limit = shell*lnd
         mask = (g_mag <= current_g_limit) & (deviations < 0.08)
-        hkl = hkl_pool[mask]
-    g_pool = g_pool[mask]
-    g_mag = g_mag[mask]
+        hkl_indices = hkl_pool[mask]
 
     # Check if enough beams are present
-    if len(hkl) < min_strong_beams:
+    if len(hkl_indices) < inp.min_strong_beams:
         raise ValueError("Beam pool is too small, please increase g_limit!")
 
     # Check if required output HKLs are in the hkl list
-    g_output = ([])
-    for g in input_hkls:
-        comparison = np.all(hkl == g, axis=1)
+    hkl_output = ([])
+    for g in hkl.input_hkls:
+        comparison = np.all(hkl_indices == g, axis=1)
         if not np.any(comparison):
             print(f"Input hkl not found: {g}")
         idx = np.where(comparison)
         if len(idx[0]) > 0:
-            g_output.append(idx[0][0])
-    g_output = np.append([0],np.array(g_output))
+            hkl_output.append(idx[0][0])
+    hkl_output = np.append([0], np.array(hkl_output))
 
-    return hkl, g_pool, g_mag, np.array(g_output)
+    bloch.g_pool = g_pool[mask]
+    bloch.g_pool_mag = g_mag[mask]
+    bloch.hkl_output = np.array(hkl_output)
+    bloch.n_hkl = len(bloch.g_pool)
+
+    # return hkl, g_pool, g_mag, np.array(hkl_output)
+    return
 
 
-def Fg_matrix(n_hkl, scatter_factor_method, basis_atom_label, atom_label,
-              atom_coordinate, atomic_number, occupancy, u_ij, g_matrix,
-              absorption_method, absorption_per, electron_velocity, kappas, pv,
-              r2, debug):
+def Fg_matrix(xtal, inp, cell, bloch):
+# def Fg_matrix(n_hkl, scatter_factor_method, basis_atom_label, atom_label,
+#               atom_coordinate, atomic_number, occupancy, u_ij, g_matrix,
+#               absorption_method, absorption_per, electron_velocity, kappas, pv,
+#               r2, debug):
     """
     Parameters
     ----------
@@ -1113,7 +1121,7 @@ def Fg_matrix(n_hkl, scatter_factor_method, basis_atom_label, atom_label,
     atomic_number : int, size [n_cell], number of atoms in the cell
     occupancy : float, size [n_cell]
     u_ij : float array of ADPs, size [n_cell,3,3]
-    g_matrix : array of g-vectors in the microscope frame, size [n_hkl,n_hkl]
+    bloch.g_matrix : array of g-vectors in the microscope frame, size [n_hkl,n_hkl]
     absorption_method : int, flag for absorption calculation
     absorption_per : float, % absorption, if that method is used
     electron_velocity : float
@@ -1129,56 +1137,57 @@ def Fg_matrix(n_hkl, scatter_factor_method, basis_atom_label, atom_label,
     -------
     Fg_matrix : size [n_hkl,n_hkl]
     """
-    n_basis = len(basis_atom_label)
-    n_cell = len(atom_label)
-    # calculate g.r for all g-vectors and atom posns [n_hkl, n_hkl, n_cell]
-    g_dot_r = np.einsum('ijk,lk->ijl', g_matrix, atom_coordinate)
-    # exp(i g.r) [n_hkl, n_hkl, n_cell]
+    # n_basis = len(basis_atom_label)
+    # n_cell = len(atom_label)
+    # calculate g.r for all g-vectors and atom posns [n_hkl, n_hkl, cell.n_atoms]
+    g_dot_r = np.einsum('ijk,lk->ijl', bloch.g_matrix, cell.atom_coordinate)
+    # exp(i g.r) [n_hkl, n_hkl, cell.n_atoms]
     phase = np.exp(-1j * g_dot_r)
 
     # NB scattering factor methods accept and return 2D[n_hkl, n_hkl] array of
     # g magnitudes but only one atom type.
 
     # g-vector magnitudes, size [n_hkl, n_hkl]
-    g_magnitude = np.sqrt(np.sum(g_matrix**2, axis=2))
+    # g_magnitude = np.sqrt(np.sum(g_matrix**2, axis=2))
+    # replaced by bloch.g_pool_mag
 
-    # anisotropic DP U*g[i]*g[j], size [n_cell, n_hkl, n_hkl]
+    # anisotropic DP U*g[i]*g[j], size [cell.n_atoms, n_hkl, n_hkl]
     Ugg = np.einsum('ijm, a mn, ij n -> aij', g_matrix, u_ij, g_matrix)
-    # equivalent anisotropic B, size [n_cell, n_hkl, n_hkl]
-    B_aniso = np.divide(Ugg, np.square(g_magnitude), out=np.zeros_like(Ugg),
-                        where=(g_magnitude != 0)) * 8 * np.pi**2
+    # equivalent anisotropic B, size [cell.n_atoms, n_hkl, n_hkl]
+    B_aniso = np.divide(Ugg, np.square(bloch.g_pool_mag), out=np.zeros_like(Ugg),
+                        where=(bloch.g_pool_mag != 0)) * 8 * np.pi**2
     if debug:
         np.set_printoptions(precision=3, suppress=True)
         print("g_magnitudes")
-        print(g_magnitude[:5, :5])
+        print(bloch.g_pool_mag[:5, :5])
         print("  ")
-        for i in range(n_basis):
+        for i in range(basis.n_atoms):
             print(f"Anisotropic u_ij*g[i]*g[j] [{i}]")
             print(f"{Ugg[i, :5, :5]}")
         print("  ")
-        for i in range(n_basis):
+        for i in range(basis.n_atoms):
             print(f"Anisotropic B[{i}]")
             print(f"{B_aniso[i, :5, :5]}")
         print("  ")
 
     # scattering factors, atom by atom in the basis and applied to cell
-    f_g_basis = np.zeros([n_basis, n_hkl, n_hkl], dtype=np.complex128)
-    f_g_basis_prime = np.zeros([n_basis, n_hkl, n_hkl], dtype=np.complex128)
-    f_g = np.zeros([n_cell, n_hkl, n_hkl], dtype=np.complex128)
-    f_g_prime = np.zeros([n_cell, n_hkl, n_hkl], dtype=np.complex128)
-    for i in range(n_basis):
+    f_g_basis = np.zeros([basis.n_atoms, n_hkl, n_hkl], dtype=np.complex128)
+    f_g_basis_prime = np.zeros([basis.n_atoms, n_hkl, n_hkl], dtype=np.complex128)
+    f_g = np.zeros([cell.n_atoms, n_hkl, n_hkl], dtype=np.complex128)
+    f_g_prime = np.zeros([cell.n_atoms, n_hkl, n_hkl], dtype=np.complex128)
+    for i in range(basis.n_atoms):
         # get the scattering factor for the basis f_g_basis
         if scatter_factor_method == 0:
-            f_g_basis[i, :, :] = f_kirkland(atomic_number[i], g_magnitude)
+            f_g_basis[i, :, :] = f_kirkland(atomic_number[i], bloch.g_pool_mag)
         elif scatter_factor_method == 1:
-            f_g_basis[i, :, :] = f_lobato(atomic_number[i], g_magnitude)
+            f_g_basis[i, :, :] = f_lobato(atomic_number[i], bloch.g_pool_mag)
         elif scatter_factor_method == 2:
-            f_g_basis[i, :, :] = f_peng(atomic_number[i], g_magnitude)
+            f_g_basis[i, :, :] = f_peng(atomic_number[i], bloch.g_pool_mag)
         elif scatter_factor_method == 3:
-            f_g_basis[i, :, :] = f_doyle_turner(atomic_number[i], g_magnitude)
+            f_g_basis[i, :, :] = f_doyle_turner(atomic_number[i], bloch.g_pool_mag)
         elif scatter_factor_method == 4:
-            print(f"Calculating kappa factor for atom {i+1}/{n_cell}")
-            f_g_basis[i, :, :] = kappa_factors(g_magnitude, i, r2[i])
+            print(f"Calculating kappa factor for atom {i+1}/{cell.n_atoms}")
+            f_g_basis[i, :, :] = kappa_factors(bloch.g_pool_mag, i, r2[i])
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
 
@@ -1188,7 +1197,7 @@ def Fg_matrix(n_hkl, scatter_factor_method, basis_atom_label, atom_label,
         elif absorption_method == 1:  # proportional model
             f_g_basis_prime[i, :, :] = 1j * f_g * absorption_per/100.0
         elif absorption_method == 2:  # Bird & King, Thomas (Acta Cryst 2023)
-            f_g_basis_prime[i, :, :] = 1j * f_thomas(g_magnitude, B_aniso[i, :, :],
+            f_g_basis_prime[i, :, :] = 1j * f_thomas(bloch.g_pool_mag, B_aniso[i, :, :],
                                       atomic_number[i], electron_velocity)
         if debug:
             print(f"f_g_basis [{i}]")
@@ -1198,50 +1207,51 @@ def Fg_matrix(n_hkl, scatter_factor_method, basis_atom_label, atom_label,
             print(f"{f_g_basis_prime[i, :5, :5]}")
 
         # put into the unit cell
-        for j in range(n_cell):
+        for j in range(cell.n_atoms):
             if atom_label[j] == basis_atom_label[i]:
                 f_g[j, :, :] = f_g_basis[i, :, :]
 
     # now make up the full matrix
     Fg_matrix = np.zeros([n_hkl, n_hkl], dtype=np.complex128)
-    for i in range(n_cell):
+    for i in range(cell.n_atoms):
         # The Structure Factor Equation
         Fg_matrix = Fg_matrix+((f_g[i, :, :] + f_g_prime[i, :, :])
                                * phase[:, :, i]
                                * occupancy[i]
-                               # np.exp(-B_aniso[i, :, :] * (g_magnitude**2) /
+                               # np.exp(-B_aniso[i, :, :] * (bloch.g_pool_mag**2) /
                                # (16*np.pi**2)))
                                * np.exp(-Ugg[i, :, :] / 2))
 
     return Fg_matrix
 
 
-def deviation_parameter(convergence_angle, image_radius, big_k_mag, g_pool,
-                        g_pool_mag):
+def deviation_parameter(inp, bloch):
+# def deviation_parameter(convergence_angle, image_radius, big_k_mag, g_pool,
+#                         g_pool_mag):
     # for LACBED pattern of size [m, m] and a set of g-vectors [n, 3]
     # this returns a 3D array of deviation parameters [m, m, n]
 
     # resolution in k-space
-    delta_K = 2.0*np.pi * convergence_angle/image_radius
+    delta_K = 2.0*np.pi * inp.convergence_angle/inp.image_radius
 
     # pixel grids
-    x_pix = np.arange(-image_radius+.5, image_radius+.5)
-    y_pix = np.arange(-image_radius+.5, image_radius+.5)
+    x_pix = np.arange(-inp.image_radius+.5, inp.image_radius+.5)
+    y_pix = np.arange(-inp.image_radius+.5, inp.image_radius+.5)
     # k_x and k_y
     k_x, k_y = np.meshgrid(x_pix * delta_K, y_pix * delta_K)
 
     # k-vector for all pixels k'
     k_z = np.sqrt(big_k_mag**2 - k_x**2 - k_y**2)
-    tilted_k = np.stack([k_x, k_y, k_z], axis=-1)
+    bloch.tilted_k = np.stack([k_x, k_y, k_z], axis=-1)
 
     # g excuding g_pool[0], which is always [000]
-    g_pool1 = g_pool[1:]  # shape: (n_hkl-1, 3)
-    g_pool_mag1 = g_pool_mag[1:]  # shape: (n_hkl-1)
+    g_pool1 = bloch.g_pool[1:]  # shape: (n_hkl-1, 3)
+    g_pool_mag1 = bloch.g_pool_mag[1:]  # shape: (n_hkl-1)
     # Components of k_0
     k_0_0 = -g_pool_mag1 / 2
     k_0_2 = np.sqrt(big_k_mag**2 - k_0_0**2)
     # Components of k_prime
-    k_prime_0 = np.einsum('ijk,lk->ijl', tilted_k, g_pool1) / g_pool_mag1
+    k_prime_0 = np.einsum('ijk,lk->ijl', bloch.tilted_k, g_pool1) / g_pool_mag1
     k_prime_2 = np.sqrt(big_k_mag**2 - k_prime_0**2)
 
     k_0_dot_k_prime = (k_0_0[None, None, :] * k_prime_0 +
@@ -1252,9 +1262,10 @@ def deviation_parameter(convergence_angle, image_radius, big_k_mag, g_pool,
 
     # add in 000
     s_0 = np.expand_dims(np.zeros_like(k_x), axis=-1)
-    s_g = np.concatenate([s_0, s_g], axis=-1)  # add 000
+    bloch.s_g = np.concatenate([s_0, s_g], axis=-1)  # add 000
 
-    return s_g, tilted_k
+    # return s_g, tilted_k
+    return
 
 
 def strong_beams(s_g_pix, ug_matrix, min_strong_beams):
@@ -1287,7 +1298,7 @@ def strong_beams(s_g_pix, ug_matrix, min_strong_beams):
     return np.flatnonzero(strong)
 
 
-def bloch(g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl,
+def blochwave(g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl,
           big_k_mag, g_dot_norm, k_dot_n_pix, debug):
 
     # strong_beam_indices gives the index of a strong beam in the beam pool
@@ -1338,14 +1349,15 @@ def bloch(g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl,
     return n_beams, strong_beam_indices, gamma, eigenvecs, inv_eigenvecs
 
 
-def wave_functions(g_output, s_g_pix, ug_matrix, min_strong_beams,
-                   n_hkl, big_k_mag, g_dot_norm,
-                   k_dot_n_pix, thickness, debug):
+def wave_functions(bloch, inp):
+# def wave_functions(g_output, s_g_pix, ug_matrix, min_strong_beams,
+#                    n_hkl, big_k_mag, g_dot_norm,
+#                    k_dot_n_pix, thickness, debug):
     # calculates wave functions for a given thickness by calling the bloch
     # subroutine to get the eigenvector matrices
     # and evaluating for a range of thicknesses
 
-    n_beams, strong_beam_indices, gamma, eigenvecs, inv_eigenvecs = bloch(
+    n_beams, strong_beam_indices, gamma, eigenvecs, inv_eigenvecs = blochwave(
         g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl, big_k_mag,
         g_dot_norm, k_dot_n_pix, debug)
     # calculate intensities
@@ -1480,13 +1492,13 @@ def orb(Z):
     return orb
 
 
-def f_kirkland(z, g_magnitude):
+def f_kirkland(z, bloch.g_pool_mag):
     """
     calculates atomic scattering factor using the Kirkland model.
     From Appendix C of "Advanced Computing in Electron Microscopy", 2nd ed.
 
     Parameters:
-    g_magnitude (ndarray): Magnitude of the scattering vector in 1/Å.
+    bloch.g_pool_mag (ndarray): Magnitude of the scattering vector in 1/Å.
     (NB exp(-i*g.r), physics negative convention)
     z (int): Atomic number, used to index scattering factors.
     kirkland (np.ndarray): Array of scattering factors from pylix_dicts
@@ -1494,7 +1506,7 @@ def f_kirkland(z, g_magnitude):
     Returns:
     ndarray: The calculated Kirkland scattering factor.
     """
-    q = g_magnitude / (2*np.pi)
+    q = bloch.g_pool_mag / (2*np.pi)
     # coefficients in shape (3, 1, 1) for broadcasting
     a = fu.kirkland[z-1, 0:6:2].reshape(-1, 1, 1)
     b = fu.kirkland[z-1, 1:7:2].reshape(-1, 1, 1)
@@ -1505,12 +1517,12 @@ def f_kirkland(z, g_magnitude):
     return f_g
 
 
-def f_doyle_turner(z, g_magnitude):
+def f_doyle_turner(z, bloch.g_pool_mag):
     """
     calculates atomic scattering factor using the Doyle & Turner model.
 
     Parameters:
-    g_magnitude (ndarray): Magnitude of the scattering vector in 1/Å.
+    bloch.g_pool_mag (ndarray): Magnitude of the scattering vector in 1/Å.
     (NB exp(-i*g.r), physics negative convention)
     z (int): Atomic number, used to index scattering factors.
     kirkland (np.ndarray): Array of scattering factors from pylix_dicts
@@ -1519,7 +1531,7 @@ def f_doyle_turner(z, g_magnitude):
     ndarray: The calculated Doyle & Turner scattering factor.
     """
     # Convert g to s
-    s = g_magnitude / (2*np.pi)
+    s = bloch.g_pool_mag / (2*np.pi)
 
     a = fu.doyle_turner[z-1, 0:8:2].reshape(-1, 1, 1)
     b = fu.doyle_turner[z-1, 1:8:2].reshape(-1, 1, 1)
@@ -1529,12 +1541,12 @@ def f_doyle_turner(z, g_magnitude):
     return f_g
 
 
-def f_lobato(z, g_magnitude):
+def f_lobato(z, bloch.g_pool_mag):
     """
     calculates atomic scattering factor using the Lobato model.
     Lobato & van Dyck Acta Cryst A70, 636 (2014)
     Parameters:
-    g_magnitude (ndarray): Magnitude of the scattering vector in 1/Å.
+    bloch.g_pool_mag (ndarray): Magnitude of the scattering vector in 1/Å.
     (NB exp(-i*g.r), physics negative convention)
     z (int): Atomic number, used to index scattering factors.
     lobato (np.ndarray): Array of scattering factors from pylix_dicts
@@ -1543,7 +1555,7 @@ def f_lobato(z, g_magnitude):
     ndarray: The calculated Lobato scattering factor.
     """
     # Convert physics to crystallography convention
-    g = g_magnitude / (2*np.pi)
+    g = bloch.g_pool_mag / (2*np.pi)
 
     a = fu.lobato[z-1, 0:5].reshape(-1, 1, 1)
     b = fu.lobato[z-1, 5:10].reshape(-1, 1, 1)
@@ -1553,12 +1565,12 @@ def f_lobato(z, g_magnitude):
     return f_g
 
 
-def f_peng(z, g_magnitude):
+def f_peng(z, bloch.g_pool_mag):
     """
     calculates atomic scattering factor using the Peng model.
     Peng, Micron 30, 625 (1999)
     Parameters:
-    g_magnitude (ndarray): Magnitude of the scattering vector in 1/Å.
+    bloch.g_pool_mag (ndarray): Magnitude of the scattering vector in 1/Å.
     (NB exp(-i*g.r), physics negative convention)
     z (int): Atomic number, used to index scattering factors.
     peng (np.ndarray): Array of scattering factors from pylix_dicts

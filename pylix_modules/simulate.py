@@ -25,30 +25,35 @@ import time
 import os
 from pylix_modules import pylix as px
 from pylix_modules import pylix_dicts as fu
+from pylix_modules import pylix_class as pc
 
 
-def simulate(v):
+def simulate(xtal, basis, inp, hkl, rc):
+
+    cell = pc.Cell()  # all atom variables
+    bloch = pc.Bloch()  # variables in Bloch wave calculation
+
     # some setup calculations
     # Electron velocity in metres per second
     electron_velocity = (c * np.sqrt(1.0 - ((m_e * c**2) /
-                         (e * v.accelerating_voltage_kv*1000.0 +
+                         (e * inp.accelerating_voltage_kv*1000.0 +
                           m_e * c**2))**2))
     # Electron wavelength in Angstroms
     electron_wavelength = h / (
-        np.sqrt(2.0 * m_e * e * v.accelerating_voltage_kv*1000.0) *
-        np.sqrt(1.0 + (e * v.accelerating_voltage_kv*1000.0) /
+        np.sqrt(2.0 * m_e * e * inp.accelerating_voltage_kv*1000.0) *
+        np.sqrt(1.0 + (e * inp.accelerating_voltage_kv*1000.0) /
                 (2.0 * m_e * c**2))) / angstrom
     # Wavevector magnitude k
     electron_wave_vector_magnitude = 2.0 * np.pi / electron_wavelength
     # Relativistic correction
     relativistic_correction = 1.0 / np.sqrt(1.0 - (electron_velocity / c)**2)
     # Cell volume
-    cell_volume = (v.cell_a*v.cell_b*v.cell_c
-                   * np.sqrt(1.-np.cos(v.cell_alpha)**2
-                             - np.cos(v.cell_beta)**2
-                             - np.cos(v.cell_gamma)**2
-                             + 2.0*np.cos(v.cell_alpha)
-                             * np.cos(v.cell_beta) * np.cos(v.cell_gamma)))
+    cell_volume = (xtal.cell_a*xtal.cell_b*xtal.cell_c
+                   * np.sqrt(1.-np.cos(xtal.cell_alpha)**2
+                             - np.cos(xtal.cell_beta)**2
+                             - np.cos(xtal.cell_gamma)**2
+                             + 2.0*np.cos(xtal.cell_alpha)
+                             * np.cos(xtal.cell_beta) * np.cos(xtal.cell_gamma)))
     # Conversion from scattering factor to volts
     scatt_fac_to_volts = ((h**2) /
                           (2.0*np.pi * m_e * e * cell_volume * (angstrom**2)))
@@ -60,81 +65,84 @@ def simulate(v):
     # if v.iter_count == 0 or v.current_variable_type < 6:
     # print (v.atom_site_type_symbol)
 
-    atom_position, atom_label, atom_type, atom_name, u_ij, occupancy, \
-        pv, kappas, r2 = \
-        px.unique_atom_positions(
-            v.symmetry_matrix, v.symmetry_vector, v.basis_atom_label,
-            v.atom_site_type_symbol, v.basis_atom_name, v.basis_atom_position,
-            v.basis_u_ij, v.basis_occupancy, v.basis_pv,
-            v.basis_kappa, v.basis_r2, v.debug)
+    # atom_position, atom_label, atom_type, atom_name, u_ij, occupancy, \
+    #     pv, kappas, r2 = \
+    #     px.unique_atom_positions(
+    #         xtal.symmetry_matrix, xtal.symmetry_vector, basis.atom_label,
+    #         v.atom_site_type_symbol, basis.atom_name, basis.atom_position,
+    #         basis.u_ij, basis.occupancy, basis.pv,
+    #         basis.kappa, basis.r2, v.debug)
+    px.unique_atom_positions(xtal, basis, cell, inp.debug)
+
 
     # Generate atomic numbers based on the elemental symbols
-    atomic_number = np.array([fu.atomic_number_map[na] for na in atom_name])
-
-    n_atoms = len(atom_label)
-    if v.iter_count == 0:
-        print("  There are "+str(n_atoms)+" atoms in the unit cell")
+    cell.atomic_number = np.array([fu.atomic_number_map[na]
+                                   for na in cell.atom_name])
+    if rc.iter_count == 0:
+        print("  There are "+str(cell.n_atoms)+" atoms in the unit cell")
 
     # output for debugging
-    if v.debug:
+    if inp.debug:
         print("Symmetry operations:")
-        for i in range(len(v.symmetry_matrix)):
-            print(f"{i+1}: {v.symmetry_matrix[i]}, {v.symmetry_vector[i]}")
+        for i in range(len(xtal.symmetry_matrix)):
+            print(f"{i+1}: {xtal.symmetry_matrix[i]}, {xtal.symmetry_vector[i]}")
         np.set_printoptions(precision=5, suppress=True)
         print("atomic coordinates")
-        for i in range(n_atoms):
-            print(f"{atom_label[i]} {atom_name[i]}: {atom_position[i]}")
+        for i in range(cell.n_atoms):
+            print(f"{cell.atom_label[i]} {cell.atom_name[i]}: {cell.atom_position[i]}")
 
     # mean inner potential as the sum of scattering factors at g=0
     # multiplied by h^2/(2pi*m0*e*CellVolume)
     mip = 0.0
-    for i in range(n_atoms):  # get the scattering factor
-        if v.scatter_factor_method == 0:
-            mip += px.f_kirkland(atomic_number[i], 0.0)
-        elif v.scatter_factor_method == 1:
-            mip += px.f_lobato(atomic_number[i], 0.0)
-        elif v.scatter_factor_method == 2:
-            mip += px.f_peng(atomic_number[i], 0.0)
-        elif v.scatter_factor_method == 3:
-            mip += px.f_doyle_turner(atomic_number[i], 0.0)
-        elif v.scatter_factor_method == 4:
-            mip += px.f_kirkland(atomic_number[i], 0.0)    # because we use kirkland for S<0.5 we can just set it here as well
+    for i in range(cell.n_atoms):  # get the scattering factor
+        if inp.scatter_factor_method == 0:
+            mip += px.f_kirkland(cell.atomic_number[i], 0.0)
+        elif inp.scatter_factor_method == 1:
+            mip += px.f_lobato(cell.atomic_number[i], 0.0)
+        elif inp.scatter_factor_method == 2:
+            mip += px.f_peng(cell.atomic_number[i], 0.0)
+        elif inp.scatter_factor_method == 3:
+            mip += px.f_doyle_turner(cell.atomic_number[i], 0.0)
+        elif inp.scatter_factor_method == 4:
+            mip += px.f_kirkland(cell.atomic_number[i], 0.0)    # because we use kirkland for S<0.5 we can just set it here as well
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
     mip = mip.item()*scatt_fac_to_volts  # NB convert array to float
-    if v.iter_count == 0:
+    if rc.iter_count == 0:
         print(f"  Mean inner potential = {mip:.1f} Volts")
     # Wave vector magnitude in crystal
     # high-energy approximation (not HOLZ compatible)
     # K^2=k^2+U0
-    big_k_mag = electron_wave_vector_magnitude
-    # big_k_mag = np.sqrt(electron_wave_vector_magnitude**2+mip)
+    # big_k_mag = electron_wave_vector_magnitude  # version without mip
+    bloch.big_k_mag = np.sqrt(electron_wave_vector_magnitude**2+mip)
     # k-vector for the incident beam (k is along z in the microscope frame)
-    big_k = np.array([0.0, 0.0, big_k_mag])
+    bloch.big_k = np.array([0.0, 0.0, bloch.big_k_mag])
 
     # ===============================================
     # set up reference frames
-    a_vec_m, b_vec_m, c_vec_m, ar_vec_m, br_vec_m, cr_vec_m, norm_dir_m, t_mat_o2m, t_mat_c2o = \
-        px.reference_frames(v.cell_a, v.cell_b, v.cell_c, v.cell_alpha, 
-                            v.cell_beta, v.cell_gamma, v.space_group,
-                            v.x_direction, v.incident_beam_direction,
-                            v.normal_direction, v.debug)
+    # a_vec_m, b_vec_m, c_vec_m, ar_vec_m, br_vec_m, cr_vec_m, norm_dir_m, t_mat_o2m, t_mat_c2o = \
+    #     px.reference_frames(cell_a, cell_b, cell_c, cell_alpha, 
+    #                         cell_beta, cell_gamma, v.space_group,
+    #                         v.x_direction, v.incident_beam_direction,
+    #                         v.normal_direction, v.debug)
+    px.reference_frames(xtal, inp)
+
     # put the crystal in the micrcoscope reference frame, in Å
-    atom_coordinate = (atom_position[:, 0, np.newaxis] * a_vec_m +
-                       atom_position[:, 1, np.newaxis] * b_vec_m +
-                       atom_position[:, 2, np.newaxis] * c_vec_m)
+    cell.atom_coordinate = (cell.atom_position[:, 0, np.newaxis]*xtal.a_vec_m +
+                            cell.atom_position[:, 1, np.newaxis]*xtal.b_vec_m +
+                            cell.atom_position[:, 2, np.newaxis]*xtal.c_vec_m)
 
     # plot unit cell and save .xyz file
-    if v.iter_count == 0 and v.plot >= 1:
+    if rc.iter_count == 0 and inp.plot >= 1:
         atom_cvals = mcolors.Normalize(vmin=1, vmax=103)
         atom_cmap = plt.cm.prism
-        atom_colours = atom_cmap(atom_cvals(atomic_number))
+        atom_colours = atom_cmap(atom_cvals(cell.atomic_number))
         border_cvals = mcolors.Normalize(vmin=0, vmax=1)
         border_cmap = plt.cm.plasma
-        border_colours = border_cmap(border_cvals(atom_position[:, 2]))
+        border_colours = border_cmap(border_cvals(cell.atom_position[:, 2]))
         bb = 5
         fig, ax = plt.subplots(figsize=(bb, bb))
-        plt.scatter(atom_coordinate[:, 0], atom_coordinate[:, 1],
+        plt.scatter(cell.atom_coordinate[:, 0], cell.atom_coordinate[:, 1],
                     color=atom_colours, edgecolor=border_colours,
                     linewidth=1, s=100)
         # plt.xlim(left=0.0, right=1.0)
@@ -146,7 +154,7 @@ def simulate(v):
         # # xyz file
         # text = "\n"
         # for i in range(n_atoms):
-        #     sas = str(atom_coordinate[i])
+        #     sas = str(cell.atom_coordinate[i])
         #     xyz = sas[1:len(sas)-1]
         #     text = text + atom_name[i] + "  " + xyz + "\n"
         # fnam = v.chemical_formula_sum+".xyz"
@@ -161,38 +169,42 @@ def simulate(v):
     # where we need to do it in iterations
     strt = time.time()
     # NB g_pool are in reciprocal Angstroms in the microscope reference frame
-    v.hkl, g_pool, g_pool_mag, v.g_output = \
-        px.hkl_make(ar_vec_m, br_vec_m, cr_vec_m,
-                    big_k, v.lattice_type, v.min_reflection_pool,
-                    v.min_strong_beams, v.g_limit, v.input_hkls, big_k_mag)
-    n_hkl = len(g_pool)
-    # n_out = len(v.g_output)  # redefined to match what we can actually output
+    # v.hkl, g_pool, g_pool_mag, hkl_output = \
+    #     px.hkl_make(ar_vec_m, br_vec_m, cr_vec_m,
+    #                 big_k, v.lattice_type, v.min_reflection_pool,
+    #                 v.min_strong_beams, v.g_limit, v.input_hkls, big_k_mag)
+    # n_hkl = len(g_pool)
+
+    # calculate bloch.g_pool, bloch.g_pool_mag, bloch.hkl_output, bloch.n_hkl
+    px.hkl_make(xtal, inp, hkl, bloch)
+    # output redefined to match what we can actually do
+    bloch.n_out = len(bloch.hkl_output)
     # NEEDS SOME MORE WORK TO MATCH SIM/EXPT PATTERNS if this happens
 
     # outputs
-    if v.iter_count == 0:
-        print(f"  Beam pool: {n_hkl} reflexions ({v.min_strong_beams} strong beams)")
+    if rc.iter_count == 0:
+        print(f"  Beam pool: {bloch.n_hkl} reflexions ({inp.min_strong_beams} strong beams)")
         # we will have larger g-vectors in g_matrix since this has
         # differences g - h
         # but the maximum of the g pool is probably a more useful thing to know
-        print(f"  Maximum |g| = {np.max(g_pool_mag)/(2*np.pi):.3f} 1/Å")
+        print(f"  Maximum |g| = {np.max(bloch.g_pool_mag)/(2*np.pi):.3f} 1/Å")
         # for i in range(n_hkl):
         #     print(f"{i},  {v.hkl[i]}")
 
     # plot beam pool
-    if v.iter_count == 0 and v.plot >= 1:
-        xm = np.ceil(np.max(g_pool_mag/(2*np.pi)))
+    if pc.iter_count == 0 and inp.plot >= 1:
+        xm = np.ceil(np.max(bloch.g_pool_mag/(2*np.pi)))
         fig, ax = plt.subplots(1, 1)
         w_f = 10
         fig.set_size_inches(w_f, w_f)
         ax.set_facecolor('black')
         # colour according to Laue zone
-        lz_cvals = mcolors.Normalize(vmin=np.min(g_pool[:, 2]),
-                                     vmax=np.max(g_pool[:, 2]))
+        lz_cvals = mcolors.Normalize(vmin=np.min(bloch.g_pool[:, 2]),
+                                     vmax=np.max(bloch.g_pool[:, 2]))
         lz_cmap = plt.cm.brg
-        lz_colours = lz_cmap(lz_cvals(g_pool[:, 2]))
+        lz_colours = lz_cmap(lz_cvals(bloch.g_pool[:, 2]))
         # plots the g-vectors in the pool, colours for different Laue zones
-        plt.scatter(g_pool[:, 0]/(2*np.pi), g_pool[:, 1]/(2*np.pi),
+        plt.scatter(bloch.g_pool[:, 0]/(2*np.pi), bloch.g_pool[:, 1]/(2*np.pi),
                     s=20, color=lz_colours)
         # title
         plt.annotate("Beam pool", xy=(5, 5), color='white',
@@ -214,66 +226,77 @@ def simulate(v):
         plt.show()
 
     # g-vector matrix, array [n_hkl, n_hkl, 3]
-    g_matrix = np.zeros((n_hkl, n_hkl, 3))
-    g_matrix = g_pool[:, np.newaxis, :] - g_pool[np.newaxis, :, :]
+    bloch.g_matrix = np.zeros((bloch.n_hkl, bloch.n_hkl, 3))
+    bloch.g_matrix = bloch.g_pool[:, np.newaxis, :] \
+        - bloch.g_pool[np.newaxis, :, :]
 
     # Conversion factor from F_g to U_g
     Fg_to_Ug = relativistic_correction / (np.pi * cell_volume)
 
     # now make the Ug matrix, i.e. calculate the structure factor Fg for all
     # g-vectors in g_matrix and convert using the above factor
-    ug_matrix = Fg_to_Ug * \
-        px.Fg_matrix(n_hkl, v.scatter_factor_method, v.basis_atom_label,
-                     atom_label, atom_coordinate, atomic_number, occupancy,
-                     u_ij, g_matrix, v.absorption_method, v.absorption_per,
-                     electron_velocity, kappas, pv, r2, v.debug)
+    # ug_matrix = Fg_to_Ug * \
+    #     px.Fg_matrix(n_hkl, v.inp.scatter_factor_method, basis.atom_label,
+    #                  atom_label, atom_coordinate, atomic_number, occupancy,
+    #                  u_ij, g_matrix, v.absorption_method, v.absorption_per,
+    #                  electron_velocity, kappas, pv, r2, v.debug)
+    px.Fg_matrix(xtal, inp, cell, bloch)
+
     # matrix of dot products with the surface normal
-    g_dot_norm = np.dot(g_pool, norm_dir_m)
-    if v.iter_count == 0:
+    bloch.g_dot_norm = np.dot(bloch.g_pool, xtal.norm_dir_m)
+    if rc.iter_count == 0:
         print("    Ug matrix constructed")
-    if v.debug:
+    if inp.debug:
         np.set_printoptions(precision=3, suppress=True)
-        print(100*ug_matrix[:5, :5])
+        print(100*bloch.ug_matrix[:5, :5])
 
     # ===============================================
     # deviation parameter for each pixel and g-vector
     # s_g [n_hkl, image diameter, image diameter]
     # and k vector for each pixel, tilted_k [image diameter, image diameter, 3]
-    s_g, tilted_k = px.deviation_parameter(v.convergence_angle, v.image_radius,
-                                           big_k_mag, g_pool, g_pool_mag)
+    # s_g, tilted_k = px.deviation_parameter(v.convergence_angle, v.image_radius,
+    #                                        big_k_mag, g_pool, g_pool_mag)
+    px.deviation_parameter(inp, bloch)
 
     # ===============================================
     # Bloch wave calculation
     mid = time.time()
     # Dot product of k with surface normal, [image diameter, image diameter]
-    k_dot_n = np.tensordot(tilted_k, norm_dir_m, axes=([2], [0]))
-    v.lacbed_sim = np.zeros([v.n_thickness, 2*v.image_radius, 2*v.image_radius,
-                             len(v.g_output)], dtype=float)
+    bloch.k_dot_n = np.tensordot(bloch.tilted_k, xtal.norm_dir_m,
+                                 axes=([2], [0]))
+
+    # output container
+    out = pc.Output()  # output variables
+    out.lacbed_sim = np.zeros([rc.n_thickness, 2*inp.image_radius,
+                               2*inp.image_radius, len(bloch.hkl_output)],
+                              dtype=float)
 
     print("Bloch wave calculation...", end=' ')
-    if v.debug:
+    if inp.debug:
         print("")
         print("output indices")
-        print(v.g_output[:15])
+        print(bloch.hkl_output[:15])
     # pixel by pixel calculations from here
-    for pix_x in range(2*v.image_radius):
+    for pix_x in range(2*inp.image_radius):
         # progess
-        print(f"\rBloch wave calculation... {50*pix_x/v.image_radius:.0f}%", end="")
+        print(f"\rBloch wave calculation... {50*pix_x/inp.image_radius:.0f}%",
+              end="")
 
-        for pix_y in range(2*v.image_radius):
-            s_g_pix = np.squeeze(s_g[pix_x, pix_y, :])
-            k_dot_n_pix = k_dot_n[pix_x, pix_y]
+        for pix_y in range(2*inp.image_radius):
+            bloch.s_g_pix = np.squeeze(bloch.s_g[pix_x, pix_y, :])
+            bloch.k_dot_n_pix = bloch.k_dot_n[pix_x, pix_y]
 
             # works for multiple thicknesses
-            wave_functions = px.wave_functions(
-                v.g_output, s_g_pix, ug_matrix, v.min_strong_beams, n_hkl,
-                big_k_mag, g_dot_norm, k_dot_n_pix, v.thickness, v.debug)
+            # wave_functions = px.wave_functions(
+            #     bloch.hkl_output, s_g_pix, ug_matrix, v.min_strong_beams, n_hkl,
+            #     big_k_mag, g_dot_norm, k_dot_n_pix, v.thickness, v.debug)
+            px.wave_functions(bloch, inp)
 
             intensity = np.abs(wave_functions)**2
 
             # Map diffracted intensity to required output g vectors
             # note x and y swapped!
-            v.lacbed_sim[:, -pix_y, pix_x, :] = intensity[:, :len(v.g_output)]
+            v.lacbed_sim[:, -pix_y, pix_x, :] = intensity[:, :len(bloch.hkl_output)]
 
     # timings
     setup = mid-strt
@@ -584,7 +607,7 @@ def figure_of_merit(v):
                   '-.', '--', ':', '-', '-.', '--', ':', '-', '-.', '--', ':',
                   '-', '-.', '--', ':', '-', '-.', '--', ':', '-', '-.', '--']
         for i in range(v.n_out):
-            annotation = f"{v.hkl[v.g_output[i], 0]}{v.hkl[v.g_output[i], 1]}{v.hkl[v.g_output[i], 2]}"
+            annotation = f"{v.hkl[bloch.hkl_output[i], 0]}{v.hkl[bloch.hkl_output[i], 1]}{v.hkl[bloch.hkl_output[i], 2]}"
             plt.plot(v.thickness/10, fom_array[:, i],
                      color=colours[i],
                      linestyle=styles[i],
@@ -646,10 +669,10 @@ def update_variables(v):
             if sub[i] == 0:  # Atomic coordinates
                 atom_id = j
                 # Update position: r' = r - v*(r.v) + v*current_var
-                r_dot_v = np.dot(v.basis_atom_position[atom_id],
+                r_dot_v = np.dot(basis.atom_position[atom_id],
                                  v.atom_refine_vec[i])
-                v.basis_atom_position[atom_id, :] = np.mod(
-                    v.basis_atom_position[atom_id, :] + v.atom_refine_vec[i] *
+                basis.atom_position[atom_id, :] = np.mod(
+                    basis.atom_position[atom_id, :] + v.atom_refine_vec[i] *
                     (var - r_dot_v), 1)
 
                 # error estimate - needs work
@@ -659,72 +682,72 @@ def update_variables(v):
                 #                                   * independent_delta[i]
 
             elif sub[i] == 1:  # Occupancy
-                v.basis_occupancy[j] = var
-                # shared occupancy is held in v.basis_mult_occ
-                if v.basis_mult_occ[j] != 0:
+                basis.occupancy[j] = var
+                # shared occupancy is held in basis.mult_occ
+                if basis.mult_occ[j] != 0:
                     # get the indices of atoms on the same site
-                    mask = v.basis_mult_occ == v.basis_mult_occ[j]
+                    mask = basis.mult_occ == basis.mult_occ[j]
                     mask[j] = False
                     # scale their occupancies in propotion to existing
-                    v.basis_occupancy[mask] *= (1 - var) \
-                        / v.basis_occupancy[mask].sum()
+                    basis.occupancy[mask] *= (1 - var) \
+                        / basis.occupancy[mask].sum()
 
             elif sub[i] == 2:   # Iso ADPs
                 if 0 < var:  # must lie in range
-                    v.basis_u_ij[j, 0, 0] = var / (8 * np.pi**2)
-                    v.basis_u_ij[j, 1, 1] = var / (8 * np.pi**2)
-                    v.basis_u_ij[j, 2, 2] = var / (8 * np.pi**2)
+                    basis.u_ij[j, 0, 0] = var / (8 * np.pi**2)
+                    basis.u_ij[j, 1, 1] = var / (8 * np.pi**2)
+                    basis.u_ij[j, 2, 2] = var / (8 * np.pi**2)
                 else:
-                    v.basis_u_ij[j, :, :] = 0.0
+                    basis.u_ij[j, :, :] = 0.0
             elif sub[i] == 3:  # u[1,1]
-                v.basis_u_ij[j, 0, 0] = var
+                basis.u_ij[j, 0, 0] = var
             elif sub[i] == 4:  # u[1,1]
-                v.basis_u_ij[j, 1, 1] = var
+                basis.u_ij[j, 1, 1] = var
             elif sub[i] == 5:  # u[2,2]
-                v.basis_u_ij[j, 2, 2] = var
+                basis.u_ij[j, 2, 2] = var
             elif sub[i] == 6:  # u[1,2]
-                v.basis_u_ij[j, 0, 1] = var
-                v.basis_u_ij[j, 1, 0] = var
+                basis.u_ij[j, 0, 1] = var
+                basis.u_ij[j, 1, 0] = var
             elif sub[i] == 7:  # u[1,3]
-                v.basis_u_ij[j, 0, 2] = var
-                v.basis_u_ij[j, 2, 0] = var
+                basis.u_ij[j, 0, 2] = var
+                basis.u_ij[j, 2, 0] = var
             elif sub[i] == 8:  # u[2,3]
-                v.basis_u_ij[j, 1, 2] = var
-                v.basis_u_ij[j, 2, 1] = var
+                basis.u_ij[j, 1, 2] = var
+                basis.u_ij[j, 2, 1] = var
 
         elif typ[i] == 3:
             # Lattice parameters a, b, c
             if sub[i] == 0:
-                v.cell_a = v.cell_b = v.cell_c = var
+                xtal.cell_a = xtal.cell_b = xtal.cell_c = var
             elif sub[i] == 1:
-                v.cell_b = var
+                xtal.cell_b = var
             elif sub[i] == 2:
-                v.cell_c = var
+                xtal.cell_c = var
             elif sub[i] == 3:
-                v.cell_alpha = var
+                xtal.cell_alpha = var
             elif sub[i] == 4:
-                v.cell_beta = var
+                xtal.cell_beta = var
             elif sub[i] == 5:
-                v.cell_gamma = var
+                xtal.cell_gamma = var
 
         elif typ[i] == 4:
             if sub[i] == 0:  # Convergence angle
                 v.convergence_angle = var
             elif sub[i] == 1:  # Accelerating voltage
-                v.accelerating_voltage_kv = var
+                inp.accelerating_voltage_kv = var
 
         elif typ[i] == 5:
             if sub[i] == 0:  # kappa
                 if 0.7 < var < 1.3:  # must lie in a reasonable range
-                    v.basis_kappa[j] = var*1.0
+                    basis.kappa[j] = var*1.0
                 else:
-                    v.basis_kappa[j] = np.clip(var, 0.7, 1.3)
+                    basis.kappa[j] = np.clip(var, 0.7, 1.3)
             elif sub[i] == 1:  # valence electrons
                 if 0.5 < var < 1.5:  # must lie in a reasonable range
-                    v.basis_pv[j] = var*1.0
+                    basis.pv[j] = var*1.0
                 else:
-                    v.basis_pv[j] = 0.0
-                    # v.basis_pv[j] = np.clip(var, ,1.5 )
+                    basis.pv[j] = 0.0
+                    # basis.pv[j] = np.clip(var, ,1.5 )
     return
 
 
@@ -751,7 +774,7 @@ def print_montage(v, images, lut, j=0):
             axes[i].imshow(img, cmap=lut)
 
         axes[i].axis('off')
-        annotation = f"{v.hkl[v.g_output[i], 0]}{v.hkl[v.g_output[i], 1]}{v.hkl[v.g_output[i], 2]}"
+        annotation = f"{v.hkl[bloch.hkl_output[i], 0]}{v.hkl[bloch.hkl_output[i], 1]}{v.hkl[bloch.hkl_output[i], 2]}"
         axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
                          size=30, color='w', path_effects=[text_effect])
     for i in range(n, len(axes)):
@@ -793,7 +816,7 @@ def print_LACBED_pattern(i, j, v):
     text_effect = withStroke(linewidth=3, foreground='black')
     ax.imshow(v.lacbed_sim[j, :, :, i], cmap='pink')
     ax.axis('off')
-    annotation = f"{v.hkl[v.g_output[i], 0]}{v.hkl[v.g_output[i], 1]}{v.hkl[v.g_output[i], 2]}"
+    annotation = f"{v.hkl[bloch.hkl_output[i], 0]}{v.hkl[bloch.hkl_output[i], 1]}{v.hkl[bloch.hkl_output[i], 2]}"
     ax.annotate(annotation, xy=(5, 5), xycoords='axes pixels',
                      size=30, color='w', path_effects=[text_effect])
 
@@ -811,7 +834,7 @@ def save_LACBED(v):
     for j in range(v.n_thickness):
         t = int(v.thickness[j]/10)
         for i in range(v.lacbed_sim.shape[3]):
-            signed_str = "".join(f"{x:+d}" for x in v.hkl[v.g_output[i], :])
+            signed_str = "".join(f"{x:+d}" for x in v.hkl[bloch.hkl_output[i], :])
             fname = f"{v.chemical_formula_sum}_{signed_str}_{t}nm.bin"
             v.lacbed_sim[j, :, :, i].tofile(fname)
             fname = f"{v.chemical_formula_sum}_{signed_str}_{t}nm.png"
@@ -823,7 +846,7 @@ def print_current_var(v, i):
     # prints the variable being refined
     typ = v.refined_variable_type[i]  # variable type & subtype
     atom_id = v.atom_refine_flag[i]
-    label = v.basis_atom_label[atom_id]
+    label = basis.atom_label[atom_id]
 
     # dictionary of format strings
     formats = {
@@ -851,7 +874,7 @@ def print_current_var(v, i):
 
     if typ == 20:  # atomic coords
         with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
-            print(f"  Atom {atom_id}: {label}  {v.basis_atom_position[atom_id, :]}")
+            print(f"  Atom {atom_id}: {label}  {basis.atom_position[atom_id, :]}")
     elif typ in formats:
         label, fmt = formats[typ]
         print(f"  {label} {fmt.format(v.refined_variable[i])}")
