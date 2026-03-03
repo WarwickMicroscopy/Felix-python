@@ -13,7 +13,7 @@ from typing import Optional
 # ----------------------------------------------------------------------------
 # variables in felix.inp
 @dataclass
-class Inp:
+class RunControl:
     # control
     write_flag = None
     scatter_factor_method = None
@@ -72,11 +72,9 @@ class Inp:
             if hasattr(self, key):
                 setattr(self, key, value)
 
-
 # ----------------------------------------------------------------------------
 # run control variables derived from felix.inp
-@dataclass
-class RunControl:
+
     thickness: NDArray[np.floating] | None = None
     n_thickness: int = 0
     n_out: int = 0  # number of output reflections
@@ -89,8 +87,10 @@ class RunControl:
     n_variables: int = 0
     best_fit: float = 0.0
     last_fit: float = 0.0
+    fit_log: NDArray[np.floating] | None = None
     df: float = 1.0
     iter_count: int = 0
+    plot: int = 0
 #     p: np.ndarray = field(default_factory=lambda: np.array([]))
 #     last_p: np.ndarray = field(default_factory=lambda: np.array([]))
 #     var_pl: list = field(default_factory=list)
@@ -105,7 +105,7 @@ class Bloch:
     relativistic_correction: float = 0.0
     big_k: NDArray[np.floating] | None = None
     big_k_mag: float = 0.0
-    hkl: NDArray[np.integer] | None = None
+    hkl_indices: NDArray[np.integer] | None = None
     n_hkl: int = 0
     hkl_output: NDArray[np.integer] | None = None
     n_out: int = 0
@@ -130,8 +130,9 @@ class Bloch:
 # ----------------------------------------------------------------------------
 # variables output
 @dataclass
-class Output:
+class Cbed:
     lacbed_sim: NDArray[np.floating] | None = None
+    diff_image: NDArray[np.floating] | None = None
 
 
 # ----------------------------------------------------------------------------
@@ -262,10 +263,3 @@ class Hkl:  # hkl file
     input_hkls: NDArray[np.integer] | None = None
     i_obs: NDArray[np.floating] | None = None
     sigma_obs: NDArray[np.floating] | None = None
-
-
-# ------------------------------------------------
-# working variables for simulation
-class Var(Inp):
-    def __init__(self):
-        Inp.__init__(self)

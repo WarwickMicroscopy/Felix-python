@@ -28,20 +28,19 @@ from pylix_modules import pylix_dicts as fu
 from pylix_modules import pylix_class as pc
 
 
-def simulate(xtal, basis, inp, hkl, rc):
+def simulate(xtal, basis, hkl, bloch, cbed, rc):
 
     cell = pc.Cell()  # all atom variables
-    bloch = pc.Bloch()  # variables in Bloch wave calculation
 
     # some setup calculations
     # Electron velocity in metres per second
     bloch.electron_velocity = (c * np.sqrt(1.0 - ((m_e * c**2) /
-                         (e * inp.accelerating_voltage_kv*1000.0 +
+                         (e * rc.accelerating_voltage_kv*1000.0 +
                           m_e * c**2))**2))
     # Electron wavelength in Angstroms
     electron_wavelength = h / (
-        np.sqrt(2.0 * m_e * e * inp.accelerating_voltage_kv*1000.0) *
-        np.sqrt(1.0 + (e * inp.accelerating_voltage_kv*1000.0) /
+        np.sqrt(2.0 * m_e * e * rc.accelerating_voltage_kv*1000.0) *
+        np.sqrt(1.0 + (e * rc.accelerating_voltage_kv*1000.0) /
                 (2.0 * m_e * c**2))) / angstrom
     # Wavevector magnitude k
     electron_wave_vector_magnitude = 2.0 * np.pi / electron_wavelength
@@ -73,7 +72,7 @@ def simulate(xtal, basis, inp, hkl, rc):
     #         v.atom_site_type_symbol, basis.atom_name, basis.atom_position,
     #         basis.u_ij, basis.occupancy, basis.pv,
     #         basis.kappa, basis.r2, v.debug)
-    px.unique_atom_positions(xtal, basis, cell, inp)
+    px.unique_atom_positions(xtal, basis, cell, rc)
 
 
     # Generate atomic numbers based on the elemental symbols
@@ -83,7 +82,7 @@ def simulate(xtal, basis, inp, hkl, rc):
         print("  There are "+str(cell.n_atoms)+" atoms in the unit cell")
 
     # output for debugging
-    if inp.debug:
+    if rc.debug:
         print("Symmetry operations:")
         for i in range(len(xtal.symmetry_matrix)):
             print(f"{i+1}: {xtal.symmetry_matrix[i]}, {xtal.symmetry_vector[i]}")
@@ -96,15 +95,15 @@ def simulate(xtal, basis, inp, hkl, rc):
     # multiplied by h^2/(2pi*m0*e*CellVolume)
     mip = 0.0
     for i in range(cell.n_atoms):  # get the scattering factor
-        if inp.scatter_factor_method == 0:
+        if rc.scatter_factor_method == 0:
             mip += px.f_kirkland(cell.atomic_number[i], 0.0)
-        elif inp.scatter_factor_method == 1:
+        elif rc.scatter_factor_method == 1:
             mip += px.f_lobato(cell.atomic_number[i], 0.0)
-        elif inp.scatter_factor_method == 2:
+        elif rc.scatter_factor_method == 2:
             mip += px.f_peng(cell.atomic_number[i], 0.0)
-        elif inp.scatter_factor_method == 3:
+        elif rc.scatter_factor_method == 3:
             mip += px.f_doyle_turner(cell.atomic_number[i], 0.0)
-        elif inp.scatter_factor_method == 4:
+        elif rc.scatter_factor_method == 4:
             mip += px.f_kirkland(cell.atomic_number[i], 0.0)    # because we use kirkland for S<0.5 we can just set it here as well
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
@@ -126,7 +125,7 @@ def simulate(xtal, basis, inp, hkl, rc):
     #                         cell_beta, cell_gamma, v.space_group,
     #                         v.x_direction, v.incident_beam_direction,
     #                         v.normal_direction, v.debug)
-    px.reference_frames(xtal, inp)
+    px.reference_frames(xtal, rc)
 
     # put the crystal in the micrcoscope reference frame, in Å
     cell.atom_coordinate = (cell.atom_position[:, 0, np.newaxis]*xtal.a_vec_m +
@@ -134,7 +133,7 @@ def simulate(xtal, basis, inp, hkl, rc):
                             cell.atom_position[:, 2, np.newaxis]*xtal.c_vec_m)
 
     # plot unit cell and save .xyz file
-    if rc.iter_count == 0 and inp.plot >= 1:
+    if rc.iter_count == 0 and rc.plot >= 1:
         atom_cvals = mcolors.Normalize(vmin=1, vmax=103)
         atom_cmap = plt.cm.prism
         atom_colours = atom_cmap(atom_cvals(cell.atomic_number))
@@ -170,30 +169,30 @@ def simulate(xtal, basis, inp, hkl, rc):
     # where we need to do it in iterations
     strt = time.time()
     # NB g_pool are in reciprocal Angstroms in the microscope reference frame
-    # v.hkl, g_pool, g_pool_mag, hkl_output = \
+    # bloch.hkl_indices, g_pool, g_pool_mag, hkl_output = \
     #     px.hkl_make(ar_vec_m, br_vec_m, cr_vec_m,
     #                 big_k, v.lattice_type, v.min_reflection_pool,
     #                 v.min_strong_beams, v.g_limit, v.input_hkls, big_k_mag)
     # n_hkl = len(g_pool)
 
     # calculate bloch.g_pool, bloch.g_pool_mag, bloch.hkl_output, bloch.n_hkl
-    px.hkl_make(xtal, inp, hkl, bloch)
+    px.hkl_make(xtal, hkl, bloch, rc)
     # output redefined to match what we can actually do
     bloch.n_out = len(bloch.hkl_output)
     # NEEDS SOME MORE WORK TO MATCH SIM/EXPT PATTERNS if this happens
 
     # outputs
     if rc.iter_count == 0:
-        print(f"  Beam pool: {bloch.n_hkl} reflexions ({inp.min_strong_beams} strong beams)")
+        print(f"  Beam pool: {bloch.n_hkl} reflexions ({rc.min_strong_beams} strong beams)")
         # we will have larger g-vectors in g_matrix since this has
         # differences g - h
         # but the maximum of the g pool is probably a more useful thing to know
         print(f"  Maximum |g| = {np.max(bloch.g_pool_mag)/(2*np.pi):.3f} 1/Å")
         # for i in range(n_hkl):
-        #     print(f"{i},  {v.hkl[i]}")
+        #     print(f"{i},  {bloch.hkl_indices[i]}")
 
     # plot beam pool
-    if rc.iter_count == 0 and inp.plot >= 1:
+    if rc.iter_count == 0 and rc.plot >= 1:
         xm = np.ceil(np.max(bloch.g_pool_mag/(2*np.pi)))
         fig, ax = plt.subplots(1, 1)
         w_f = 10
@@ -235,17 +234,17 @@ def simulate(xtal, basis, inp, hkl, rc):
     # now make the Ug matrix, i.e. calculate the structure factor Fg for all
     # g-vectors in g_matrix and convert using the above factor
     # ug_matrix = Fg_to_Ug * \
-    #     px.Fg_matrix(n_hkl, v.inp.scatter_factor_method, basis.atom_label,
+    #     px.Fg_matrix(n_hkl, v.rc.scatter_factor_method, basis.atom_label,
     #                  atom_label, atom_coordinate, atomic_number, occupancy,
     #                  u_ij, g_matrix, v.absorption_method, v.absorption_per,
     #                  electron_velocity, kappas, pv, r2, v.debug)
-    px.Fg_matrix(xtal, inp, basis, cell, bloch)
+    px.Fg_matrix(xtal, basis, cell, bloch, rc)
 
     # matrix of dot products with the surface normal
     bloch.g_dot_norm = np.dot(bloch.g_pool, xtal.norm_dir_m)
     if rc.iter_count == 0:
         print("    Ug matrix constructed")
-    if inp.debug:
+    if rc.debug:
         np.set_printoptions(precision=3, suppress=True)
         print(100*bloch.ug_matrix[:5, :5])
 
@@ -255,7 +254,7 @@ def simulate(xtal, basis, inp, hkl, rc):
     # and k vector for each pixel, tilted_k [image diameter, image diameter, 3]
     # s_g, tilted_k = px.deviation_parameter(v.convergence_angle, v.image_radius,
     #                                        big_k_mag, g_pool, g_pool_mag)
-    px.deviation_parameter(inp, bloch)
+    px.deviation_parameter(bloch, rc)
 
     # ===============================================
     # Bloch wave calculation
@@ -265,23 +264,22 @@ def simulate(xtal, basis, inp, hkl, rc):
                                  axes=([2], [0]))
 
     # output container
-    out = pc.Output()  # output variables
-    out.lacbed_sim = np.zeros([rc.n_thickness, 2*inp.image_radius,
-                               2*inp.image_radius, len(bloch.hkl_output)],
+    cbed.lacbed_sim = np.zeros([rc.n_thickness, 2*rc.image_radius,
+                               2*rc.image_radius, len(bloch.hkl_output)],
                               dtype=float)
 
     print("Bloch wave calculation...", end=' ')
-    if inp.debug:
+    if rc.debug:
         print("")
         print("output indices")
         print(bloch.hkl_output[:15])
     # pixel by pixel calculations from here
-    for pix_x in range(2*inp.image_radius):
+    for pix_x in range(2*rc.image_radius):
         # progess
-        print(f"\rBloch wave calculation... {50*pix_x/inp.image_radius:.0f}%",
+        print(f"\rBloch wave calculation... {50*pix_x/rc.image_radius:.0f}%",
               end="")
 
-        for pix_y in range(2*inp.image_radius):
+        for pix_y in range(2*rc.image_radius):
             bloch.s_g_pix = np.squeeze(bloch.s_g[pix_x, pix_y, :])
             bloch.k_dot_n_pix = bloch.k_dot_n[pix_x, pix_y]
 
@@ -289,20 +287,20 @@ def simulate(xtal, basis, inp, hkl, rc):
             # wave_functions = px.wave_functions(
             #     bloch.hkl_output, s_g_pix, ug_matrix, v.min_strong_beams, n_hkl,
             #     big_k_mag, g_dot_norm, k_dot_n_pix, v.thickness, v.debug)
-            px.wave_functions(inp, bloch, rc)
+            px.wave_functions(bloch, rc)
 
             intensity = np.abs(bloch.wave_function)**2
 
             # Map diffracted intensity to required output g vectors
             # note x and y swapped!
-            out.lacbed_sim[:, -pix_y, pix_x, :] = intensity[:, :len(bloch.hkl_output)]
+            cbed.lacbed_sim[:, -pix_y, pix_x, :] = intensity[:, :len(bloch.hkl_output)]
 
     # timings
     setup = mid-strt
     bwc = time.time()-mid
     print(f"\rBloch wave calculation... done in {bwc:.1f}s")  # " (beam pool setup {setup:.1f} s)")
     if rc.iter_count == 0: 
-        print(f"    {1000*(bwc)/(4*inp.image_radius**2):.2f} ms/pixel")
+        print(f"    {1000*(bwc)/(4*rc.image_radius**2):.2f} ms/pixel")
 
     # increment iteration counter
     rc.iter_count += 1
@@ -401,7 +399,7 @@ def pcc(stack1, stack2):
     return pcc  # , shifts
 
 
-def optimise_pool(v):
+def optimise_pool(rc):
     """
     runs simulations with decreasing numbers of strong beams
     gives a plot of intensity change to inform best pool size for a refinement
@@ -411,15 +409,15 @@ def optimise_pool(v):
     strong = np.array([300, 200, 150, 100, 50])
     n_strong = len(strong)
     times = []
-    v.min_reflection_pool = poo
-    v.min_strong_beams = strong[0]
+    rc.min_reflection_pool = poo
+    rc.min_strong_beams = strong[0]
     print(f"Baseline simulation: beam pool {poo}, {strong[0]} strong beams")
     t0 = time.time()
     simulate(v)
     times.append(time.time()-t0)
-    print_LACBED(v, 0)
-    baseline = np.copy(v.lacbed_sim)
-    v.diff_image = np.copy(v.lacbed_sim)
+    print_LACBED(rc, 0)
+    baseline = np.copy(cbed.lacbed_sim)
+    cbed.diff_image = np.copy(cbed.lacbed_sim)
     # subtract mean and divide by SD
     for i in range(v.n_thickness):
         for j in range(v.n_out):
@@ -438,7 +436,7 @@ def optimise_pool(v):
         times.append(time.time()-t0)
         for i in range(v.n_thickness):
             for j in range(v.n_out):
-                a0 = v.lacbed_sim[i, :, :, j]
+                a0 = cbed.lacbed_sim[i, :, :, j]
                 a = (a0 - np.mean(a0))/np.std(a0)
                 b = baseline[i, :, :, j]
                 pcc = b-a
@@ -606,7 +604,7 @@ def figure_of_merit(v):
                   '-.', '--', ':', '-', '-.', '--', ':', '-', '-.', '--', ':',
                   '-', '-.', '--', ':', '-', '-.', '--', ':', '-', '-.', '--']
         for i in range(v.n_out):
-            annotation = f"{v.hkl[bloch.hkl_output[i], 0]}{v.hkl[bloch.hkl_output[i], 1]}{v.hkl[bloch.hkl_output[i], 2]}"
+            annotation = f"{bloch.hkl_indices[bloch.hkl_output[i], 0]}{bloch.hkl_indices[bloch.hkl_output[i], 1]}{bloch.hkl_indices[bloch.hkl_output[i], 2]}"
             plt.plot(v.thickness/10, fom_array[:, i],
                      color=colours[i],
                      linestyle=styles[i],
@@ -750,7 +748,7 @@ def update_variables(v):
     return
 
 
-def print_montage(v, images, lut, j=0):
+def print_montage(bloch, cbed, rc, images, lut, j=0):
     '''
     images[wid, wid, n] = array of n images each of size [wid, wid]
     '''
@@ -773,78 +771,78 @@ def print_montage(v, images, lut, j=0):
             axes[i].imshow(img, cmap=lut)
 
         axes[i].axis('off')
-        annotation = f"{v.hkl[bloch.hkl_output[i], 0]}{v.hkl[bloch.hkl_output[i], 1]}{v.hkl[bloch.hkl_output[i], 2]}"
+        annotation = f"{bloch.hkl_indices[bloch.hkl_output[i], 0]}{bloch.hkl_indices[bloch.hkl_output[i], 1]}{bloch.hkl_indices[bloch.hkl_output[i], 2]}"
         axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
                          size=30, color='w', path_effects=[text_effect])
     for i in range(n, len(axes)):
         axes[i].axis('off')
     plt.tight_layout()
-    annotation = f"{v.thickness[j]/10:.0f} nm"
+    annotation = f"{rc.thickness[j]/10:.0f} nm"
     plt.annotate(annotation, xy=(0.105, 0.96), xycoords='figure fraction',
                  size=30, color='c', path_effects=[text_effect])
     plt.show()
 
 
-def print_LACBED(v, image_type):
+def print_LACBED(bloch, cbed, rc, image_type):
     '''
     Plots all LACBED patterns in a montage
     image_type options 0=sim, 1=expt, 2=difference
     '''
     if image_type == 0:  # simulation output
         # only print all thicknesses for the first simulation
-        if v.iter_count == 1:
-            for j in range(v.n_thickness):
-                out_image = v.lacbed_sim[j, :, :, :]
-                print_montage(v, out_image, 'pink', j)
+        if rc.iter_count == 1:
+            for j in range(rc.n_thickness):
+                out_image = cbed.lacbed_sim[j, :, :, :]
+                print_montage(bloch, cbed, rc, out_image, 'pink', j)
         else:
-            out_image = v.lacbed_sim[v.best_t, :, :, :]
-            print_montage(v, out_image, 'pink')
+            out_image = cbed.lacbed_sim[rc.best_t, :, :, :]
+            print_montage(bloch, cbed, rc, out_image, 'pink')
     elif image_type == 1:  # experiment output
-        out_image = v.lacbed_expt
-        print_montage(v, out_image, 'grey')
-    elif v.plot >= 3:
-        out_image = v.diff_image
-        print_montage(v, out_image, 'diff')
+        out_image = cbed.lacbed_expt
+        print_montage(bloch, cbed, rc, out_image, 'grey')
+    elif rc.plot >= 3:
+        out_image = cbed.diff_image
+        print_montage(bloch, cbed, rc, out_image, 'diff')
 
 
-def print_LACBED_pattern(i, j, v):
+def print_LACBED_pattern(i, j, cbed, bloch):
     # Prints an individual LACBED pattern
     # i = 0  # index of the pattern to plot
     # j = 0  # index of the thickness to plot
     fig, ax = plt.subplots(1, 1)
     text_effect = withStroke(linewidth=3, foreground='black')
-    ax.imshow(v.lacbed_sim[j, :, :, i], cmap='pink')
+    ax.imshow(cbed.lacbed_sim[j, :, :, i], cmap='pink')
     ax.axis('off')
-    annotation = f"{v.hkl[bloch.hkl_output[i], 0]}{v.hkl[bloch.hkl_output[i], 1]}{v.hkl[bloch.hkl_output[i], 2]}"
+    annotation = f"{bloch.hkl_indices[bloch.hkl_output[i], 0]}{bloch.hkl_indices[bloch.hkl_output[i], 1]}{bloch.hkl_indices[bloch.hkl_output[i], 2]}"
     ax.annotate(annotation, xy=(5, 5), xycoords='axes pixels',
                      size=30, color='w', path_effects=[text_effect])
 
 
-def save_LACBED(v):
+def save_LACBED(xtal, bloch, cbed, rc):
     '''
     Saves all LACBED patterns in .npy and .png format
     '''
     print(os.getcwd())
-    if not os.path.isdir(v.chemical_formula_sum):
-        os.mkdir(v.chemical_formula_sum)
-    os.chdir(v.chemical_formula_sum)
+    if not os.path.isdir(xtal.chemical_formula):
+        os.mkdir(xtal.chemical_formula)
+    os.chdir(xtal.chemical_formula)
     j = 0
     # j = v.best_t
-    for j in range(v.n_thickness):
-        t = int(v.thickness[j]/10)
-        for i in range(v.lacbed_sim.shape[3]):
-            signed_str = "".join(f"{x:+d}" for x in v.hkl[bloch.hkl_output[i], :])
-            fname = f"{v.chemical_formula_sum}_{signed_str}_{t}nm.bin"
-            v.lacbed_sim[j, :, :, i].tofile(fname)
-            fname = f"{v.chemical_formula_sum}_{signed_str}_{t}nm.png"
-            plt.imsave(fname, v.lacbed_sim[j, :, :, i], cmap='gray')
+    for j in range(rc.n_thickness):
+        t = int(rc.thickness[j]/10)
+        for i in range(cbed.lacbed_sim.shape[3]):
+            signed_str = "".join(f"{x:+d}" for x in bloch.hkl_indices[bloch.hkl_output[i], :])
+            fname = f"{xtal.chemical_formula}_{signed_str}_{t}nm.bin"
+            cbed.lacbed_sim[j, :, :, i].tofile(fname)
+            fname = f"{xtal.chemical_formula}_{signed_str}_{t}nm.png"
+            plt.imsave(fname, cbed.lacbed_sim[j, :, :, i], cmap='gray')
     os.chdir("..")
 
 
-def print_current_var(v, i):
+def print_current_var(basis, rc, i):
     # prints the variable being refined
-    typ = v.refined_variable_type[i]  # variable type & subtype
-    atom_id = v.atom_refine_flag[i]
+    typ = rc.refined_variable_type[i]  # variable type & subtype
+    atom_id = rc.atom_refine_flag[i]
     label = basis.atom_label[atom_id]
 
     # dictionary of format strings
@@ -876,7 +874,7 @@ def print_current_var(v, i):
             print(f"  Atom {atom_id}: {label}  {basis.atom_position[atom_id, :]}")
     elif typ in formats:
         label, fmt = formats[typ]
-        print(f"  {label} {fmt.format(v.refined_variable[i])}")
+        print(f"  {label} {fmt.format(rc.refined_variable[i])}")
 
 
 def variable_message(vtype):
@@ -907,98 +905,98 @@ def variable_message(vtype):
     return msg[vtype]
 
 
-def sim_fom(v, i):
+def sim_fom(xtal, basis, hkl, bloch, cbed, rc, i):
     '''
     wraps multiple subroutine calls into a single line: update variables
     simulate and figure of merit
     input i = index of variable to be refined, for single variables
     i = -1 for multiple variables
     '''
-    update_variables(v)
-    print_current_var(v, i)
-    simulate(v)
+    update_variables(rc)
+    print_current_var(rc, i)
+    simulate(xtal, basis, hkl, bloch, cbed, rc)
     # figure of merit
-    fom = figure_of_merit(v)
-    v.fit_log.append(fom)
-    print(f"  Figure of merit {100*fom:.3f}% (previous best {100*v.best_fit:.3f}%)")
+    fom = figure_of_merit(rc)
+    rc.fit_log.append(fom)
+    print(f"  Figure of merit {100*fom:.3f}% (previous best {100*rc.best_fit:.3f}%)")
 
     return fom
 
 
-def refine_single_variable(v, i):
+def refine_single_variable(xtal, basis, hkl, bloch, cbed, rc, i):
     '''
     Does 3-point refinement for a single variable and if no minimum is found
     retuns the step size for a subsequent multidimensional refinement
     i: integer, index of variable being refined
-    Uses the whole variable space v as it is passed on to the simulation:
-    v.best_fit: float, best figure of merit
-    v.best_var: float array, the refined variables with best FoM
-    v.refined_variable: float array of variables being refined
-    v.refined_variable_type: integer array, type of variable being refined
-    v.refinement_scale: float, step to change the variable (from felix.inp)
-    v.next_var: float array of predicted variable values
+    Uses the whole variable space as it is passed on to the simulation:
+    rc.best_fit: float, best figure of merit
+    rc.best_var: float array, the refined variables with best FoM
+    rc.refined_variable: float array of variables being refined
+    rc.refined_variable_type: integer array, type of variable being refined
+    rc.refinement_scale: float, step to change the variable (from felix.inp)
+    rc.next_var: float array of predicted variable values
     ----------------
     Updates:
-        v.best_fit, v.best_var if necessary
-        v.next_var as an output
+        rc.best_fit, rc.best_var if necessary
+        rc.next_var as an output
     Returns:
         dydx_i: the gradient of this variable
     '''
     r3_var = np.zeros(3)  # for parabolic minimum
     r3_fom = np.zeros(3)
     # Check if ADP is negative, skip if so NB u12,u13,u23 can be -ve
-    if 21 < v.refined_variable_type[i] < 26 and v.refined_variable[i] < 1e-10:
+    if 21 < rc.refined_variable_type[i] < 26 and rc.refined_variable[i] < 1e-10:
         dydx_i = 0.0
     else:
         # middle point is the previous best simulation
-        r3_var[1] = v.best_var[i]*1.0
-        r3_fom[1] = v.best_fit*1.0
-        print(f"Finding gradient, variable {i+1} of {v.n_variables}")
-        print(variable_message(v.refined_variable_type[i]))
-        # print_current_var(v, i)
+        r3_var[1] = rc.best_var[i]*1.0
+        r3_fom[1] = rc.best_fit*1.0
+        print(f"Finding gradient, variable {i+1} of {rc.n_variables}")
+        print(variable_message(rc.refined_variable_type[i]))
+        # print_current_var(rc, i)
 
         # delta is a small change in the current variable
         # which is either refinement_scale for atomic coordinates and
         # refinement_scale*variable for everything else
-        delta = abs(v.refinement_scale * v.refined_variable[i])
-        if v.refined_variable_type[i] == 20:
-            delta = abs(v.refinement_scale)
+        delta = abs(rc.refinement_scale * rc.refined_variable[i])
+        if rc.refined_variable_type[i] == 20:
+            delta = abs(rc.refinement_scale)
         # Three-point gradient measurement, starting with plus
-        v.refined_variable[i] += delta
+        rc.refined_variable[i] += delta
         # simulate and get figure of merit
-        fom = sim_fom(v, i)
-        r3_var[2] = v.refined_variable[i]*1.0
+        fom = sim_fom(rc, i)
+        r3_var[2] = rc.refined_variable[i]*1.0
         r3_fom[2] = fom*1.0
         print("-1-----------------------------")  # " {r3_var},{r3_fom}")
         # update best fit
-        if (fom < v.best_fit):
-            v.best_fit = fom*1.0
-            v.best_var = np.copy(v.refined_variable)
+        if (fom < rc.best_fit):
+            rc.best_fit = fom*1.0
+            rc.best_var = np.copy(rc.refined_variable)
 
         # keep going or turn round?
         if r3_fom[2] < r3_fom[1]:  # keep going
-            v.refined_variable[i] += np.exp(0.5) * delta
+            rc.refined_variable[i] += np.exp(0.5) * delta
         else:  # turn round
             delta = - delta
-            v.refined_variable[i] += np.exp(0.75) * delta
+            rc.refined_variable[i] += np.exp(0.75) * delta
         # simulate and get figure of merit
-        fom = sim_fom(v, i)
-        r3_var[0] = v.refined_variable[i]*1.0
+        fom = sim_fom(rc, i)
+        r3_var[0] = rc.refined_variable[i]*1.0
         r3_fom[0] = fom*1.0
         print("-2-----------------------------")  # " {r3_var},{r3_fom}")
         # update best fit
-        if (fom < v.best_fit):
-            v.best_fit = fom*1.0
-            v.best_var = np.copy(v.refined_variable)
+        if (fom < rc.best_fit):
+            rc.best_fit = fom*1.0
+            rc.best_var = np.copy(rc.refined_variable)
 
         # test to see if the variable has an effect
         if np.max(r3_fom)-np.min(r3_fom) < 1e-5:  # no effect on FoM
             exclude = True
-            print(f"  Low effect, fixed at {v.best_var[i]}")
+            print(f"  Low effect, fixed at {rc.best_var[i]}")
         else:
-            v.next_var[i], exclude = px.convex(r3_var, r3_fom)
+            rc.next_var[i], exclude = px.convex(r3_var, r3_fom)
         # predict the next point as a minimum or a step onwards
-        # v.next_var gets passed on to the multidimensional refinement
+        # rc.next_var gets passed on to the multidimensional refinement
         # as a global variable
         if exclude:
             dydx_i = 0.0  # this variable excluded from vector downhill
@@ -1027,21 +1025,21 @@ def variable_check(x, t):
     return x, continue_
 
 
-def refine_multi_variable(v, dydx, single=True):
+def refine_multi_variable(rc, dydx, single=True):
     '''
     multidimensional refinement
     dydx: float array of gradients, generated in refine_single_variable
-    Uses the whole variable space v, only:
-    v.refined_variable: array of variables to refine size [n_var]
-    v.refined_variable_type: what kind of variable (see felixrefine)
-    v.best_fit: best figure of merit so far
-    v.best_var: array of variables that gives best fit
-    v.refinement_scale: size of change in variable to obtain gradient
+    Uses the whole variable space rc, only:
+    rc.refined_variable: array of variables to refine size [n_var]
+    rc.refined_variable_type: what kind of variable (see felixrefine)
+    rc.best_fit: best figure of merit so far
+    rc.best_var: array of variables that gives best fit
+    rc.refinement_scale: size of change in variable to obtain gradient
 
     dydx = array of gradients, size [n_var]
     '''
     # starting point is the current best set of variables
-    last_fit = 1.0*v.best_fit
+    last_fit = 1.0*rc.best_fit
 
     n_var = np.count_nonzero(dydx)
     if n_var > 1:
@@ -1058,54 +1056,54 @@ def refine_multi_variable(v, dydx, single=True):
         raise ValueError("No refinement variables defined!")
     # index of principal variable
     j = np.argmax(abs(dydx))
-    t = v.refined_variable_type[j]
+    t = rc.refined_variable_type[j]
     print(f"  Principal variable: {variable_message(t)}")
 
     # Check the gradient vector magnitude and initialize vector descent
     if not single:
-        print(f"    Extrapolation, should be better than {100*v.best_fit:.2f}%")
+        print(f"    Extrapolation, should be better than {100*rc.best_fit:.2f}%")
         # initial trial uses the predicted best set of variables
-        v.refined_variable = 1.0*v.next_var
+        rc.refined_variable = 1.0*rc.next_var
         # simulate and get figure of merit
-        fom = sim_fom(v, j)
+        fom = sim_fom(rc, j)
         # is it actually any better
         if fom < last_fit:
-            v.best_fit = fom*1.0
-            v.best_var = np.copy(v.refined_variable)
+            rc.best_fit = fom*1.0
+            rc.best_var = np.copy(rc.refined_variable)
             print("Point 1 of 3: extrapolated")  # yes, use it
         else:
             print("Point 1 of 3: previous best")  # no, use the best
-        v.refined_variable = np.copy(v.best_var)
-        print_LACBED(v, 0)
+        rc.refined_variable = np.copy(rc.best_var)
+        print_LACBED(rc, 0)
         print("-a-----------------------------")  # "{r3_var},{r3_fom}")
 
     # First point: incoming best simulation
     r3_var = np.zeros(3)
     r3_fom = np.zeros(3)
-    r3_var[0] = 1.0*v.best_var[j]  # using principal variable
-    r3_fom[0] = 1.0*v.best_fit
+    r3_var[0] = 1.0*rc.best_var[j]  # using principal variable
+    r3_fom[0] = 1.0*rc.best_fit
 
     # set the refinement scale
-    # if v.refined_variable_type[j] == 20:  # atom coordinates, absolute value
-    delta = dydx * v.refinement_scale
-    # delta = v.best_var[j] * v.refinement_scale
+    # if rc.refined_variable_type[j] == 20:  # atom coordinates, absolute value
+    delta = dydx * rc.refinement_scale
+    # delta = rc.best_var[j] * rc.refinement_scale
 
     # Second point
     print("Refining, point 2 of 3")
     # Change the array of variables by a small amount
-    v.refined_variable += delta  # point 2
+    rc.refined_variable += delta  # point 2
     # check for validity: ADPs must be >=0
-    v.refined_variable[j], cont = variable_check(v.refined_variable[j], t)
-    fom = sim_fom(v, j)  # simulate and get figure of merit
+    rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
+    fom = sim_fom(rc, j)  # simulate and get figure of merit
     # check for no effect
-    if fom == v.best_fit:
+    if fom == rc.best_fit:
         raise ValueError(f"{variable_message(t)} has no effect!")
-    r3_var[1] = 1.0*v.refined_variable[j]
+    r3_var[1] = 1.0*rc.refined_variable[j]
     r3_fom[1] = 1.0*fom
     print(f"-b-----------------------------{r3_var},{r3_fom}")
-    if fom < v.best_fit:
-        v.best_fit = fom*1.0
-        v.best_var = np.copy(v.refined_variable)
+    if fom < rc.best_fit:
+        rc.best_fit = fom*1.0
+        rc.best_var = np.copy(rc.refined_variable)
     if not cont:
         dydx[j] = 0.0
         return dydx
@@ -1114,17 +1112,17 @@ def refine_multi_variable(v, dydx, single=True):
     print("Refining, point 3 of 3")
     if r3_fom[1] > r3_fom[0]:  # if second point is worse
         # Go in the opposite direction
-        v.refined_variable -= np.exp(0.8)*delta
+        rc.refined_variable -= np.exp(0.8)*delta
     else:  # keep going
-        v.refined_variable += np.exp(0.4)*delta
-    v.refined_variable[j], cont = variable_check(v.refined_variable[j], t)
-    fom = sim_fom(v, j)
-    r3_var[2] = 1.0*v.refined_variable[j]
+        rc.refined_variable += np.exp(0.4)*delta
+    rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
+    fom = sim_fom(rc, j)
+    r3_var[2] = 1.0*rc.refined_variable[j]
     r3_fom[2] = 1.0*fom
     print(f"-c----------------------------- {r3_var},{r3_fom}")
-    if fom < v.best_fit:
-        v.best_fit = fom*1.0
-        v.best_var = np.copy(v.refined_variable)
+    if fom < rc.best_fit:
+        rc.best_fit = fom*1.0
+        rc.best_var = np.copy(rc.refined_variable)
     if not cont:
         dydx[j] = 0.0
         return dydx
@@ -1132,43 +1130,43 @@ def refine_multi_variable(v, dydx, single=True):
     # We continue downhill until we get a predicted minnymum
     minny = False
     while minny is False:
-        last_x = 1.0*v.refined_variable[j]
+        last_x = 1.0*rc.refined_variable[j]
         # predict the next point as a minimum or a step on
         next_x, minny = px.convex(r3_var, r3_fom)
-        v.refined_variable *= next_x/last_x
-        # print(f"**..** next x = {v.refined_variable[j]}")
-        v.refined_variable[j], cont = variable_check(v.refined_variable[j], t)
-        fom = sim_fom(v, j)
-        if (fom < v.best_fit):  # it's better, keep going
-            v.best_fit = fom*1.0
-            v.best_var = np.copy(v.refined_variable)
+        rc.refined_variable *= next_x/last_x
+        # print(f"**..** next x = {rc.refined_variable[j]}")
+        rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
+        fom = sim_fom(rc, j)
+        if (fom < rc.best_fit):  # it's better, keep going
+            rc.best_fit = fom*1.0
+            rc.best_var = np.copy(rc.refined_variable)
         if not cont:  # variable has gone out of the valid range
             dydx[j] = 0.0
             return dydx
         # replace worst point with this one
         i = np.argmax(r3_fom)
-        r3_var[i] = 1.0*v.refined_variable[j]
+        r3_var[i] = 1.0*rc.refined_variable[j]
         r3_fom[i] = 1.0*fom
         with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
             print(f"-.-----------------------------{r3_var}: {r3_fom}")
-        # if (fom < v.best_fit):  # it's better, keep going
-        #     v.best_fit = fom*1.0
-        #     v.best_var = np.copy(v.refined_variable)
+        # if (fom < rc.best_fit):  # it's better, keep going
+        #     rc.best_fit = fom*1.0
+        #     rc.best_var = np.copy(rc.refined_variable)
         # else:  # we must have a minimum
-        #     last_x = 1.0*v.refined_variable[j]
+        #     last_x = 1.0*rc.refined_variable[j]
         #     # check it out
         #     next_x, minny = px.convex(r3_var, r3_fom)
-        #     v.refined_variable += dydx * (next_x-last_x)/next_x
-        #     fom = sim_fom(v, j)
-        #     if (fom < v.best_fit):  # it's better, keep going
-        #         v.best_fit = fom*1.0
-        #         v.best_var = np.copy(v.refined_variable)
+        #     rc.refined_variable += dydx * (next_x-last_x)/next_x
+        #     fom = sim_fom(rc, j)
+        #     if (fom < rc.best_fit):  # it's better, keep going
+        #         rc.best_fit = fom*1.0
+        #         rc.best_var = np.copy(rc.refined_variable)
         #     if not cont:
         #         dydx[j] = 0.0
         #         return dydx
     # we have taken the principal variable to a minimum
     dydx[j] = 0.0
     print(f"    ====Refined variable {j}====")
-    print_LACBED(v, 0)
+    print_LACBED(rc, 0)
 
     return dydx

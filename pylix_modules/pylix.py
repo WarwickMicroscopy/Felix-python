@@ -290,7 +290,7 @@ def symop_convert(symop_xyz):
     return mat, vec
 
 
-def unique_atom_positions(xtal, basis, cell, inp):
+def unique_atom_positions(xtal, basis, cell, rc):
     """
     Fills the unit cell by applying symmetry operations to the basis
 
@@ -311,7 +311,7 @@ def unique_atom_positions(xtal, basis, cell, inp):
     # Determine the size of the all_atom_position array
     n_symops = xtal.symmetry_vector.shape[0]
     total_atoms = n_symops * basis.n_atoms
-    if inp.debug:
+    if rc.debug:
         np.set_printoptions(precision=5, suppress=True)
         for i in range(basis.n_atoms):
             print(f"Basis anisotropic u_aniso [{i}]")
@@ -323,7 +323,7 @@ def unique_atom_positions(xtal, basis, cell, inp):
     all_atom_name = np.tile(basis.atom_name, n_symops)
     # print(all_atom_name)
     all_occupancy = np.tile(basis.occupancy, n_symops)
-    if inp.scatter_factor_method == 4:
+    if rc.scatter_factor_method == 4:
         all_kappa = np.tile(basis.kappa, n_symops)
         all_pv = np.tile(basis.pv, n_symops)
         all_r2 = np.tile(basis.r2, n_symops)
@@ -367,12 +367,12 @@ def unique_atom_positions(xtal, basis, cell, inp):
     cell.atom_name = all_atom_name[i]
     cell.occupancy = all_occupancy[i]
     cell.u_aniso = all_u_aniso[i]
-    if inp.scatter_factor_method == 4:
+    if rc.scatter_factor_method == 4:
         cell.kappa = all_kappa[i]
         cell.pv = all_pv[i]
         cell.r2 = all_r2[i]
     cell.n_atoms = len(cell.atom_name)
-    if inp.debug:
+    if rc.debug:
         np.set_printoptions(precision=5, suppress=True)
         for i in range(3):
             print(f"Anisotropic u_aniso [{i}]")
@@ -382,9 +382,9 @@ def unique_atom_positions(xtal, basis, cell, inp):
     return
 
 
-def reference_frames(xtal, inp):
+def reference_frames(xtal, rc):
 # def reference_frames(cell_a, xtal.cell_b, xtal.cell_c, xtal.cell_alpha, xtal.cell_beta, xtal.cell_gamma,
-#                      space_group, inp.x_direction, inp.z_direction, norm_dir_c, debug):
+#                      space_group, rc.x_direction, rc.z_direction, norm_dir_c, debug):
     """
     Produces reciprocal lattice vectors and related parameters
 
@@ -395,12 +395,12 @@ def reference_frames(xtal, inp):
         Lattice angles in radians.
     xtal.cell_a, xtal.cell_b, xtal.cell_c : float
         Lattice lengths in Angstroms.
-    inp.incident_beam_direction : ndarray
+    rc.incident_beam_direction : ndarray
         Direct lattice vector that defines the beam direction.
-    inp.x_direction : ndarray
+    rc.x_direction : ndarray
         Reciprocal lattice vector that defines the x-axis of the diffraction
         pattern.
-    inp.normal : ndarray
+    rc.normal : ndarray
         Normal direction in the crystal reference frame.
     """
 
@@ -413,11 +413,13 @@ def reference_frames(xtal, inp):
     c_vec_o = np.array([
         xtal.cell_c * np.cos(xtal.cell_beta),
         xtal.cell_c * (np.cos(xtal.cell_alpha) - np.cos(xtal.cell_beta) *
-                  np.cos(xtal.cell_gamma)) / np.sin(xtal.cell_gamma),
+                       np.cos(xtal.cell_gamma)) / np.sin(xtal.cell_gamma),
         xtal.cell_c * np.sqrt(1.0 - np.cos(xtal.cell_alpha)**2 -
-                         np.cos(xtal.cell_beta)**2 - np.cos(xtal.cell_gamma)**2 +
-                         2.0 * np.cos(xtal.cell_alpha) *
-                         np.cos(xtal.cell_beta) * np.cos(xtal.cell_gamma)) /
+                              np.cos(xtal.cell_beta)**2 -
+                              np.cos(xtal.cell_gamma)**2 +
+                              2.0 * np.cos(xtal.cell_alpha) *
+                              np.cos(xtal.cell_beta) *
+                              np.cos(xtal.cell_gamma)) /
         np.sin(xtal.cell_gamma)])
 
     # Some checks for rhombohedral cells
@@ -456,9 +458,9 @@ def reference_frames(xtal, inp):
     t_mat_cr2or = np.column_stack((ar_vec_o, br_vec_o, cr_vec_o))
 
     # Unit reciprocal lattice vectors in orthogonal frame
-    x_dir_o = t_mat_cr2or @ inp.x_direction
+    x_dir_o = t_mat_cr2or @ rc.x_direction
     x_dir_o /= np.linalg.norm(x_dir_o)
-    z_dir_o = xtal.t_mat_c2o @ inp.incident_beam_direction
+    z_dir_o = xtal.t_mat_c2o @ rc.incident_beam_direction
     z_dir_o /= np.linalg.norm(z_dir_o)
     y_dir_o = np.cross(z_dir_o, x_dir_o)
 
@@ -466,7 +468,7 @@ def reference_frames(xtal, inp):
     xtal.t_mat_o2m = np.column_stack((x_dir_o, y_dir_o, z_dir_o)).T
 
     # Unit normal to the specimen in microscope frame
-    xtal.norm_dir_m = xtal.t_mat_o2m @ xtal.t_mat_c2o @ inp.normal
+    xtal.norm_dir_m = xtal.t_mat_o2m @ xtal.t_mat_c2o @ rc.normal
     xtal.norm_dir_m /= np.linalg.norm(xtal.norm_dir_m)
 
     # Transform from crystal reference frame to microscope frame
@@ -483,13 +485,13 @@ def reference_frames(xtal, inp):
                 np.dot(xtal.c_vec_m, np.cross(xtal.a_vec_m, xtal.b_vec_m)))
 
     # Output to check
-    if inp.debug:
+    if rc.debug:
         print(" ")
         np.set_printoptions(precision=5, suppress=True)
         print(f"a = {xtal.cell_a}, b = {xtal.cell_b}, c = {xtal.cell_c}")
         print(f"alpha = {xtal.cell_alpha*180.0/np.pi:.2f}, beta = {xtal.cell_beta*180.0/np.pi:.2f}, gamma = {xtal.cell_gamma*180.0/np.pi:.2f}")
-        print(f"X = {inp.x_direction} (reciprocal space)")
-        print(f"Z = {inp.incident_beam_direction} (direct space)")
+        print(f"X = {rc.x_direction} (reciprocal space)")
+        print(f"Z = {rc.incident_beam_direction} (direct space)")
         print(" ")
         print("Transformation crystal to orthogonal (O) frame:")
         print(xtal.t_mat_c2o)
@@ -980,9 +982,9 @@ def preferred_basis(basis, space_group):
         return
 
 
-def hkl_make(xtal, inp, hkl, bloch):
+def hkl_make(xtal, hkl, bloch, rc):
 # def hkl_make(ar_vec_m, br_vec_m, cr_vec_m, big_k, lattice_type,
-#              min_reflection_pool, min_strong_beams, inp.g_limit, input_hkls,
+#              min_reflection_pool, min_strong_beams, rc.g_limit, input_hkls,
 #              electron_wave_vector_magnitude):
     """
     Generates Miller indices that satisfy the selection rules for a given
@@ -993,8 +995,8 @@ def hkl_make(xtal, inp, hkl, bloch):
     xtal.br_vec_m (ndarray): Reciprocal lattice vector b
     xtal.cr_vec_m (ndarray): Reciprocal lattice vector c
     xtal.lattice_type (str): Lattice type (from space group name)
-    inp.min_strong_beams (int): Minimum number of strong beams required
-    inp.g_limit (float): Upper limit for g-vector magnitude
+    rc.min_strong_beams (int): Minimum number of strong beams required
+    rc.g_limit (float): Upper limit for g-vector magnitude
     bloch.big_k (ndarray): vector K along Z in microscope frame (=[001])
     bloch.big_k_mag (float): magnitude of K
 
@@ -1011,17 +1013,17 @@ def hkl_make(xtal, inp, hkl, bloch):
     # Determine shell size (smallest basis vector)
     shell = min(ar_mag, br_mag, cr_mag)
 
-    if inp.g_limit < 1e-10:
+    if rc.g_limit < 1e-10:
         # Use default value and set min_reflection_pool as cutoff
-        inp.g_limit = 10.0 * 2 * np.pi
+        rc.g_limit = 10.0 * 2 * np.pi
     else:
-        # Make min_reflection_pool large and use inp.g_limit as the cutoff
-        inp.min_reflection_pool = 6666
+        # Make min_reflection_pool large and use rc.g_limit as the cutoff
+        rc.min_reflection_pool = 6666
 
-    # Maximum indices to consider based on inp.inp.g_limit
-    max_h = int(np.ceil(inp.g_limit / ar_mag))
-    max_k = int(np.ceil(inp.g_limit / br_mag))
-    max_l = int(np.ceil(inp.g_limit / cr_mag))
+    # Maximum indices to consider based on rc.g_limit
+    max_h = int(np.ceil(rc.g_limit / ar_mag))
+    max_k = int(np.ceil(rc.g_limit / br_mag))
+    max_l = int(np.ceil(rc.g_limit / cr_mag))
 
     # Generate grid of h, k, l values
     h_range = np.arange(-max_h, max_h + 1)
@@ -1069,7 +1071,7 @@ def hkl_make(xtal, inp, hkl, bloch):
 
     # we choose reflections by increasing the radius of reciprocal space
     # explored until we have enough
-    # (limited by inp.g_limit or min_reflection_pool, whichever is smallest)
+    # (limited by rc.g_limit or min_reflection_pool, whichever is smallest)
 
     # first shell
     lnd = 1.0  # Number of the shell
@@ -1077,14 +1079,14 @@ def hkl_make(xtal, inp, hkl, bloch):
     mask = (g_mag <= current_g_limit) & (deviations < 0.08)
     hkl_indices = hkl_pool[mask]
     # expand until we have enough
-    while (len(hkl_indices) < inp.min_reflection_pool) and (lnd * shell < inp.g_limit):
+    while (len(hkl_indices) < rc.min_reflection_pool) and (lnd * shell < rc.g_limit):
         lnd += 1.0
         current_g_limit = shell*lnd
         mask = (g_mag <= current_g_limit) & (deviations < 0.08)
         hkl_indices = hkl_pool[mask]
 
     # Check if enough beams are present
-    if len(hkl_indices) < inp.min_strong_beams:
+    if len(hkl_indices) < rc.min_strong_beams:
         raise ValueError("Beam pool is too small, please increase g_limit!")
 
     # Check if required output HKLs are in the hkl list
@@ -1100,6 +1102,7 @@ def hkl_make(xtal, inp, hkl, bloch):
 
     bloch.g_pool = g_pool[mask]
     bloch.g_pool_mag = g_mag[mask]
+    bloch.hkl_indices = hkl_indices
     bloch.hkl_output = np.array(hkl_output)
     bloch.n_hkl = len(bloch.g_pool)
 
@@ -1107,7 +1110,7 @@ def hkl_make(xtal, inp, hkl, bloch):
     return
 
 
-def Fg_matrix(xtal, inp, basis, cell, bloch):
+def Fg_matrix(xtal, basis, cell, bloch, rc):
 # def Fg_matrix(n_hkl, scatter_factor_method, basis_atom_label, atom_label,
 #               atom_coordinate, atomic_number, occupancy, u_aniso, g_matrix,
 #               absorption_method, absorption_per, electron_velocity, kappas, pv,
@@ -1160,7 +1163,7 @@ def Fg_matrix(xtal, inp, basis, cell, bloch):
     B_aniso = np.divide(Ugg, np.square(bloch.g_pool_mag),
                         out=np.zeros_like(Ugg),
                         where=(bloch.g_pool_mag != 0)) * 8 * np.pi**2
-    if inp.debug:
+    if rc.debug:
         np.set_printoptions(precision=3, suppress=True)
         print("g_magnitudes")
         print(bloch.g_pool_mag[:5, :5])
@@ -1185,19 +1188,19 @@ def Fg_matrix(xtal, inp, basis, cell, bloch):
                          dtype=np.complex128)
     for i in range(basis.n_atoms):
         # get the scattering factor for the basis basis.f_g
-        if inp.scatter_factor_method == 0:
+        if rc.scatter_factor_method == 0:
             basis.f_g[i, :, :] = f_kirkland(basis.atomic_number[i],
                                             bloch.g_pool_mag)
-        elif inp.scatter_factor_method == 1:
+        elif rc.scatter_factor_method == 1:
             basis.f_g[i, :, :] = f_lobato(basis.atomic_number[i],
                                           bloch.g_pool_mag)
-        elif inp.scatter_factor_method == 2:
+        elif rc.scatter_factor_method == 2:
             basis.f_g[i, :, :] = f_peng(basis.atomic_number[i],
                                         bloch.g_pool_mag)
-        elif inp.scatter_factor_method == 3:
+        elif rc.scatter_factor_method == 3:
             basis.f_g[i, :, :] = f_doyle_turner(basis.atomic_number[i],
                                                 bloch.g_pool_mag)
-        elif inp.scatter_factor_method == 4:
+        elif rc.scatter_factor_method == 4:
             print(f"Calculating kappa factor for atom {i+1}/{cell.n_atoms}")
             basis.f_g[i, :, :] = kappa_factors(bloch.g_pool_mag,
                                                i, basis.r2[i])
@@ -1205,16 +1208,16 @@ def Fg_matrix(xtal, inp, basis, cell, bloch):
             raise ValueError("No scattering factors chosen in felix.inp")
 
         # get the absorptive scattering factor for the basis basis.f_g_prime
-        if inp.absorption_method == 0:  # no absorption
+        if rc.absorption_method == 0:  # no absorption
             basis.f_g_prime[i, :, :] = np.zeros_like(basis.f_g)
-        elif inp.absorption_method == 1:  # proportional model
-            basis.f_g_prime[i, :, :] = 0.01j * basis.f_g * inp.absorption_per
-        elif inp.absorption_method == 2:  # Bird & King, Thomas
+        elif rc.absorption_method == 1:  # proportional model
+            basis.f_g_prime[i, :, :] = 0.01j * basis.f_g * rc.absorption_per
+        elif rc.absorption_method == 2:  # Bird & King, Thomas
             basis.f_g_prime[i, :, :] = 1j * f_thomas(bloch.g_pool_mag,
                                                      B_aniso[i, :, :],
                                                      basis.atomic_number[i],
                                                      bloch.electron_velocity)
-        if inp.debug:
+        if rc.debug:
             print(f"basis.f_g [{i}]")
             print(f"{basis.f_g[i, :5, :5]}")
             print("  ")
@@ -1240,21 +1243,21 @@ def Fg_matrix(xtal, inp, basis, cell, bloch):
     Fg_to_Ug = bloch.relativistic_correction / (np.pi * xtal.cell_volume)
     bloch.ug_matrix = Fg_to_Ug * Fg_matrix
 
-    return Fg_matrix
+    return  # Fg_matrix
 
 
-def deviation_parameter(inp, bloch):
+def deviation_parameter(bloch, rc):
 # def deviation_parameter(convergence_angle, image_radius, big_k_mag, g_pool,
 #                         g_pool_mag):
     # for LACBED pattern of size [m, m] and a set of g-vectors [n, 3]
     # this returns a 3D array of deviation parameters [m, m, n]
 
     # resolution in k-space
-    delta_K = 2.0*np.pi * inp.convergence_angle/inp.image_radius
+    delta_K = 2.0*np.pi * rc.convergence_angle/rc.image_radius
 
     # pixel grids
-    x_pix = np.arange(-inp.image_radius+.5, inp.image_radius+.5)
-    y_pix = np.arange(-inp.image_radius+.5, inp.image_radius+.5)
+    x_pix = np.arange(-rc.image_radius+.5, rc.image_radius+.5)
+    y_pix = np.arange(-rc.image_radius+.5, rc.image_radius+.5)
     # k_x and k_y
     k_x, k_y = np.meshgrid(x_pix * delta_K, y_pix * delta_K)
 
@@ -1286,7 +1289,7 @@ def deviation_parameter(inp, bloch):
     return
 
 
-def strong_beams(inp, bloch):
+def strong_beams(bloch, rc):
     # def strong_beams(s_g_pix, ug_matrix, min_strong_beams):
     """
     returns a list of strong beams according to their perturbation strength
@@ -1308,7 +1311,7 @@ def strong_beams(inp, bloch):
 
     # Determine strong beams: Increase max_sg until enough beams are found
     strong = np.zeros_like(bloch.s_g_pix, dtype=int)
-    while np.sum(strong) < inp.min_strong_beams:
+    while np.sum(strong) < rc.min_strong_beams:
         min_pert_strong = 0.025 / max_sg
         strong = np.where((np.abs(bloch.s_g_pix) < max_sg)
                           | (pert >= min_pert_strong), 1, 0)
@@ -1320,14 +1323,14 @@ def strong_beams(inp, bloch):
     return
 
 
-def blochwave(inp, bloch):
+def blochwave(bloch, rc):
 # def blochwave(g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl,
 #           big_k_mag, g_dot_norm, k_dot_n_pix, debug):
 
     # strong_beam_indices gives the index of a strong beam in the beam pool
     # Use Sg and perturbation strength to define strong beams
     # strong_beam = strong_beams(s_g_pix, ug_matrix, min_strong_beams)
-    strong_beams(inp, bloch)
+    strong_beams(bloch, rc)
     # print(f"spoink {bloch.strong_beam}")
     # which ones are new (i.e. not already in the output list)
     strong_new = np.setdiff1d(bloch.strong_beam, bloch.hkl_output)
@@ -1378,18 +1381,18 @@ def blochwave(inp, bloch):
     return
 
 
-def wave_functions(inp, bloch, rc):
-# def wave_functions(g_output, s_g_pix, ug_matrix, min_strong_beams,
-#                    n_hkl, big_k_mag, g_dot_norm,
-#                    k_dot_n_pix, thickness, debug):
+def wave_functions(bloch, rc):
+    # def wave_functions(g_output, s_g_pix, ug_matrix, min_strong_beams,
+    #                    n_hkl, big_k_mag, g_dot_norm,
+    #                    k_dot_n_pix, thickness, debug):
     # calculates wave functions for a given thickness by calling the bloch
     # subroutine to get the eigenvector matrices
     # and evaluating for a range of thicknesses
 
-    # n_beams, strong_beam_indices, gamma, eigenvecs, inv_eigenvecs = blochwave(
+    # n_beams,strong_beam_indices, gamma, eigenvecs, inv_eigenvecs = blochwave(
     #     g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl, big_k_mag,
     #     g_dot_norm, k_dot_n_pix, debug)
-    blochwave(inp, bloch)
+    blochwave(bloch, rc)
     # calculate intensities
 
     # Initialize incident (complex) wave function psi0
