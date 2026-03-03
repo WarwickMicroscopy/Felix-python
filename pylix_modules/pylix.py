@@ -1153,20 +1153,19 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
     # g magnitudes but only one atom type.
 
     # g-vector magnitudes, size [n_hkl, n_hkl]
-    # g_magnitude = np.sqrt(np.sum(g_matrix**2, axis=2))
-    # replaced by bloch.g_pool_mag
+    g_magnitude = np.sqrt(np.sum(bloch.g_matrix**2, axis=2))
 
     # anisotropic DP U*g[i]*g[j], size [cell.n_atoms, n_hkl, n_hkl]
     Ugg = np.einsum('ijm, a mn, ij n -> aij', bloch.g_matrix,
                     cell.u_aniso, bloch.g_matrix)
     # equivalent anisotropic B, size [cell.n_atoms, n_hkl, n_hkl]
-    B_aniso = np.divide(Ugg, np.square(bloch.g_pool_mag),
+    B_aniso = np.divide(Ugg, np.square(g_magnitude),
                         out=np.zeros_like(Ugg),
-                        where=(bloch.g_pool_mag != 0)) * 8 * np.pi**2
+                        where=(g_magnitude != 0)) * 8 * np.pi**2
     if rc.debug:
         np.set_printoptions(precision=3, suppress=True)
         print("g_magnitudes")
-        print(bloch.g_pool_mag[:5, :5])
+        print(g_magnitude[:5, :5])
         print("  ")
         for i in range(basis.n_atoms):
             print(f"Anisotropic u_aniso*g[i]*g[j] [{i}]")
@@ -1190,19 +1189,19 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
         # get the scattering factor for the basis basis.f_g
         if rc.scatter_factor_method == 0:
             basis.f_g[i, :, :] = f_kirkland(basis.atomic_number[i],
-                                            bloch.g_pool_mag)
+                                            g_magnitude)
         elif rc.scatter_factor_method == 1:
             basis.f_g[i, :, :] = f_lobato(basis.atomic_number[i],
-                                          bloch.g_pool_mag)
+                                          g_magnitude)
         elif rc.scatter_factor_method == 2:
             basis.f_g[i, :, :] = f_peng(basis.atomic_number[i],
-                                        bloch.g_pool_mag)
+                                        g_magnitude)
         elif rc.scatter_factor_method == 3:
             basis.f_g[i, :, :] = f_doyle_turner(basis.atomic_number[i],
-                                                bloch.g_pool_mag)
+                                                g_magnitude)
         elif rc.scatter_factor_method == 4:
             print(f"Calculating kappa factor for atom {i+1}/{cell.n_atoms}")
-            basis.f_g[i, :, :] = kappa_factors(bloch.g_pool_mag,
+            basis.f_g[i, :, :] = kappa_factors(g_magnitude,
                                                i, basis.r2[i])
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
@@ -1213,7 +1212,7 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
         elif rc.absorption_method == 1:  # proportional model
             basis.f_g_prime[i, :, :] = 0.01j * basis.f_g * rc.absorption_per
         elif rc.absorption_method == 2:  # Bird & King, Thomas
-            basis.f_g_prime[i, :, :] = 1j * f_thomas(bloch.g_pool_mag,
+            basis.f_g_prime[i, :, :] = 1j * f_thomas(g_magnitude,
                                                      B_aniso[i, :, :],
                                                      basis.atomic_number[i],
                                                      bloch.electron_velocity)
@@ -1236,7 +1235,7 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
         Fg_matrix = Fg_matrix+((cell.f_g[i, :, :] + cell.f_g_prime[i, :, :])
                                * phase[:, :, i]
                                * cell.occupancy[i]
-                               # np.exp(-B_aniso[i, :, :] * (bloch.g_pool_mag**2) /
+                               # np.exp(-B_aniso[i, :, :] * (g_magnitude**2) /
                                # (16*np.pi**2)))
                                * np.exp(-Ugg[i, :, :] / 2))
     # Conversion factor from F_g to U_g

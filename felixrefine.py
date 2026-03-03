@@ -229,7 +229,7 @@ rc.update_from_dict(inp_dict)
 if rc.debug:
     np.set_printoptions(precision=5, suppress=True)
     for i in range(basis.n_atoms):
-        print(f"{basis.atom_label[i]}:  u_ij =\n {basis.u_ij[i, :, :]}")
+        print(f"{basis.atom_label[i]}:  u_ij =\n {basis.u_aniso[i, :, :]}")
 
 # thickness array
 if (rc.final_thickness > rc.initial_thickness + rc.delta_thickness):
@@ -595,7 +595,8 @@ if 'S' not in rc.refine_mode:
 
 print("-------------------------------")
 if 'O' in rc.refine_mode:
-    diff_max, diff_mean, times = sim.optimise_pool(rc)
+    # diff_max, diff_mean, times = sim.optimise_pool(v)
+    sim.optimise_pool(xtal, basis, hkl, bloch, cbed, rc)
 else:
     print("Baseline simulation:")
     # uses the whole v=Var class
@@ -645,11 +646,11 @@ if 'S' not in rc.refine_mode:
     
 
 # output LACBED patterns and figure of merit
-if v.image_processing == 1:
-    print(f"  Blur radius {v.blur_radius} pixels")
+if rc.image_processing == 1:
+    print(f"  Blur radius {rc.blur_radius} pixels")
 if 'S' not in rc.refine_mode:
     # figure of merit
-    fom = sim.figure_of_merit(v)
+    fom = sim.figure_of_merit(bloch, cbed, rc)
     print(f"  Figure of merit {100*fom:.2f}%")
     print("-------------------------------")
 
@@ -658,7 +659,7 @@ if 'S' not in rc.refine_mode:
 if 'S' not in rc.refine_mode:
     # Initialise variables for refinement
     fit0 = fom*1.0
-    v.best_fit = fom*1.0
+    rc.best_fit = fom*1.0
     last_fit = fom*1.0
     r3_var = np.zeros(3)  # for parabolic minimum
     r3_fom = np.zeros(3)
@@ -670,14 +671,14 @@ if 'S' not in rc.refine_mode:
 
     # Refinement loop
     df = 1.0
-    while df >= v.exit_criteria:
+    while df >= rc.exit_criteria:
         # rc.refined_variable is the working array of variables
         # best_var is the best array of variables during this refinement cycle
-        v.best_var = np.copy(rc.refined_variable)
+        rc.best_var = np.copy(rc.refined_variable)
         # next_var is the predicted next (best) point
-        v.next_var = np.copy(rc.refined_variable)
+        rc.next_var = np.copy(rc.refined_variable)
 
-        if v.refine_method == 0:
+        if rc.refine_method == 0:
             print("Gradient descent, one parameter at a time")
             # dydx is a vector along the gradient in n-dimensional space
             dydx = np.zeros(rc.n_variables)
@@ -685,10 +686,10 @@ if 'S' not in rc.refine_mode:
                 dydx[i] = 1.0
                 print(f"Refinement vector {dydx}")
                 # single is just multiparameter with one non-zero value
-                # v.next_var = v.best_var - dydx*v.refinement_scale
-                dydx = sim.refine_multi_variable(v, dydx)
+                # rc.next_var = rc.best_var - dydx*rc.refinement_scale
+                dydx = sim.refine_multi_variable(rc, dydx)
 
-        elif v.refine_method == 1:
+        elif rc.refine_method == 1:
             print("Multiparameter refinement, finding parameter gradients")
             # =========== step 1: individual variable minimisation
             # if all variables have been refined, reset
@@ -699,53 +700,53 @@ if 'S' not in rc.refine_mode:
             # that variable from multidimensional refinement, dydx[i] = 0.
             # Otherwise dydx[i] is the gradient for that variable.
             # We also get a predicted best starting point
-            # for gradient descent, v.next_var
+            # for gradient descent, rc.next_var
             for i in range(rc.n_variables):
                 # Skip variables already optimized
                 if abs(dydx[i]) < 1e-10:
                     dydx[i] = 0.0
                     continue
-                dydx[i] = sim.refine_single_variable(v, i)
+                dydx[i] = sim.refine_single_variable(rc, i)
 
             # all variables have updated/predicted so do a final simulation
-            # if it's better, update v.best_fit and v.best_var accordingly
+            # if it's better, update rc.best_fit and rc.best_var accordingly
             if np.count_nonzero(dydx) == 0:
                 print("Closing simulation for this cycle")
-                rc.refined_variable = np.copy(v.next_var)
-                fom = sim.sim_fom(v, 0)
-                if (fom < v.best_fit):
-                    v.best_fit = fom*1.0
-                    v.best_var = np.copy(rc.refined_variable)
+                rc.refined_variable = np.copy(rc.next_var)
+                fom = sim.sim_fom(xtal, basis, hkl, bloch, cbed, rc, i)
+                if (fom < rc.best_fit):
+                    rc.best_fit = fom*1.0
+                    rc.best_var = np.copy(rc.refined_variable)
             print("Vector gradient descent")
             # ===========step 2: vector descent
             # Downhill minimisation until we eliminate all variables
             while np.sum(np.abs(dydx)) > 1e-10:
                 # the returned dydx will have an extra zero!
-                dydx = sim.refine_multi_variable(v, dydx, False)
+                dydx = sim.refine_multi_variable(rc, dydx, False)
         else:
             raise ValueError("No valid refine method (0,1) in felix.inp")
 
         # Update for next iteration
-        df = last_fit - v.best_fit
+        df = last_fit - rc.best_fit
 
-        last_fit = np.copy(v.best_fit)
-        rc.refined_variable = np.copy(v.best_var)
+        last_fit = np.copy(rc.best_fit)
+        rc.refined_variable = np.copy(rc.best_var)
         # reduce refinement scale for next round
-        v.refinement_scale *= (1 - 1 / (1 + rc.n_variables))
-        print(f"Improvement in fit {100*df:.2f}%, will stop at {100*v.exit_criteria:.2f}%")
-        if df >= v.exit_criteria:
-            print(f"Step size reduced to {v.refinement_scale:.6f}")
+        rc.refinement_scale *= (1 - 1 / (1 + rc.n_variables))
+        print(f"Improvement in fit {100*df:.2f}%, will stop at {100*rc.exit_criteria:.2f}%")
+        if df >= rc.exit_criteria:
+            print(f"Step size reduced to {rc.refinement_scale:.6f}")
         print("-------------------------------")
-        if v.plot >= 1:
-            plt.plot(v.fit_log)
+        if rc.plot >= 1:
+            plt.plot(rc.fit_log)
             # plt.scatter(var_pl, fit_pl)
             plt.show()
 
-    print(f"Refinement complete after {v.iter_count} simulations.  Refined values: {v.best_var}")
+    print(f"Refinement complete after {rc.iter_count} simulations.  Refined values: {rc.best_var}")
 
 # %% final print
-sim.print_LACBED(v, 0)
-sim.save_LACBED(v)
+sim.print_LACBED(bloch, cbed, rc, 0)
+sim.save_LACBED(xtal, bloch, cbed, rc)
 total_time = time.time() - start
 print("-----------------------------------------------------------------")
 print(f"Total time {total_time:.1f} s")

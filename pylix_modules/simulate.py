@@ -59,18 +59,18 @@ def simulate(xtal, basis, hkl, bloch, cbed, rc):
                            angstrom**2))
 
     # ===============================================
-    # added unique APD tensors u_ij
+    # added unique APD tensors u_aniso
     # fill the unit cell and get mean inner potential
     # when iterating we only do it if necessary?
     # if v.iter_count == 0 or v.current_variable_type < 6:
     # print (v.atom_site_type_symbol)
 
-    # atom_position, atom_label, atom_type, atom_name, u_ij, occupancy, \
+    # atom_position, atom_label, atom_type, atom_name, u_aniso, occupancy, \
     #     pv, kappas, r2 = \
     #     px.unique_atom_positions(
     #         xtal.symmetry_matrix, xtal.symmetry_vector, basis.atom_label,
     #         v.atom_site_type_symbol, basis.atom_name, basis.atom_position,
-    #         basis.u_ij, basis.occupancy, basis.pv,
+    #         basis.u_aniso, basis.occupancy, basis.pv,
     #         basis.kappa, basis.r2, v.debug)
     px.unique_atom_positions(xtal, basis, cell, rc)
 
@@ -236,7 +236,7 @@ def simulate(xtal, basis, hkl, bloch, cbed, rc):
     # ug_matrix = Fg_to_Ug * \
     #     px.Fg_matrix(n_hkl, v.rc.scatter_factor_method, basis.atom_label,
     #                  atom_label, atom_coordinate, atomic_number, occupancy,
-    #                  u_ij, g_matrix, v.absorption_method, v.absorption_per,
+    #                  u_aniso, g_matrix, v.absorption_method, v.absorption_per,
     #                  electron_velocity, kappas, pv, r2, v.debug)
     px.Fg_matrix(xtal, basis, cell, bloch, rc)
 
@@ -399,7 +399,7 @@ def pcc(stack1, stack2):
     return pcc  # , shifts
 
 
-def optimise_pool(rc):
+def optimise_pool(xtal, basis, hkl, bloch, cbed, rc):
     """
     runs simulations with decreasing numbers of strong beams
     gives a plot of intensity change to inform best pool size for a refinement
@@ -413,43 +413,43 @@ def optimise_pool(rc):
     rc.min_strong_beams = strong[0]
     print(f"Baseline simulation: beam pool {poo}, {strong[0]} strong beams")
     t0 = time.time()
-    simulate(v)
+    simulate(xtal, basis, hkl, bloch, cbed, rc)
     times.append(time.time()-t0)
     print_LACBED(rc, 0)
     baseline = np.copy(cbed.lacbed_sim)
     cbed.diff_image = np.copy(cbed.lacbed_sim)
     # subtract mean and divide by SD
-    for i in range(v.n_thickness):
-        for j in range(v.n_out):
+    for i in range(rc.n_thickness):
+        for j in range(rc.n_out):
             a0 = baseline[i, :, :, j]
             a = (a0 - np.mean(a0))/np.std(a0)
             baseline[i, :, :, j] = a
     # now do decreasing beam pool size and compare against baseline
-    diff_max = np.zeros([n_strong, v.n_thickness, v.n_out])  # max difference
-    diff_mean = np.zeros([n_strong, v.n_thickness, v.n_out])  # mean difference
+    diff_max = np.zeros([n_strong, rc.n_thickness, rc.n_out])  # max difference
+    diff_mean = np.zeros([n_strong, rc.n_thickness, rc.n_out])
     for k in range(1, n_strong):
-        v.min_strong_beams = strong[k]
+        rc.min_strong_beams = strong[k]
         print("-------------------------------")
         print(f"Simulation: beam pool {poo}, {strong[i]} strong beams")
         t0 = time.time()
-        simulate(v)
+        simulate(xtal, basis, hkl, bloch, cbed, rc)
         times.append(time.time()-t0)
-        for i in range(v.n_thickness):
-            for j in range(v.n_out):
+        for i in range(rc.n_thickness):
+            for j in range(rc.n_out):
                 a0 = cbed.lacbed_sim[i, :, :, j]
                 a = (a0 - np.mean(a0))/np.std(a0)
                 b = baseline[i, :, :, j]
                 pcc = b-a
-                v.diff_image[i, :, :, j] = pcc
+                cbed.diff_image[i, :, :, j] = pcc
                 diff_max[k, i, j] = np.max(abs(pcc))
                 diff_mean[k, i, j] = np.mean(abs(pcc))
-            print_LACBED(v, 2)
+            print_LACBED(bloch, cbed, rc, 2)
 
     # make some plots
     fig, ax = plt.subplots(1, 1)
     w_f = 10
     fig.set_size_inches(w_f, w_f)
-    for i in range(v.n_thickness):
+    for i in range(rc.n_thickness):
         max_ = np.sum(diff_max, axis=2)  # max[strong, thickness]
         ax.semilogy(strong, max_[:, i])
     ax.set_xlabel('Strong beams', size=24)
@@ -461,7 +461,7 @@ def optimise_pool(rc):
     fig, ax = plt.subplots(1, 1)
     w_f = 10
     fig.set_size_inches(w_f, w_f)
-    for i in range(v.n_thickness):
+    for i in range(rc.n_thickness):
         mean_ = np.sum(diff_mean, axis=2)  # mean[strong, thickness]
         ax.semilogy(strong, mean_[:, i])
     ax.set_xlabel('Strong beams', size=24)
@@ -473,7 +473,7 @@ def optimise_pool(rc):
     fig, ax = plt.subplots(1, 1)
     w_f = 10
     fig.set_size_inches(w_f, w_f)
-    for i in range(v.n_thickness):
+    for i in range(rc.n_thickness):
         plt.scatter(strong, times)
     ax.set_xlabel('Strong beams', size=24)
     ax.set_ylabel('Time (s)', size=24)
@@ -484,9 +484,9 @@ def optimise_pool(rc):
     return diff_max, diff_mean, times
 
 
-def figure_of_merit(v):
+def figure_of_merit(bloch, cbed, rc):
     """
-    takes as an input v.lacbed_sim, shape [v.n_thickness, pix_x, pix_y, n_out]
+    takes as an input cbed.lacbed_sim, shape [rc.n_thickness, pix_x, pix_y, n_out]
     applies image processing if required
     image processing = 0 -> no Gaussian blur (applied with radius 0)
     image processing = 1 -> Gaussian blur radius defined in felix.inp
@@ -496,11 +496,11 @@ def figure_of_merit(v):
     the best thickness.  Could give a more sophisticated analysis..
     """
     # figure of merit - might need a NaN check? size [n_thick, n_out]
-    fom_array = np.ones([v.n_thickness, v.n_out])
+    fom_array = np.ones([rc.n_thickness, rc.n_out])
     # difference images
-    v.diff_image = np.copy(v.lacbed_expt)
+    cbed.diff_image = np.copy(cbed.lacbed_expt)
     # set up plot for blur optimisation
-    if v.plot >= 2 and v.image_processing == 2:
+    if rc.plot >= 2 and rc.image_processing == 2:
         fig, ax = plt.subplots(1, 1)
         w_f = 10
         fig.set_size_inches(w_f, w_f)
@@ -510,33 +510,33 @@ def figure_of_merit(v):
         plt.xticks(fontsize=22)
         plt.yticks(fontsize=22)
     # loop over thicknesses
-    for i in range(v.n_thickness):
+    for i in range(rc.n_thickness):
         # image processing = 2 -> find the best blur
-        if v.image_processing == 2:
+        if rc.image_processing == 2:
             radii = np.arange(0.2, 2.1, 0.1)  # range of blurs to try
             b_fom = ([])  # mean fom for each blur
             for r in radii:
-                blacbed = np.copy(v.lacbed_sim[i, :, :, :])
-                for j in range(v.n_out):
+                blacbed = np.copy(cbed.lacbed_sim[i, :, :, :])
+                for j in range(rc.n_out):
                     blacbed[:, :, j] = gaussian_filter(blacbed[:, :, j],
                                                        sigma=r)
-                # b_fom.append(np.mean(1.0 - zncc(v.lacbed_expt, blacbed)))
-                b_fom.append(np.mean(1.0 - pcc(v.lacbed_expt, blacbed)))
-            # if v.plot >= 2:
+                # b_fom.append(np.mean(1.0 - zncc(cbed.lacbed_expt, blacbed)))
+                b_fom.append(np.mean(1.0 - pcc(cbed.lacbed_expt, blacbed)))
+            # if rc.plot >= 2:
             #     plt.plot(radii, b_fom)
-            v.blur_radius = radii[np.argmin(b_fom)]
-        if v.image_processing != 0:
-            for j in range(v.n_out):
-                v.lacbed_sim[i, :, :, j] = gaussian_filter(v.lacbed_sim[i, :, :, j],
-                                                           sigma=v.blur_radius)
-        v.lacbed_expt = np.copy(v.lacbed_expt_raw)
+            rc.blur_radius = radii[np.argmin(b_fom)]
+        if rc.image_processing != 0:
+            for j in range(rc.n_out):
+                cbed.lacbed_sim[i, :, :, j] = gaussian_filter(cbed.lacbed_sim[i, :, :, j],
+                                                           sigma=rc.blur_radius)
+        rc.lacbed_expt = np.copy(cbed.lacbed_expt_raw)
         # sub-pixel shift for correlation if required
-        if v.correlation_type == 2:
-            for j in range(v.n_out):
+        if rc.correlation_type == 2:
+            for j in range(rc.n_out):
                 # we only do this for zncc images that exist
-                if np.sum(v.lacbed_expt_raw[j]) != 0:
-                    a0 = v.lacbed_sim[i, :, :, j]
-                    b0 = v.lacbed_expt_raw[:, :, j]
+                if np.sum(cbed.lacbed_expt_raw[j]) != 0:
+                    a0 = cbed.lacbed_sim[i, :, :, j]
+                    b0 = cbed.lacbed_expt_raw[:, :, j]
                     # zero mean normalise the images
                     a = (a0 - np.mean(a0))/np.std(a0)
                     b = (b0 - np.mean(b0))/np.std(b0)
@@ -547,52 +547,52 @@ def figure_of_merit(v):
                     # replace empty experimental pixels with simulation
                     # (which )prevents them from contribution to the zncc)
                     c[c == 0] = a[c == 0]
-                    v.lacbed_expt[:, :, j] = c
+                    cbed.lacbed_expt[:, :, j] = c
 
         # figure of merit
-        if v.correlation_type == 0 or 2:
-            fom_array[i, :] = 1.0 - zncc(v.lacbed_expt,
-                                         v.lacbed_sim[i, :, :, :])
-        elif v.correlation_type == 1:
-            fom_array[i, :] = 1.0 - pcc(v.lacbed_expt,
-                                        v.lacbed_sim[i, :, :, :])
+        if rc.correlation_type == 0 or 2:
+            fom_array[i, :] = 1.0 - zncc(cbed.lacbed_expt,
+                                         cbed.lacbed_sim[i, :, :, :])
+        elif rc.correlation_type == 1:
+            fom_array[i, :] = 1.0 - pcc(cbed.lacbed_expt,
+                                        cbed.lacbed_sim[i, :, :, :])
         else:
             raise ValueError("Invalid correlation_type !(0 or 1) in felix.inp")
 
         # difference images
-        if v.plot ==3:
-            for j in range(v.n_out):
-                a0 = v.lacbed_sim[i, :, :, j]
-                b0 = v.lacbed_expt[:, :, j]
+        if rc.plot ==3:
+            for j in range(rc.n_out):
+                a0 = cbed.lacbed_sim[i, :, :, j]
+                b0 = cbed.lacbed_expt[:, :, j]
     
                 # zero mean normalise the images
                 a = (a0 - np.mean(a0))/np.std(a0)
                 b = (b0 - np.mean(b0))/np.std(b0)
-                v.diff_image[:, :, j] = a-b
-            print_LACBED(v, 2)
+                cbed.diff_image[:, :, j] = a-b
+            print_LACBED(bloch, cbed, rc, 2)
 
-    # plot of blur fit when v.image_processing == 2
-    if v.plot >= 2 and v.image_processing == 2:
+    # plot of blur fit when rc.image_processing == 2
+    if rc.plot >= 2 and rc.image_processing == 2:
         plt.show()
     # print best values
-    if v.image_processing == 2:
-        print(f"  Best blur={v.blur_radius:.1f}")
-    if v.n_thickness > 1:
-        v.best_t = np.argmin(np.mean(fom_array, axis=1))
-        print(f"  Best thickness {0.1*v.thickness[v.best_t]:.1f} nm")
+    if rc.image_processing == 2:
+        print(f"  Best blur={rc.blur_radius:.1f}")
+    if rc.n_thickness > 1:
+        rc.best_t = np.argmin(np.mean(fom_array, axis=1))
+        print(f"  Best thickness {0.1*rc.thickness[rc.best_t]:.1f} nm")
         # mean figure of merit
-        fom = np.mean(fom_array[v.best_t])
+        fom = np.mean(fom_array[rc.best_t])
     else:
-        v.best_t = 0
+        rc.best_t = 0
         fom = np.mean(fom_array[0])
 
     # plot FoM vs thickness for all LACBED patterns
-    if v.plot >= 2 and v.n_thickness > 1:
+    if rc.plot >= 2 and rc.n_thickness > 1:
         fig, ax = plt.subplots(1, 1)
         w_f = 10
         fig.set_size_inches(1.5*w_f, w_f)
-        plt.plot(v.thickness/10, np.mean(fom_array, axis=1), 'ro', linewidth=2)
-        colours = plt.cm.gnuplot(np.linspace(0, 1, v.n_out))
+        plt.plot(rc.thickness/10, np.mean(fom_array, axis=1), 'ro', linewidth=2)
+        colours = plt.cm.gnuplot(np.linspace(0, 1, rc.n_out))
         # I have 99 styles but . ain't one
         styles = ['-', '-.', '--', ':', '-', '-.', '--', ':', '-', '-.', '--',
                   ':', '-', '-.', '--', ':', '-', '-.', '--', ':', '-', '-.',
@@ -603,9 +603,9 @@ def figure_of_merit(v):
                   '--', ':', '-', '-.', '--', ':', '-', '-.', '--', ':', '-',
                   '-.', '--', ':', '-', '-.', '--', ':', '-', '-.', '--', ':',
                   '-', '-.', '--', ':', '-', '-.', '--', ':', '-', '-.', '--']
-        for i in range(v.n_out):
+        for i in range(rc.n_out):
             annotation = f"{bloch.hkl_indices[bloch.hkl_output[i], 0]}{bloch.hkl_indices[bloch.hkl_output[i], 1]}{bloch.hkl_indices[bloch.hkl_output[i], 2]}"
-            plt.plot(v.thickness/10, fom_array[:, i],
+            plt.plot(rc.thickness/10, fom_array[:, i],
                      color=colours[i],
                      linestyle=styles[i],
                      label=annotation)
@@ -667,9 +667,9 @@ def update_variables(v):
                 atom_id = j
                 # Update position: r' = r - v*(r.v) + v*current_var
                 r_dot_v = np.dot(basis.atom_position[atom_id],
-                                 v.atom_refine_vec[i])
+                                 rc.atom_refine_vec[i])
                 basis.atom_position[atom_id, :] = np.mod(
-                    basis.atom_position[atom_id, :] + v.atom_refine_vec[i] *
+                    basis.atom_position[atom_id, :] + rc.atom_refine_vec[i] *
                     (var - r_dot_v), 1)
 
                 # error estimate - needs work
@@ -691,26 +691,26 @@ def update_variables(v):
 
             elif sub[i] == 2:   # Iso ADPs
                 if 0 < var:  # must lie in range
-                    basis.u_ij[j, 0, 0] = var / (8 * np.pi**2)
-                    basis.u_ij[j, 1, 1] = var / (8 * np.pi**2)
-                    basis.u_ij[j, 2, 2] = var / (8 * np.pi**2)
+                    basis.u_aniso[j, 0, 0] = var / (8 * np.pi**2)
+                    basis.u_aniso[j, 1, 1] = var / (8 * np.pi**2)
+                    basis.u_aniso[j, 2, 2] = var / (8 * np.pi**2)
                 else:
-                    basis.u_ij[j, :, :] = 0.0
+                    basis.u_aniso[j, :, :] = 0.0
             elif sub[i] == 3:  # u[1,1]
-                basis.u_ij[j, 0, 0] = var
+                basis.u_aniso[j, 0, 0] = var
             elif sub[i] == 4:  # u[1,1]
-                basis.u_ij[j, 1, 1] = var
+                basis.u_aniso[j, 1, 1] = var
             elif sub[i] == 5:  # u[2,2]
-                basis.u_ij[j, 2, 2] = var
+                basis.u_aniso[j, 2, 2] = var
             elif sub[i] == 6:  # u[1,2]
-                basis.u_ij[j, 0, 1] = var
-                basis.u_ij[j, 1, 0] = var
+                basis.u_aniso[j, 0, 1] = var
+                basis.u_aniso[j, 1, 0] = var
             elif sub[i] == 7:  # u[1,3]
-                basis.u_ij[j, 0, 2] = var
-                basis.u_ij[j, 2, 0] = var
+                basis.u_aniso[j, 0, 2] = var
+                basis.u_aniso[j, 2, 0] = var
             elif sub[i] == 8:  # u[2,3]
-                basis.u_ij[j, 1, 2] = var
-                basis.u_ij[j, 2, 1] = var
+                basis.u_aniso[j, 1, 2] = var
+                basis.u_aniso[j, 2, 1] = var
 
         elif typ[i] == 3:
             # Lattice parameters a, b, c
@@ -916,7 +916,7 @@ def sim_fom(xtal, basis, hkl, bloch, cbed, rc, i):
     print_current_var(rc, i)
     simulate(xtal, basis, hkl, bloch, cbed, rc)
     # figure of merit
-    fom = figure_of_merit(rc)
+    fom = figure_of_merit(bloch, cbed, rc)
     rc.fit_log.append(fom)
     print(f"  Figure of merit {100*fom:.3f}% (previous best {100*rc.best_fit:.3f}%)")
 
@@ -964,7 +964,7 @@ def refine_single_variable(xtal, basis, hkl, bloch, cbed, rc, i):
         # Three-point gradient measurement, starting with plus
         rc.refined_variable[i] += delta
         # simulate and get figure of merit
-        fom = sim_fom(rc, i)
+        fom = sim_fom(xtal, basis, hkl, bloch, cbed, rc, i)
         r3_var[2] = rc.refined_variable[i]*1.0
         r3_fom[2] = fom*1.0
         print("-1-----------------------------")  # " {r3_var},{r3_fom}")
@@ -980,7 +980,7 @@ def refine_single_variable(xtal, basis, hkl, bloch, cbed, rc, i):
             delta = - delta
             rc.refined_variable[i] += np.exp(0.75) * delta
         # simulate and get figure of merit
-        fom = sim_fom(rc, i)
+        fom = sim_fom(xtal, basis, hkl, bloch, cbed, rc, i)
         r3_var[0] = rc.refined_variable[i]*1.0
         r3_fom[0] = fom*1.0
         print("-2-----------------------------")  # " {r3_var},{r3_fom}")
@@ -1065,7 +1065,7 @@ def refine_multi_variable(rc, dydx, single=True):
         # initial trial uses the predicted best set of variables
         rc.refined_variable = 1.0*rc.next_var
         # simulate and get figure of merit
-        fom = sim_fom(rc, j)
+        fom = sim_fom(xtal, basis, hkl, bloch, cbed, rc, j)
         # is it actually any better
         if fom < last_fit:
             rc.best_fit = fom*1.0
@@ -1094,7 +1094,7 @@ def refine_multi_variable(rc, dydx, single=True):
     rc.refined_variable += delta  # point 2
     # check for validity: ADPs must be >=0
     rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
-    fom = sim_fom(rc, j)  # simulate and get figure of merit
+    fom = sim_fom(xtal, basis, hkl, bloch, cbed, rc, j)  # simulate and get figure of merit
     # check for no effect
     if fom == rc.best_fit:
         raise ValueError(f"{variable_message(t)} has no effect!")
@@ -1116,7 +1116,7 @@ def refine_multi_variable(rc, dydx, single=True):
     else:  # keep going
         rc.refined_variable += np.exp(0.4)*delta
     rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
-    fom = sim_fom(rc, j)
+    fom = sim_fom(xtal, basis, hkl, bloch, cbed, rc, j)
     r3_var[2] = 1.0*rc.refined_variable[j]
     r3_fom[2] = 1.0*fom
     print(f"-c----------------------------- {r3_var},{r3_fom}")
@@ -1136,7 +1136,7 @@ def refine_multi_variable(rc, dydx, single=True):
         rc.refined_variable *= next_x/last_x
         # print(f"**..** next x = {rc.refined_variable[j]}")
         rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
-        fom = sim_fom(rc, j)
+        fom = sim_fom(xtal, basis, hkl, bloch, cbed, rc, j)
         if (fom < rc.best_fit):  # it's better, keep going
             rc.best_fit = fom*1.0
             rc.best_var = np.copy(rc.refined_variable)

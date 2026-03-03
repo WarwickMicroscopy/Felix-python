@@ -89,6 +89,7 @@ class RunControl:
     last_fit: float = 0.0
     fit_log: NDArray[np.floating] | None = None
     df: float = 1.0
+    fom: float = 1.0
     iter_count: int = 0
     plot: int = 0
 #     p: np.ndarray = field(default_factory=lambda: np.array([]))
@@ -132,7 +133,12 @@ class Bloch:
 @dataclass
 class Cbed:
     lacbed_sim: NDArray[np.floating] | None = None
+    lacbed_expt: NDArray[np.floating] | None = None
+    lacbed_expt_raw: NDArray[np.floating] | None = None
     diff_image: NDArray[np.floating] | None = None
+    diff_max: NDArray[np.floating] | None = None
+    diff_mean: NDArray[np.floating] | None = None
+    times: NDArray[np.floating] | None = None
 
 
 # ----------------------------------------------------------------------------
