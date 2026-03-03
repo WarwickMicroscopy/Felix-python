@@ -607,9 +607,10 @@ else:
 
 # %% read in experimental images
 if 'S' not in rc.refine_mode:
-    v.lacbed_expt_raw = np.zeros([2*v.image_radius, 2*v.image_radius, v.n_out])
+    cbed.lacbed_expt_raw = np.zeros([2*rc.image_radius, 2*rc.image_radius,
+                                     rc.n_out])
     # get the list of available images
-    x_str = str(2*v.image_radius)
+    x_str = str(2*rc.image_radius)
     dm3_folder = None
     for dirpath, dirnames, filenames in os.walk(path):
         for dirname in dirnames:
@@ -622,28 +623,27 @@ if 'S' not in rc.refine_mode:
                      if file.lower().endswith('.dm3')]
         # just match the indices in the filename to felix.hkl, expect the user
         # to ensure the data is of the right material!
-        n_expt = v.n_out
-        for i in range(v.n_out):
-            g_string = px.hkl_string(v.hkl[v.g_output[i]])
+        n_expt = rc.n_out
+        for i in range(rc.n_out):
+            g_string = px.hkl_string(bloch.hkl_indices[bloch.hkl_output[i]])
             found = False
             for file_name in dm3_files:
                 if g_string in file_name:
                     file_path = os.path.join(dm3_folder, file_name)
-                    v.lacbed_expt_raw[:, :, i] = px.read_dm3(file_path,
-                                                             2*v.image_radius,
-                                                             v.debug)
+                    cbed.lacbed_expt_raw[:, :, i] = px.read_dm3(file_path,
+                                                             2*rc.image_radius,
+                                                             rc.debug)
                     found = True
             if not found:
                 n_expt -= 1  # *_* we don't actually do anything with this!
                 print(f"{g_string} not found")
-                
+
         # print experimental LACBED patterns
-        v.lacbed_expt = np.copy(v.lacbed_expt_raw)
+        cbed.lacbed_expt = np.copy(cbed.lacbed_expt_raw)
         # print_LACBED has options 0=sim, 1=expt, 2=difference
-        sim.print_LACBED(v, 1)
+        sim.print_LACBED(bloch, cbed, rc, 1)
         # initialise correlation
-        best_corr = np.ones(v.n_out)
-    
+        best_corr = np.ones(rc.n_out)
 
 # output LACBED patterns and figure of merit
 if rc.image_processing == 1:
@@ -687,7 +687,8 @@ if 'S' not in rc.refine_mode:
                 print(f"Refinement vector {dydx}")
                 # single is just multiparameter with one non-zero value
                 # rc.next_var = rc.best_var - dydx*rc.refinement_scale
-                dydx = sim.refine_multi_variable(rc, dydx)
+                dydx = sim.refine_multi_variable(xtal, basis, hkl,
+                                                 bloch, cbed, rc, dydx)
 
         elif rc.refine_method == 1:
             print("Multiparameter refinement, finding parameter gradients")

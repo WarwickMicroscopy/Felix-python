@@ -620,7 +620,7 @@ def figure_of_merit(bloch, cbed, rc):
     return fom
 
 
-def update_variables(v):
+def update_variables(xtal, basis, rc):
     """
     Updates the different refinement variables
     current_var is an array of variable values
@@ -651,12 +651,12 @@ def update_variables(v):
     # will tackle this when doing atomic position refinement
     # basis_atom_delta.fill(0)  # Reset atom coordinate uncertainties to zero
 
-    typ = v.refined_variable_type // 10  # variable type
-    sub = v.refined_variable_type % 10  # variable subtype
+    typ = rc.refined_variable_type // 10  # variable type
+    sub = rc.refined_variable_type % 10  # variable subtype
 
-    for i in range(v.n_variables):
-        j = v.atom_refine_flag[i]  # neat
-        var = np.copy(v.refined_variable[i])
+    for i in range(rc.n_variables):
+        j = rc.atom_refine_flag[i]  # neat
+        var = np.copy(rc.refined_variable[i])
 
         if typ[i] == 0:
             # Structure factor refinement (handled elsewhere)
@@ -729,9 +729,9 @@ def update_variables(v):
 
         elif typ[i] == 4:
             if sub[i] == 0:  # Convergence angle
-                v.convergence_angle = var
+                rc.convergence_angle = var
             elif sub[i] == 1:  # Accelerating voltage
-                inp.accelerating_voltage_kv = var
+                rc.accelerating_voltage_kv = var
 
         elif typ[i] == 5:
             if sub[i] == 0:  # kappa
@@ -839,7 +839,7 @@ def save_LACBED(xtal, bloch, cbed, rc):
     os.chdir("..")
 
 
-def print_current_var(basis, rc, i):
+def print_current_var(xtal, basis, rc, i):
     # prints the variable being refined
     typ = rc.refined_variable_type[i]  # variable type & subtype
     atom_id = rc.atom_refine_flag[i]
@@ -847,8 +847,8 @@ def print_current_var(basis, rc, i):
 
     # dictionary of format strings
     formats = {
-        10: (f"Current Ug", "{:.3f}"),
-        11: (f"Current Ug", "{:.3f}"),
+        10: ("Current Ug", "{:.3f}"),
+        11: ("Current Ug", "{:.3f}"),
         21: (f" Atom {atom_id}: {label} Current occupancy", "{:.2f}"),
         22: (f" Atom {atom_id}: {label} Current B_iso", "{:.2f}"),
         23: (f" Atom {atom_id}: {label} Current U[1,1]", "{:.5f}"),
@@ -857,14 +857,14 @@ def print_current_var(basis, rc, i):
         26: (f" Atom {atom_id}: {label} Current U[1,2]", "{:.5f}"),
         27: (f" Atom {atom_id}: {label} Current U[1,3]", "{:.5f}"),
         28: (f" Atom {atom_id}: {label} Current U[2,3]", "{:.5f}"),
-        30: (f"Current lattice parameter a", "{:.4f}"),
-        31: (f"Current lattice parameter b", "{:.4f}"),
-        32: (f"Current lattice parameter c", "{:.4f}"),
-        33: (f"Current lattice alpha", "{:.4f}"),
-        34: (f"Current lattice beta", "{:.4f}"),
-        35: (f"Current lattice gamma", "{:.4f}"),
-        40: (f"Current convergence angle", "{:.3f} Å^-1"),
-        41: (f"Current accelerating voltage", "{:.1f} kV"),
+        30: ("Current lattice parameter a", "{:.4f}"),
+        31: ("Current lattice parameter b", "{:.4f}"),
+        32: ("Current lattice parameter c", "{:.4f}"),
+        33: ("Current lattice alpha", "{:.4f}"),
+        34: ("Current lattice beta", "{:.4f}"),
+        35: ("Current lattice gamma", "{:.4f}"),
+        40: ("Current convergence angle", "{:.3f} Å^-1"),
+        41: ("Current accelerating voltage", "{:.1f} kV"),
         50: (f" Atom {atom_id}: Current Kappa", "{:.3f}"),
         51: (f" Atom {atom_id}: Current proportion of valence electrons", "{:.4f}")
             }
@@ -912,8 +912,8 @@ def sim_fom(xtal, basis, hkl, bloch, cbed, rc, i):
     input i = index of variable to be refined, for single variables
     i = -1 for multiple variables
     '''
-    update_variables(rc)
-    print_current_var(rc, i)
+    update_variables(xtal, basis, rc)
+    print_current_var(xtal, basis, rc, i)
     simulate(xtal, basis, hkl, bloch, cbed, rc)
     # figure of merit
     fom = figure_of_merit(bloch, cbed, rc)
@@ -1025,7 +1025,7 @@ def variable_check(x, t):
     return x, continue_
 
 
-def refine_multi_variable(rc, dydx, single=True):
+def refine_multi_variable(xtal, basis, hkl, bloch, cbed, rc, dydx, single=True):
     '''
     multidimensional refinement
     dydx: float array of gradients, generated in refine_single_variable
