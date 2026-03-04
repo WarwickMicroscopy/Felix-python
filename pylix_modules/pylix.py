@@ -367,6 +367,10 @@ def unique_atom_positions(xtal, basis, cell, rc):
     cell.atom_name = all_atom_name[i]
     cell.occupancy = all_occupancy[i]
     cell.u_aniso = all_u_aniso[i]
+    # Generate atomic numbers based on the elemental symbols
+    cell.atomic_number = np.array([fu.atomic_number_map[na]
+                                   for na in cell.atom_name])
+
     if rc.scatter_factor_method == 4:
         cell.kappa = all_kappa[i]
         cell.pv = all_pv[i]
@@ -382,7 +386,7 @@ def unique_atom_positions(xtal, basis, cell, rc):
     return
 
 
-def reference_frames(xtal, rc):
+def reference_frames(xtal, cell, rc):
 # def reference_frames(cell_a, xtal.cell_b, xtal.cell_c, xtal.cell_alpha, xtal.cell_beta, xtal.cell_gamma,
 #                      space_group, rc.x_direction, rc.z_direction, norm_dir_c, debug):
     """
@@ -483,6 +487,12 @@ def reference_frames(xtal, rc):
                 np.dot(xtal.b_vec_m, np.cross(xtal.c_vec_m, xtal.a_vec_m)))
     xtal.cr_vec_m = (2.0*np.pi * np.cross(xtal.a_vec_m, xtal.b_vec_m) /
                 np.dot(xtal.c_vec_m, np.cross(xtal.a_vec_m, xtal.b_vec_m)))
+
+    # put the crystal in the micrcoscope reference frame, in Å
+    cell.atom_coordinate = (cell.atom_position[:, 0, np.newaxis]*xtal.a_vec_m +
+                            cell.atom_position[:, 1, np.newaxis]*xtal.b_vec_m +
+                            cell.atom_position[:, 2, np.newaxis]*xtal.c_vec_m)
+
 
     # Output to check
     if rc.debug:

@@ -63,7 +63,7 @@ Debye_model               = 1
 
 # Beam selection criteria
 min_reflection_pool       = 100
-min_strong_beams          = 30
+min_strong_beams          = 10
 min_weak_beams            = 0
 g_limit                   = 0.0
 
@@ -71,8 +71,8 @@ g_limit                   = 0.0
 incident_beam_direction   = [1, -1, 0]
 x_direction               = [0, 0, -1]
 normal                    = [1, -1, 0]
-initial_thickness         = 1400.0
-final_thickness           = 1501.0
+initial_thickness         = 2000.0
+final_thickness           = 2001.0
 delta_thickness           = 20.0
 debye_waller_constant     = 0.0
 absorption_per            = 10.0
@@ -91,11 +91,11 @@ print_flag                = 0
 debug                     = 0
 
 # Refinement specific flags
-refine_mode               = 'S'
-atomic_sites              = [0]
-refinement_scale          = 0.04
-correlation_type          = 0
+refine_mode               = 'D'
 refine_method             = 0
+refinement_scale          = 0.02
+correlation_type          = 0
+atomic_sites              = [0]
 exit_criteria             = 0.00005
 precision                 = 0.00002
 weighting_flag            = 0

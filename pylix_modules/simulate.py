@@ -31,6 +31,7 @@ from pylix_modules import pylix_class as pc
 def simulate(xtal, basis, hkl, bloch, cbed, rc):
 
     cell = pc.Cell()  # all atom variables
+    typ = rc.refined_variable_type // 10  # array of variable types
 
     # some setup calculations
     # Electron velocity in metres per second
@@ -59,27 +60,31 @@ def simulate(xtal, basis, hkl, bloch, cbed, rc):
                            angstrom**2))
 
     # ===============================================
-    # added unique APD tensors u_aniso
     # fill the unit cell and get mean inner potential
-    # when iterating we only do it if necessary?
-    # if v.iter_count == 0 or v.current_variable_type < 6:
-    # print (v.atom_site_type_symbol)
+    # only if necessary, i.e. for B, C, D, E
+    if np.any(typ == 2) or rc.iter_count == 0:
+        px.unique_atom_positions(xtal, basis, cell, rc)
+        # mean inner potential as the sum of scattering factors at g=0
+        # multiplied by h^2/(2pi*m0*e*CellVolume)
+        mip = 0.0
+        for i in range(cell.n_atoms):  # get the scattering factor
+            if rc.scatter_factor_method == 0:
+                mip += px.f_kirkland(cell.atomic_number[i], 0.0)
+            elif rc.scatter_factor_method == 1:
+                mip += px.f_lobato(cell.atomic_number[i], 0.0)
+            elif rc.scatter_factor_method == 2:
+                mip += px.f_peng(cell.atomic_number[i], 0.0)
+            elif rc.scatter_factor_method == 3:
+                mip += px.f_doyle_turner(cell.atomic_number[i], 0.0)
+            elif rc.scatter_factor_method == 4:
+                mip += px.f_kirkland(cell.atomic_number[i], 0.0)
+            else:
+                raise ValueError("No scattering factors chosen in felix.inp")
+        mip = mip.item()*scatt_fac_to_volts  # NB convert array to float
 
-    # atom_position, atom_label, atom_type, atom_name, u_aniso, occupancy, \
-    #     pv, kappas, r2 = \
-    #     px.unique_atom_positions(
-    #         xtal.symmetry_matrix, xtal.symmetry_vector, basis.atom_label,
-    #         v.atom_site_type_symbol, basis.atom_name, basis.atom_position,
-    #         basis.u_aniso, basis.occupancy, basis.pv,
-    #         basis.kappa, basis.r2, v.debug)
-    px.unique_atom_positions(xtal, basis, cell, rc)
-
-
-    # Generate atomic numbers based on the elemental symbols
-    cell.atomic_number = np.array([fu.atomic_number_map[na]
-                                   for na in cell.atom_name])
     if rc.iter_count == 0:
-        print("  There are "+str(cell.n_atoms)+" atoms in the unit cell")
+        print(f"  There are {cell.n_atoms} atoms in the unit cell")
+        print(f"  Mean inner potential = {mip:.1f} Volts")
 
     # output for debugging
     if rc.debug:
@@ -91,25 +96,6 @@ def simulate(xtal, basis, hkl, bloch, cbed, rc):
         for i in range(cell.n_atoms):
             print(f"{cell.atom_label[i]} {cell.atom_name[i]}: {cell.atom_position[i]}")
 
-    # mean inner potential as the sum of scattering factors at g=0
-    # multiplied by h^2/(2pi*m0*e*CellVolume)
-    mip = 0.0
-    for i in range(cell.n_atoms):  # get the scattering factor
-        if rc.scatter_factor_method == 0:
-            mip += px.f_kirkland(cell.atomic_number[i], 0.0)
-        elif rc.scatter_factor_method == 1:
-            mip += px.f_lobato(cell.atomic_number[i], 0.0)
-        elif rc.scatter_factor_method == 2:
-            mip += px.f_peng(cell.atomic_number[i], 0.0)
-        elif rc.scatter_factor_method == 3:
-            mip += px.f_doyle_turner(cell.atomic_number[i], 0.0)
-        elif rc.scatter_factor_method == 4:
-            mip += px.f_kirkland(cell.atomic_number[i], 0.0)    # because we use kirkland for S<0.5 we can just set it here as well
-        else:
-            raise ValueError("No scattering factors chosen in felix.inp")
-    mip = mip.item()*scatt_fac_to_volts  # NB convert array to float
-    if rc.iter_count == 0:
-        print(f"  Mean inner potential = {mip:.1f} Volts")
     # Wave vector magnitude in crystal
     # high-energy approximation (not HOLZ compatible)
     # K^2=k^2+U0
@@ -120,17 +106,9 @@ def simulate(xtal, basis, hkl, bloch, cbed, rc):
 
     # ===============================================
     # set up reference frames
-    # a_vec_m, b_vec_m, c_vec_m, ar_vec_m, br_vec_m, cr_vec_m, norm_dir_m, t_mat_o2m, t_mat_c2o = \
-    #     px.reference_frames(cell_a, cell_b, cell_c, cell_alpha, 
-    #                         cell_beta, cell_gamma, v.space_group,
-    #                         v.x_direction, v.incident_beam_direction,
-    #                         v.normal_direction, v.debug)
-    px.reference_frames(xtal, rc)
-
-    # put the crystal in the micrcoscope reference frame, in Å
-    cell.atom_coordinate = (cell.atom_position[:, 0, np.newaxis]*xtal.a_vec_m +
-                            cell.atom_position[:, 1, np.newaxis]*xtal.b_vec_m +
-                            cell.atom_position[:, 2, np.newaxis]*xtal.c_vec_m)
+    # only if necessary, i.e. for cell dimensions F, G
+    if np.any(typ == 3) or rc.iter_count == 0:
+        px.reference_frames(xtal, cell, rc)
 
     # plot unit cell and save .xyz file
     if rc.iter_count == 0 and rc.plot >= 1:
@@ -165,24 +143,17 @@ def simulate(xtal, basis, hkl, bloch, cbed, rc):
 
     # ===============================================
     # set up beam pool
-    # currently we do this every iteration, but could be restricted to cases
-    # where we need to do it in iterations
-    strt = time.time()
     # NB g_pool are in reciprocal Angstroms in the microscope reference frame
-    # bloch.hkl_indices, g_pool, g_pool_mag, hkl_output = \
-    #     px.hkl_make(ar_vec_m, br_vec_m, cr_vec_m,
-    #                 big_k, v.lattice_type, v.min_reflection_pool,
-    #                 v.min_strong_beams, v.g_limit, v.input_hkls, big_k_mag)
-    # n_hkl = len(g_pool)
-
-    # calculate bloch.g_pool, bloch.g_pool_mag, bloch.hkl_output, bloch.n_hkl
-    px.hkl_make(xtal, hkl, bloch, rc)
-    # output redefined to match what we can actually do
-    bloch.n_out = len(bloch.hkl_output)
-    # NEEDS SOME MORE WORK TO MATCH SIM/EXPT PATTERNS if this happens
+    # only if necessary, i.e. for cell dimensions F, G and kV I
+    if rc.iter_count == 0 or np.any(typ == 3) or np.any(typ == 4):
+        strt = time.time()
+        px.hkl_make(xtal, hkl, bloch, rc)
+        # output redefined to match what we can actually do
+        bloch.n_out = len(bloch.hkl_output)
+        # NEEDS SOME MORE WORK TO MATCH SIM/EXPT PATTERNS if this happens
 
     # outputs
-    if rc.iter_count == 0:
+    if rc.iter_count <= 10:
         print(f"  Beam pool: {bloch.n_hkl} reflexions ({rc.min_strong_beams} strong beams)")
         # we will have larger g-vectors in g_matrix since this has
         # differences g - h
@@ -230,14 +201,9 @@ def simulate(xtal, basis, hkl, bloch, cbed, rc):
     bloch.g_matrix = bloch.g_pool[:, np.newaxis, :] \
         - bloch.g_pool[np.newaxis, :, :]
 
-
+    # ===============================================
     # now make the Ug matrix, i.e. calculate the structure factor Fg for all
-    # g-vectors in g_matrix and convert using the above factor
-    # ug_matrix = Fg_to_Ug * \
-    #     px.Fg_matrix(n_hkl, v.rc.scatter_factor_method, basis.atom_label,
-    #                  atom_label, atom_coordinate, atomic_number, occupancy,
-    #                  u_aniso, g_matrix, v.absorption_method, v.absorption_per,
-    #                  electron_velocity, kappas, pv, r2, v.debug)
+    # g-vectors in g_matrix and convert to Ug
     px.Fg_matrix(xtal, basis, cell, bloch, rc)
 
     # matrix of dot products with the surface normal
@@ -262,11 +228,10 @@ def simulate(xtal, basis, hkl, bloch, cbed, rc):
     # Dot product of k with surface normal, [image diameter, image diameter]
     bloch.k_dot_n = np.tensordot(bloch.tilted_k, xtal.norm_dir_m,
                                  axes=([2], [0]))
-
-    # output container
+    # reset output container
     cbed.lacbed_sim = np.zeros([rc.n_thickness, 2*rc.image_radius,
                                2*rc.image_radius, len(bloch.hkl_output)],
-                              dtype=float)
+                               dtype=float)
 
     print("Bloch wave calculation...", end=' ')
     if rc.debug:
@@ -1094,7 +1059,8 @@ def refine_multi_variable(xtal, basis, hkl, bloch, cbed, rc, dydx, single=True):
     rc.refined_variable += delta  # point 2
     # check for validity: ADPs must be >=0
     rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
-    fom = sim_fom(xtal, basis, hkl, bloch, cbed, rc, j)  # simulate and get figure of merit
+    # simulate and get figure of merit
+    fom = sim_fom(xtal, basis, hkl, bloch, cbed, rc, j)
     # check for no effect
     if fom == rc.best_fit:
         raise ValueError(f"{variable_message(t)} has no effect!")

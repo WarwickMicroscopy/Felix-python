@@ -398,13 +398,13 @@ rc.n_out = len(hkl.input_hkls)+1  # we expect 000 NOT to be in the hkl list
 # 41 I = accelerating_voltage_kv *** NOT YET IMPLEMENTED ***
 # 50 J = Kappa
 # 51 K = valence electrons
+rc.n_variables = 0
 rc.refined_variable = ([])  # array of floats, values to be refined
 rc.refined_variable_type = ([])  # array of integers corresponding to above
 rc.atom_refine_flag = ([])  # the index of the atom in the .cif, -1 if none
 rc.atom_refine_vec = ([])  # the direction of atom movement, [0,0,0] if none
 nullvec = np.array([0, 0, 0])  # null vector for above
 if 'S' not in rc.refine_mode:
-    rc.n_variables = 0
     n_sites = len(rc.atomic_sites)
     # count refinement variables
     if 'B' in rc.refine_mode:  # Atom coordinate refinement
