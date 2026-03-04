@@ -113,6 +113,7 @@ class Bloch:
     g_pool: NDArray[np.floating] | None = None
     g_pool_mag: NDArray[np.floating] | None = None
     g_matrix: NDArray[np.floating] | None = None
+    ug_matrix: NDArray[np.floating] | None = None
     g_dot_norm: NDArray[np.floating] | None = None
     s_g: NDArray[np.floating] | None = None
     s_g_pix: NDArray[np.floating] | None = None

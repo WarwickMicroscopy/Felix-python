@@ -28,9 +28,8 @@ from pylix_modules import pylix_dicts as fu
 from pylix_modules import pylix_class as pc
 
 
-def simulate(xtal, basis, hkl, bloch, cbed, rc):
+def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
 
-    cell = pc.Cell()  # all atom variables
     typ = rc.refined_variable_type // 10  # array of variable types
 
     # some setup calculations
@@ -196,15 +195,14 @@ def simulate(xtal, basis, hkl, bloch, cbed, rc):
                         labelbottom=False, labelleft=False)
         plt.show()
 
-    # g-vector matrix, array [n_hkl, n_hkl, 3]
-    bloch.g_matrix = np.zeros((bloch.n_hkl, bloch.n_hkl, 3))
-    bloch.g_matrix = bloch.g_pool[:, np.newaxis, :] \
-        - bloch.g_pool[np.newaxis, :, :]
-
     # ===============================================
     # now make the Ug matrix, i.e. calculate the structure factor Fg for all
     # g-vectors in g_matrix and convert to Ug
+    # any change results in recalculation
+    print(f"      atom coords {cell.atom_coordinate}")
     px.Fg_matrix(xtal, basis, cell, bloch, rc)
+    np.set_printoptions(precision=3, suppress=True)
+    print(100*bloch.ug_matrix[:5, :5])
 
     # matrix of dot products with the surface normal
     bloch.g_dot_norm = np.dot(bloch.g_pool, xtal.norm_dir_m)
@@ -216,10 +214,6 @@ def simulate(xtal, basis, hkl, bloch, cbed, rc):
 
     # ===============================================
     # deviation parameter for each pixel and g-vector
-    # s_g [n_hkl, image diameter, image diameter]
-    # and k vector for each pixel, tilted_k [image diameter, image diameter, 3]
-    # s_g, tilted_k = px.deviation_parameter(v.convergence_angle, v.image_radius,
-    #                                        big_k_mag, g_pool, g_pool_mag)
     px.deviation_parameter(bloch, rc)
 
     # ===============================================
@@ -364,7 +358,7 @@ def pcc(stack1, stack2):
     return pcc  # , shifts
 
 
-def optimise_pool(xtal, basis, hkl, bloch, cbed, rc):
+def optimise_pool(xtal, basis, cell, hkl, bloch, cbed, rc):
     """
     runs simulations with decreasing numbers of strong beams
     gives a plot of intensity change to inform best pool size for a refinement
@@ -378,7 +372,7 @@ def optimise_pool(xtal, basis, hkl, bloch, cbed, rc):
     rc.min_strong_beams = strong[0]
     print(f"Baseline simulation: beam pool {poo}, {strong[0]} strong beams")
     t0 = time.time()
-    simulate(xtal, basis, hkl, bloch, cbed, rc)
+    simulate(xtal, basis, cell, hkl, bloch, cbed, rc)
     times.append(time.time()-t0)
     print_LACBED(rc, 0)
     baseline = np.copy(cbed.lacbed_sim)
@@ -397,7 +391,7 @@ def optimise_pool(xtal, basis, hkl, bloch, cbed, rc):
         print("-------------------------------")
         print(f"Simulation: beam pool {poo}, {strong[i]} strong beams")
         t0 = time.time()
-        simulate(xtal, basis, hkl, bloch, cbed, rc)
+        simulate(xtal, basis, cell, hkl, bloch, cbed, rc)
         times.append(time.time()-t0)
         for i in range(rc.n_thickness):
             for j in range(rc.n_out):
@@ -870,7 +864,7 @@ def variable_message(vtype):
     return msg[vtype]
 
 
-def sim_fom(xtal, basis, hkl, bloch, cbed, rc, i):
+def sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, i):
     '''
     wraps multiple subroutine calls into a single line: update variables
     simulate and figure of merit
@@ -879,7 +873,7 @@ def sim_fom(xtal, basis, hkl, bloch, cbed, rc, i):
     '''
     update_variables(xtal, basis, rc)
     print_current_var(xtal, basis, rc, i)
-    simulate(xtal, basis, hkl, bloch, cbed, rc)
+    simulate(xtal, basis, cell, hkl, bloch, cbed, rc)
     # figure of merit
     fom = figure_of_merit(bloch, cbed, rc)
     rc.fit_log.append(fom)
@@ -888,7 +882,7 @@ def sim_fom(xtal, basis, hkl, bloch, cbed, rc, i):
     return fom
 
 
-def refine_single_variable(xtal, basis, hkl, bloch, cbed, rc, i):
+def refine_single_variable(xtal, basis, cell, hkl, bloch, cbed, rc, i):
     '''
     Does 3-point refinement for a single variable and if no minimum is found
     retuns the step size for a subsequent multidimensional refinement
@@ -929,7 +923,7 @@ def refine_single_variable(xtal, basis, hkl, bloch, cbed, rc, i):
         # Three-point gradient measurement, starting with plus
         rc.refined_variable[i] += delta
         # simulate and get figure of merit
-        fom = sim_fom(xtal, basis, hkl, bloch, cbed, rc, i)
+        fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, i)
         r3_var[2] = rc.refined_variable[i]*1.0
         r3_fom[2] = fom*1.0
         print("-1-----------------------------")  # " {r3_var},{r3_fom}")
@@ -945,7 +939,7 @@ def refine_single_variable(xtal, basis, hkl, bloch, cbed, rc, i):
             delta = - delta
             rc.refined_variable[i] += np.exp(0.75) * delta
         # simulate and get figure of merit
-        fom = sim_fom(xtal, basis, hkl, bloch, cbed, rc, i)
+        fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, i)
         r3_var[0] = rc.refined_variable[i]*1.0
         r3_fom[0] = fom*1.0
         print("-2-----------------------------")  # " {r3_var},{r3_fom}")
@@ -1030,7 +1024,7 @@ def refine_multi_variable(xtal, basis, hkl, bloch, cbed, rc, dydx, single=True):
         # initial trial uses the predicted best set of variables
         rc.refined_variable = 1.0*rc.next_var
         # simulate and get figure of merit
-        fom = sim_fom(xtal, basis, hkl, bloch, cbed, rc, j)
+        fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
         # is it actually any better
         if fom < last_fit:
             rc.best_fit = fom*1.0
@@ -1060,7 +1054,7 @@ def refine_multi_variable(xtal, basis, hkl, bloch, cbed, rc, dydx, single=True):
     # check for validity: ADPs must be >=0
     rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
     # simulate and get figure of merit
-    fom = sim_fom(xtal, basis, hkl, bloch, cbed, rc, j)
+    fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
     # check for no effect
     if fom == rc.best_fit:
         raise ValueError(f"{variable_message(t)} has no effect!")
@@ -1082,7 +1076,7 @@ def refine_multi_variable(xtal, basis, hkl, bloch, cbed, rc, dydx, single=True):
     else:  # keep going
         rc.refined_variable += np.exp(0.4)*delta
     rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
-    fom = sim_fom(xtal, basis, hkl, bloch, cbed, rc, j)
+    fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
     r3_var[2] = 1.0*rc.refined_variable[j]
     r3_fom[2] = 1.0*fom
     print(f"-c----------------------------- {r3_var},{r3_fom}")
@@ -1102,7 +1096,7 @@ def refine_multi_variable(xtal, basis, hkl, bloch, cbed, rc, dydx, single=True):
         rc.refined_variable *= next_x/last_x
         # print(f"**..** next x = {rc.refined_variable[j]}")
         rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
-        fom = sim_fom(xtal, basis, hkl, bloch, cbed, rc, j)
+        fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
         if (fom < rc.best_fit):  # it's better, keep going
             rc.best_fit = fom*1.0
             rc.best_var = np.copy(rc.refined_variable)

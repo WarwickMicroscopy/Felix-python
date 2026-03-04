@@ -1152,8 +1152,11 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
     -------
     Fg_matrix : size [n_hkl,n_hkl]
     """
-    # n_basis = len(basis_atom_label)
-    # n_cell = len(atom_label)
+    # initialise g-vector matrix, array [n_hkl, n_hkl, 3]
+    bloch.g_matrix = np.zeros((bloch.n_hkl, bloch.n_hkl, 3))
+    # fill it with g-vectors
+    bloch.g_matrix = bloch.g_pool[:, np.newaxis, :] \
+        - bloch.g_pool[np.newaxis, :, :]
     # calculate g.r for all g-vectors and atoms [n_hkl, n_hkl, cell.n_atoms]
     g_dot_r = np.einsum('ijk,lk->ijl', bloch.g_matrix, cell.atom_coordinate)
     # exp(i g.r) [n_hkl, n_hkl, cell.n_atoms]

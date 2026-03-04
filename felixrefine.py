@@ -45,7 +45,8 @@ rc = pc.RunControl()  # felix.inp and derived variables for run control
 cif = pc.Cif()  # cif variables
 hkl = pc.Hkl()  # hkl file variables
 xtal = pc.Crystal()  # working variables extracted from cif
-basis = pc.Basis()  # working variables extracted from cif
+basis = pc.Basis()  # basis variables extracted from cif
+cell = pc.Cell()  # all atom variables from px.unique_atom_positions
 bloch = pc.Bloch()  # variables in Bloch wave calculation
 cbed = pc.Cbed()  # images
 
@@ -596,12 +597,10 @@ if 'S' not in rc.refine_mode:
 print("-------------------------------")
 if 'O' in rc.refine_mode:
     # diff_max, diff_mean, times = sim.optimise_pool(v)
-    sim.optimise_pool(xtal, basis, hkl, bloch, cbed, rc)
+    sim.optimise_pool(xtal, basis, cell, hkl, bloch, cbed, rc)
 else:
     print("Baseline simulation:")
-    # uses the whole v=Var class
-    # sim.simulate(v)
-    sim.simulate(xtal, basis, hkl, bloch, cbed, rc)
+    sim.simulate(xtal, basis, cell, hkl, bloch, cbed, rc)
     # print_LACBED has options 0=sim, 1=expt, 2=difference
     sim.print_LACBED(bloch, cbed, rc, 0)
 
@@ -687,7 +686,7 @@ if 'S' not in rc.refine_mode:
                 print(f"Refinement vector {dydx}")
                 # single is just multiparameter with one non-zero value
                 # rc.next_var = rc.best_var - dydx*rc.refinement_scale
-                dydx = sim.refine_multi_variable(xtal, basis, hkl,
+                dydx = sim.refine_multi_variable(xtal, basis, cell, hkl,
                                                  bloch, cbed, rc, dydx)
 
         elif rc.refine_method == 1:
@@ -707,7 +706,8 @@ if 'S' not in rc.refine_mode:
                 if abs(dydx[i]) < 1e-10:
                     dydx[i] = 0.0
                     continue
-                dydx[i] = sim.refine_single_variable(rc, i)
+                dydx[i] = sim.refine_single_variable(xtal, basis, cell, hkl,
+                                                     bloch, cbed, rc, i)
 
             # all variables have updated/predicted so do a final simulation
             # if it's better, update rc.best_fit and rc.best_var accordingly
@@ -723,7 +723,8 @@ if 'S' not in rc.refine_mode:
             # Downhill minimisation until we eliminate all variables
             while np.sum(np.abs(dydx)) > 1e-10:
                 # the returned dydx will have an extra zero!
-                dydx = sim.refine_multi_variable(rc, dydx, False)
+                dydx = sim.refine_multi_variable(xtal, basis, cell, hkl,
+                                                 bloch, cbed, rc, dydx, False)
         else:
             raise ValueError("No valid refine method (0,1) in felix.inp")
 
