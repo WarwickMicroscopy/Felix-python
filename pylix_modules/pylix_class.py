@@ -225,12 +225,17 @@ class Crystal:
     norm_dir_m: NDArray[np.floating] | None = None
     t_mat_o2m: NDArray[np.floating] | None = None
     t_mat_c2o: NDArray[np.floating] | None = None
+    # kappa model
+    n_points: NDArray[np.floating] | None = None
+    r_max: float = 20.0  # Angstroms
+
 
 @dataclass
 class Basis:
     n_atoms: int = 0
     atom_label: list | None = None
     atom_name: list | None = None
+    oxno: NDArray[np.integer] | None = None
     atomic_number: NDArray[np.integer] | None = None
     wyckoff: list | None = None
     atom_position: NDArray[np.floating] | None = None
@@ -239,10 +244,16 @@ class Basis:
     u_aniso: NDArray[np.floating] | None = None
     u_iso: NDArray[np.floating] | None = None
     B_iso: NDArray[np.floating] | None = None
-    oxno: NDArray[np.integer] | None = None
     atom_delta: NDArray[np.floating] | None = None
     f_g: NDArray[np.complex128] | None = None
     f_g_prime: NDArray[np.complex128] | None = None
+    # kappa model
+    kappa: NDArray[np.floating] | None = None
+    core: NDArray[np.floating] | None = None
+    valence: NDArray[np.floating] | None = None
+    pc: NDArray[np.floating] | None = None
+    pv: NDArray[np.floating] | None = None
+    r2: NDArray[np.floating] | None = None
 
 
 @dataclass
@@ -250,6 +261,7 @@ class Cell:
     n_atoms: int = 0
     atom_label: list | None = None
     atom_name: list | None = None
+    oxno: NDArray[np.integer] | None = None
     atomic_number: NDArray[np.integer] | None = None
     wyckoff: list | None = None
     atom_position: NDArray[np.floating] | None = None  # in cell
@@ -259,9 +271,15 @@ class Cell:
     u_aniso: NDArray[np.floating] | None = None
     u_iso: NDArray[np.floating] | None = None
     B_iso: NDArray[np.floating] | None = None
-    oxno: NDArray[np.integer] | None = None
     atom_delta: NDArray[np.floating] | None = None
     f_g: NDArray[np.complex128] | None = None
+    # kappa model
+    kappa: NDArray[np.floating] | None = None
+    core: NDArray[np.floating] | None = None
+    valence: NDArray[np.floating] | None = None
+    pc: NDArray[np.floating] | None = None
+    pv: NDArray[np.floating] | None = None
+    r2: NDArray[np.floating] | None = None
 
 
 # -----------------------------------------------

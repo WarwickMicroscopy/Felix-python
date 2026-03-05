@@ -44,9 +44,9 @@ print("-----------------------------------------------------------------")
 rc = pc.RunControl()  # felix.inp and derived variables for run control
 cif = pc.Cif()  # cif variables
 hkl = pc.Hkl()  # hkl file variables
-xtal = pc.Crystal()  # working variables extracted from cif
+xtal = pc.Crystal()  # crystal variables extracted from cif
 basis = pc.Basis()  # basis variables extracted from cif
-cell = pc.Cell()  # all atom variables from px.unique_atom_positions
+cell = pc.Cell()  # filled cell variables, from px.unique_atom_positions
 bloch = pc.Bloch()  # variables in Bloch wave calculation
 cbed = pc.Cbed()  # images
 
@@ -532,8 +532,9 @@ if 'S' not in rc.refine_mode:
     independent_delta = np.zeros(rc.n_variables)
     rc.refined_variable_type = np.array(rc.refined_variable_type)
     rc.refined_variable_atom = np.array(rc.atom_refine_flag[:rc.n_variables])
-
-
+else:
+    # we still need a type for later code, set it to zero for sim only
+    rc.refined_variable_type = np.array([0])
 # # %% set up Ug refinement
 # if 'A' in refine_mode:  # Ug refinement
 #     print("Refining Structure Factors, A")
@@ -659,14 +660,14 @@ if 'S' not in rc.refine_mode:
     # Initialise variables for refinement
     fit0 = fom*1.0
     rc.best_fit = fom*1.0
-    last_fit = fom*1.0
+    rc.last_fit = fom*1.0
     r3_var = np.zeros(3)  # for parabolic minimum
     r3_fom = np.zeros(3)
     # *_*dunno what this is
     independent_delta = 0.0
 
     # for a plot
-    rc.fit_log = ([last_fit])
+    rc.fit_log = ([rc.last_fit])
 
     # Refinement loop
     df = 1.0
@@ -729,9 +730,9 @@ if 'S' not in rc.refine_mode:
             raise ValueError("No valid refine method (0,1) in felix.inp")
 
         # Update for next iteration
-        df = last_fit - rc.best_fit
+        df = rc.last_fit - rc.best_fit
 
-        last_fit = np.copy(rc.best_fit)
+        rc.last_fit = np.copy(rc.best_fit)
         rc.refined_variable = np.copy(rc.best_var)
         # reduce refinement scale for next round
         rc.refinement_scale *= (1 - 1 / (1 + rc.n_variables))

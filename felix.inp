@@ -91,7 +91,7 @@ print_flag                = 0
 debug                     = 0
 
 # Refinement specific flags
-refine_mode               = 'D'
+refine_mode               = 'S'
 refine_method             = 0
 refinement_scale          = 0.02
 correlation_type          = 0

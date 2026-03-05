@@ -1214,7 +1214,7 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
                                                 g_magnitude)
         elif rc.scatter_factor_method == 4:
             print(f"Calculating kappa factor for atom {i+1}/{cell.n_atoms}")
-            basis.f_g[i, :, :] = kappa_factors(g_magnitude,
+            basis.f_g[i, :, :] = f_kappa(g_magnitude,
                                                i, basis.r2[i])
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
@@ -1254,6 +1254,8 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
     # Conversion factor from F_g to U_g
     Fg_to_Ug = bloch.relativistic_correction / (np.pi * xtal.cell_volume)
     bloch.ug_matrix = Fg_to_Ug * Fg_matrix
+    # matrix of dot products with the surface normal
+    bloch.g_dot_norm = np.dot(bloch.g_pool, xtal.norm_dir_m)
 
     return  # Fg_matrix
 
@@ -1578,7 +1580,7 @@ def f_doyle_turner(z, g_pool_mag):
     ndarray: The calculated Doyle & Turner scattering factor.
     """
     # Convert g to s
-    s = g_pool_mag / (2*np.pi)
+    s = g_pool_mag / (4*np.pi)
 
     a = fu.doyle_turner[z-1, 0:8:2].reshape(-1, 1, 1)
     b = fu.doyle_turner[z-1, 1:8:2].reshape(-1, 1, 1)
@@ -1636,7 +1638,7 @@ def f_peng(z, g_pool_mag):
     return f_g
 
 
-def calc_slater_orbitals(z, orbital, r):
+def slater_orbitals(z, orbital, r):
     # ok so now when we calc slater orbital we pass kappa scaled q
     # r, distance of electron from atomic nucleus#
     # N is normalizing constant
@@ -1714,7 +1716,7 @@ def _form_factor_kernel(r, rho, S, scale):
     return out
 
 
-def xray_form_factor_valence(r, rho, S, pv, k):
+def f_xray_valence(r, rho, S, pv, k):
     r = np.asarray(r, dtype=np.float64)
     rho = np.asarray(rho, dtype=np.float64)
     S = np.asarray(S, dtype=np.float64)
@@ -1723,7 +1725,7 @@ def xray_form_factor_valence(r, rho, S, pv, k):
     return _form_factor_kernel(r, rho, S, scale)
 
 
-def xray_form_factor_core(r, rho, S, pc):
+def f_xray_core(r, rho, S, pc):
     r = np.asarray(r, dtype=np.float64)
     rho = np.asarray(rho, dtype=np.float64)
     S = np.asarray(S, dtype=np.float64)
@@ -1748,19 +1750,18 @@ def precompute_densities(Z, kappa, pv):
 
     for i in core_orbitals:
         n_e_core += orbi['occupation'][i]
-        R = calc_slater_orbitals(Z, i, r)
+        R = slater_orbitals(Z, i, r)
         core_density += (R**2)
     core_density /= (4*np.pi)
     core_density_n = core_density / np.trapz(4*np.pi*r**2*core_density, r)
 
     for i in valence_orbitals:
-        R = calc_slater_orbitals(Z, i, r*kappa)
+        R = slater_orbitals(Z, i, r*kappa)
         valence_density += (R**2)
     valence_density /= (4*np.pi)
     # need to normalize to 1 electron then scale by pv after
-    valence_density_n = valence_density / np.trapz(4*np.pi*r**2*valence_density, r) 
-
-    # pc = fu.elements_info[Z]['pc']
+    valence_density_n = valence_density / np.trapz(4*np.pi*r**2
+                                                   * valence_density, r)
     pc = orbi['pc']
     # p_atom(r) in kappa formalism
     density_total = pc*core_density_n + pv*kappa**3*valence_density_n
@@ -1768,52 +1769,30 @@ def precompute_densities(Z, kappa, pv):
     # mean square radius of electrons in the atom
     r2_expect = np.trapz(r**2*integrand, x=r)/np.trapz(integrand, x=r)
 
-    # fu.elements_info[Z]["r2"] = r2_expect # *** surely we shouldn't change this?
-    # why put this in a library, not just in variable space v
-    # fu.precomputed_densities[Z] = {
-    #     "r": r.copy(),
-    #     "core": core_density_n.copy(),
-    #     "valence": valence_density_n.copy(),
-    #     "r2": r2_expect
-    #     }
-
     return core_density_n, valence_density_n, r2_expect
 
 
-def calc_scattering_amplitudes(v, q, i):
+def slater_f_xray(xtal, basis, q, i):
     """
-    Needs to be changed to account for the basis rather than Z
-    ----------
-    v : global variable space
+    calculates x-ray scattering factr using Slater functions for electron
+    density
     i : int, index of atom in the basis
-    Returns f_x_total : DESCRIPTION.
+    Returns f_x_total x-ray scattering factor
     """
-    rho_core = v.basis_core[i]
-    rho_val = v.basis_valence[i]
-    r = np.linspace(1e-6, v.r_max, v.n_points)
-    pc = v.basis_pv[i]
+    rho_core = basis.core[i]
+    rho_val = basis.valence[i]
+    r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
+    pc = basis.pv[i]  # *** should this be pc??? ***
     # precomputed densities
-    f_valence = xray_form_factor_valence(r, rho_val, q, v.pv, v.kappa)
-    f_core = xray_form_factor_core(r, rho_core, q, pc)
+    f_valence = f_xray_valence(r, rho_val, q, basis.pv, basis.kappa)
+    f_core = f_xray_core(r, rho_core, q, pc)
     # fourier transform of the calculated radial funciton in 3d from 0 to inf
     f_x_total = f_core + f_valence
-
-    # old version
-    # def calc_scattering_amplitudes(q, Z, pv, kappa):
-    #     rho_core = fu.precomputed_densities[Z]["core"]
-    #     rho_val = fu.precomputed_densities[Z]["valence"]
-    #     r = fu.precomputed_densities[Z]["r"]
-    #     pc = fu.elements_info[Z]['pc']
-    #     # precomputed densities
-    #     f_valence = xray_form_factor_valence(r, rho_val, q, pv, kappa)
-    #     f_core = xray_form_factor_core(r, rho_core, q, pc)
-    #     # fourier transform of the calculated radial func in 3d from 0 to inf
-    #     f_x_total = f_core + f_valence
 
     return f_x_total
 
 
-def convert_x(Z, f_x, q):
+def mott_bethe(Z, f_x, q):  # now redundant
     Bohr = 0.52917721067  # in angstrom
     q = np.asarray(q)
     f_x = np.asarray(f_x)
@@ -1835,38 +1814,26 @@ def convert_x(Z, f_x, q):
     return f_e
 
 
-def kappa_factors(v, g, i):
-    # now includes the convert_x subroutine
+def f_kappa(xtal, basis, g, i):
+    # now includes the mott_bethe subroutine
     Bohr = 0.52917721067  # in angstrom
     orig_shape = g.shape
     g_flat = g.flatten()
     S = g_flat / (2*np.pi)
     q = np.asarray(S)
-    f_x = np.asarray(calc_scattering_amplitudes(v, S, i))
+    f_x = np.asarray(slater_f_xray(xtal, basis, S, i))
     f_out = np.zeros_like(g_flat, dtype=float)
 
     # Mask where q == 0
     mask0 = (q == 0)
     maskN = ~mask0  # q ≠ 0
     # Special case for q = 0 (Ibers correction)
-    f_out[mask0] = (v.basis_atomic_number[i] * v.basis_r2[i]) / (3 * Bohr)
+    f_out[mask0] = (basis.atomic_number[i] * basis.r2[i]) / (3 * Bohr)
     # Mott–Bethe formula
-    f_out[maskN] = (v.basis_atomic_number[i] - f_x[maskN]) \
+    f_out[maskN] = (basis.atomic_number[i] - f_x[maskN]) \
         / (2 * np.pi**2 * Bohr * q[maskN]**2)
 
     return f_out.reshape(orig_shape)
-
-    # previous version
-    # def kappa_factors(g, Z, pv, kappa):
-    #     # need to carefully look through and fix scaling of function
-    #     # close but not quite
-    #     orig_shape = g.shape
-    #     g_flat = g.flatten()
-    #     S = g_flat / (2*np.pi)
-    #     f_out = np.zeros_like(g_flat, dtype=float)
-    #     f_out = convert_x(Z, calc_scattering_amplitudes(S, Z, pv, kappa), S)
-    
-    #     return f_out.reshape(orig_shape)
 
 
 def four_gauss(s, a):

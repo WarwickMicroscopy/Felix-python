@@ -144,8 +144,8 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     # set up beam pool
     # NB g_pool are in reciprocal Angstroms in the microscope reference frame
     # only if necessary, i.e. for cell dimensions F, G and kV I
+    strt = time.time()
     if rc.iter_count == 0 or np.any(typ == 3) or np.any(typ == 4):
-        strt = time.time()
         px.hkl_make(xtal, hkl, bloch, rc)
         # output redefined to match what we can actually do
         bloch.n_out = len(bloch.hkl_output)
@@ -199,13 +199,8 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     # now make the Ug matrix, i.e. calculate the structure factor Fg for all
     # g-vectors in g_matrix and convert to Ug
     # any change results in recalculation
-    print(f"      atom coords {cell.atom_coordinate}")
     px.Fg_matrix(xtal, basis, cell, bloch, rc)
-    np.set_printoptions(precision=3, suppress=True)
-    print(100*bloch.ug_matrix[:5, :5])
 
-    # matrix of dot products with the surface normal
-    bloch.g_dot_norm = np.dot(bloch.g_pool, xtal.norm_dir_m)
     if rc.iter_count == 0:
         print("    Ug matrix constructed")
     if rc.debug:
@@ -984,7 +979,8 @@ def variable_check(x, t):
     return x, continue_
 
 
-def refine_multi_variable(xtal, basis, hkl, bloch, cbed, rc, dydx, single=True):
+def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
+                          rc, dydx, single=True):
     '''
     multidimensional refinement
     dydx: float array of gradients, generated in refine_single_variable
@@ -998,7 +994,7 @@ def refine_multi_variable(xtal, basis, hkl, bloch, cbed, rc, dydx, single=True):
     dydx = array of gradients, size [n_var]
     '''
     # starting point is the current best set of variables
-    last_fit = 1.0*rc.best_fit
+    rc.last_fit = 1.0*rc.best_fit
 
     n_var = np.count_nonzero(dydx)
     if n_var > 1:
@@ -1026,7 +1022,7 @@ def refine_multi_variable(xtal, basis, hkl, bloch, cbed, rc, dydx, single=True):
         # simulate and get figure of merit
         fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
         # is it actually any better
-        if fom < last_fit:
+        if fom < rc.last_fit:
             rc.best_fit = fom*1.0
             rc.best_var = np.copy(rc.refined_variable)
             print("Point 1 of 3: extrapolated")  # yes, use it
@@ -1060,7 +1056,7 @@ def refine_multi_variable(xtal, basis, hkl, bloch, cbed, rc, dydx, single=True):
         raise ValueError(f"{variable_message(t)} has no effect!")
     r3_var[1] = 1.0*rc.refined_variable[j]
     r3_fom[1] = 1.0*fom
-    print(f"-b-----------------------------{r3_var},{r3_fom}")
+    print("-b-----------------------------")  # {r3_var},{r3_fom}")
     if fom < rc.best_fit:
         rc.best_fit = fom*1.0
         rc.best_var = np.copy(rc.refined_variable)
@@ -1079,7 +1075,7 @@ def refine_multi_variable(xtal, basis, hkl, bloch, cbed, rc, dydx, single=True):
     fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
     r3_var[2] = 1.0*rc.refined_variable[j]
     r3_fom[2] = 1.0*fom
-    print(f"-c----------------------------- {r3_var},{r3_fom}")
+    print("-c-----------------------------")  # {r3_var},{r3_fom}")
     if fom < rc.best_fit:
         rc.best_fit = fom*1.0
         rc.best_var = np.copy(rc.refined_variable)
@@ -1108,25 +1104,48 @@ def refine_multi_variable(xtal, basis, hkl, bloch, cbed, rc, dydx, single=True):
         r3_var[i] = 1.0*rc.refined_variable[j]
         r3_fom[i] = 1.0*fom
         with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
-            print(f"-.-----------------------------{r3_var}: {r3_fom}")
-        # if (fom < rc.best_fit):  # it's better, keep going
-        #     rc.best_fit = fom*1.0
-        #     rc.best_var = np.copy(rc.refined_variable)
-        # else:  # we must have a minimum
-        #     last_x = 1.0*rc.refined_variable[j]
-        #     # check it out
-        #     next_x, minny = px.convex(r3_var, r3_fom)
-        #     rc.refined_variable += dydx * (next_x-last_x)/next_x
-        #     fom = sim_fom(rc, j)
-        #     if (fom < rc.best_fit):  # it's better, keep going
-        #         rc.best_fit = fom*1.0
-        #         rc.best_var = np.copy(rc.refined_variable)
-        #     if not cont:
-        #         dydx[j] = 0.0
-        #         return dydx
+            print("-.-----------------------------")  # {r3_var}: {r3_fom}")
     # we have taken the principal variable to a minimum
     dydx[j] = 0.0
     print(f"    ====Refined variable {j}====")
     print_LACBED(rc, 0)
 
     return dydx
+
+
+def plot_f_g(Z):
+    """
+    Utility subroutine to plot scattering factors
+    """
+    fig, ax = plt.subplots(1, 1)
+    w_f = 10
+    fig.set_size_inches(w_f, w_f)
+    style = ['-', '-.', '--', ':']
+
+    g = np.arange(0.0, 4.0, 0.05)
+    for i in range(4):
+        if i == 0:
+            f_g = px.f_kirkland(Z, g)
+            f = "Kirkland"
+        elif i == 1:
+            f_g = px.f_lobato(Z, g)
+            f = "Lobato"
+        elif i == 2:
+            f_g = px.f_peng(Z, g)
+            f = "Peng"
+        elif i == 3:
+            f_g = px.f_doyle_turner(Z, g)
+            f = "Doyle & Turner"
+        # elif i == 4:
+            # f_g = px.f_kappa(Z, g, i, r2[i])
+            # f = "Kappa"
+        plt.plot(g, f_g[0, :], linestyle=style[i], label=f)
+
+    ax.set_xlabel('g, $A^-1$', size=24)
+    ax.set_ylabel('$f_g$', size=24)
+    ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    plt.xticks(fontsize=22)
+    plt.yticks(fontsize=22)
+    plt.show()
+
+    return
