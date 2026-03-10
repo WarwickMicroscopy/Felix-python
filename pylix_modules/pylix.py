@@ -1214,8 +1214,7 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
                                                 g_magnitude)
         elif rc.scatter_factor_method == 4:
             print(f"Calculating kappa factor for atom {i+1}/{cell.n_atoms}")
-            basis.f_g[i, :, :] = f_kappa(g_magnitude,
-                                               i, basis.r2[i])
+            basis.f_g[i, :, :] = f_kappa(xtal, basis, g_magnitude, i)
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
 
@@ -1642,12 +1641,12 @@ def slater_orbitals(z, orbital, r):
     # ok so now when we calc slater orbital we pass kappa scaled q
     # r, distance of electron from atomic nucleus#
     # N is normalizing constant
-
+    bohr_radius = 0.529177210544
     delta = np.array(fu.slater_coefficients[z][orbital]['delta'])
-    delta = delta / 0.52917721092
-    # convert to angstrom
+    delta = delta / bohr_radius  # convert to angstrom
+
     C = np.array(fu.slater_coefficients[z][orbital]['coeff'])
-    n = int(orbital[0])
+    nj1 = np.array(fu.slater_coefficients[z][orbital]['n'])
 
     # for now we just state 1s contriutes to the core and 2s contributes
     # to valence with a respective electron occupation of 2,1
@@ -1655,7 +1654,7 @@ def slater_orbitals(z, orbital, r):
     # so we can actually evaluate a fourier transform integral
     R_total = 0
 
-    # Total radial finction is a superposition of these primitive radial
+    # Total radial function is a superposition of these primitive radial
     # functions and their corresponding expansion coefficent C_jln given
     # in out hartree fock equation
     # delta is given next to each slater type orbital in the table
@@ -1664,10 +1663,10 @@ def slater_orbitals(z, orbital, r):
     # use Mott-Bethe formula to get to electron scattering factor
     # then compare with kirkland to check agreement and upscale
 
-    for cj, zj in zip(C, delta):
-        Nj = ((2*zj)**(n+0.5))/(np.sqrt(math.factorial(2*n)))
+    for cj, zj, nj in zip(C, delta):
+        Nj = ((2*zj)**(nj+0.5))/(np.sqrt(math.factorial(2*nj)))
         # each electron is defined by a primitive slater orbital of this form
-        S_j = Nj*r**(n-1)*np.exp(-zj*r)
+        S_j = Nj*r**(nj-1)*np.exp(-zj*r)
         R_total += cj*S_j
     # return the radial function for our atom, integrated to get form factor
     return R_total
@@ -1782,9 +1781,9 @@ def slater_f_xray(xtal, basis, q, i):
     rho_core = basis.core[i]
     rho_val = basis.valence[i]
     r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
-    pc = basis.pv[i]  # *** should this be pc??? ***
+    pc = basis.pc[i]
     # precomputed densities
-    f_valence = f_xray_valence(r, rho_val, q, basis.pv, basis.kappa)
+    f_valence = f_xray_valence(r, rho_val, q, basis.pv[i], basis.kappa[i])
     f_core = f_xray_core(r, rho_core, q, pc)
     # fourier transform of the calculated radial funciton in 3d from 0 to inf
     f_x_total = f_core + f_valence

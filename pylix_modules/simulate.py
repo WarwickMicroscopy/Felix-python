@@ -1122,7 +1122,7 @@ def plot_f_g(Z):
     fig.set_size_inches(w_f, w_f)
     style = ['-', '-.', '--', ':']
 
-    g = np.arange(0.0, 4.0, 0.05)
+    g = np.arange(0.0, 10.0, 0.05)
     for i in range(4):
         if i == 0:
             f_g = px.f_kirkland(Z, g)
@@ -1141,9 +1141,9 @@ def plot_f_g(Z):
             # f = "Kappa"
         plt.plot(g, f_g[0, :], linestyle=style[i], label=f)
 
-    ax.set_xlabel('g, $A^-1$', size=24)
+    ax.set_xlabel('$g$, A$^{-1}$', size=24)
     ax.set_ylabel('$f_g$', size=24)
-    ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    ax.legend(loc='best', bbox_to_anchor=(1, 0.5), fontsize=12)
     plt.xticks(fontsize=22)
     plt.yticks(fontsize=22)
     plt.show()
