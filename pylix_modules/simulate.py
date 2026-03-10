@@ -24,8 +24,8 @@ from matplotlib.ticker import PercentFormatter
 import time
 import os
 from pylix_modules import pylix as px
-from pylix_modules import pylix_dicts as fu
-from pylix_modules import pylix_class as pc
+# from pylix_modules import pylix_dicts as fu
+# from pylix_modules import pylix_class as pc
 
 
 def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):

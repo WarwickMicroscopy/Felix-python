@@ -1,43 +1,23 @@
 
 #(C) 2025 by FIZ Karlsruhe - Leibniz Institute for Information Infrastructure.  All rights reserved.
-data_28858-ICSD
-_database_code_ICSD 28858
-_audit_creation_date 1980-01-01
-_audit_update_record 2006-04-01
-_chemical_name_common Carbon
-_chemical_formula_structural C
-_chemical_formula_sum C1
+data_121532-ICSD
+_database_code_ICSD 121532
+_audit_creation_date 2021-08-01
+_chemical_name_common 'Germanium - Î±'
+_chemical_formula_structural GeSn
+_chemical_formula_sum Ge98Sn2
 _chemical_name_structure_type C(cF8)
-_chemical_name_mineral Diamond
-_exptl_crystal_density_diffrn 3.52
-_diffrn_ambient_temperature 293.
+_exptl_crystal_density_diffrn 5.33
 _citation_title
 
-;
-Precision determination of lattice parameter, coefficient of thermal expansion
-and atomic weight of carbon in diamond
-;
 loop_
-_citation_id
-_citation_journal_full
-_citation_year
-_citation_journal_volume
-_citation_page_first
-_citation_page_last
-_citation_journal_id_ASTM
-primary 'Journal of the American Chemical Society' 1951 73 5643 5646 JACSAT
-loop_
-_citation_author_citation_id
-_citation_author_name
-primary 'Straumanis, M.E.'
-primary 'Aka, E.Z.'
-_cell_length_a 3.56672(19)
-_cell_length_b 3.56672(19)
-_cell_length_c 3.56672(19)
+_cell_length_a 5.68043
+_cell_length_b 5.68043
+_cell_length_c 5.68043
 _cell_angle_alpha 90.
 _cell_angle_beta 90.
 _cell_angle_gamma 90.
-_cell_volume 45.37
+_cell_volume 183.29
 _cell_formula_units_Z 8
 _space_group_name_H-M_alt 'F d -3 m'
 _space_group_IT_number 227
@@ -239,7 +219,7 @@ _space_group_symop_operation_xyz
 loop_
 _atom_type_symbol
 _atom_type_oxidation_number
-C0+ 0
+Ge0+ 0
 loop_
 _atom_site_label
 _atom_site_type_symbol
@@ -248,7 +228,8 @@ _atom_site_Wyckoff_symbol
 _atom_site_fract_x
 _atom_site_fract_y
 _atom_site_fract_z
-_atom_site_B_iso_or_equiv
+_atom_site_U_iso_or_equiv
 _atom_site_occupancy
-C1 C0+ 8 a 0 0 0 0.3 1.
-#End of TTdata_28858-ICSD
+Ge1 Ge0+ 8 a 0 0 0 0.0071(3) 0.9
+Sn1 Sn0+ 8 a 0 0 0 0.0071(3) 0.02
+#End of data
