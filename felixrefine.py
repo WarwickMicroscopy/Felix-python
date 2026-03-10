@@ -22,14 +22,13 @@ Started August 2024, converted from MPI Fortran version
 
 import os
 import numpy as np
-import matplotlib.pyplot as plt
 import time
 
 # felix modules
-from pylix_modules import pylix as px
-from pylix_modules import simulate as sim
-from pylix_modules import pylix_dicts as fu
-from pylix_modules import pylix_class as pc
+from pylix_modules import pylix as px  # most calculations found here
+from pylix_modules import simulate as sim  # simulation control and output
+from pylix_modules import pylix_dicts as fu  # dictionaries
+from pylix_modules import pylix_class as pc  # classes
 
 path = os.getcwd()
 start = time.time()
@@ -730,6 +729,8 @@ if 'S' not in rc.refine_mode:
                                                  bloch, cbed, rc, dydx, False)
         else:
             raise ValueError("No valid refine method (0,1) in felix.inp")
+        if rc.plot >= 1:
+            sim.plot_progress(rc)
 
         # Update for next iteration
         df = rc.last_fit - rc.best_fit
@@ -742,11 +743,6 @@ if 'S' not in rc.refine_mode:
         if df >= rc.exit_criteria:
             print(f"Step size reduced to {rc.refinement_scale:.6f}")
         print("-------------------------------")
-        if rc.plot >= 1:
-            plt.plot(rc.fit_log)
-            # plt.scatter(var_pl, fit_pl)
-            plt.show()
-
     print(f"Refinement complete after {rc.iter_count} simulations.  Refined values: {rc.best_var}")
 
 # %% final print

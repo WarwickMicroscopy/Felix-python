@@ -439,9 +439,25 @@ def optimise_pool(xtal, basis, cell, hkl, bloch, cbed, rc):
     return diff_max, diff_mean, times
 
 
+def plot_progress(rc):
+    fig, ax = plt.subplots(1, 1)
+    w_f = 10
+    fig.set_size_inches(1.5*w_f, w_f)
+    plt.plot(rc.fit_log)
+    # plt.scatter(var_pl, fit_pl)
+    plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1.0))
+    plt.xticks(fontsize=22)
+    plt.yticks(fontsize=22)
+    ax.set_xlabel('Iteration', size=24)
+    ax.set_ylabel('Figure of merit', size=24)
+    plt.show()
+
+    return
+
+
 def figure_of_merit(bloch, cbed, rc):
     """
-    takes as an input cbed.lacbed_sim, shape [rc.n_thickness, pix_x, pix_y, n_out]
+    takes as an input cbed.lacbed_sim, shape [n_thickness, pix_x, pix_y, n_out]
     applies image processing if required
     image processing = 0 -> no Gaussian blur (applied with radius 0)
     image processing = 1 -> Gaussian blur radius defined in felix.inp
