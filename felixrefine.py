@@ -113,9 +113,9 @@ else:
 basis.atom_label = [s.rstrip() for s in cif.atom_site_label]
 # atom symbols, stripping any charge etc.
 basis.atom_name = [''.join(filter(str.isalpha, name))
-                     for name in cif.atom_site_type_symbol]
+                   for name in cif.atom_site_type_symbol]
 basis.atomic_number = np.array([fu.atomic_number_map[s]
-                                     for s in basis.atom_name])
+                                for s in basis.atom_name])
 
 # take care of any odd symbols, get the case right
 for i in range(basis.n_atoms):
@@ -142,7 +142,7 @@ else:
     basis.occupancy = np.ones([basis.n_atoms])
 
 # check for multiple occupancy on the same site
-tol = 0.000001  # tolerance for saying atoms are the same
+tol = 0.0001  # tolerance for saying atoms are the same
 diff = basis.atom_position[:, None, :] - basis.atom_position[None, :, :]
 dist2 = np.sum(diff**2, axis=2)
 close = (dist2 <= tol**2) & (~np.eye(basis.n_atoms, dtype=bool))
@@ -431,7 +431,14 @@ if 'S' not in rc.refine_mode:
                 rc.atom_refine_vec.append(rc.moves[j, :])  # atom movement
 
     if 'C' in rc.refine_mode:  # Occupancy
+        refined_sites = set()
         for i in range(n_sites):
+            site = basis.mult_occ[rc.atomic_sites[i]]
+            # check if we already have this site
+            if site in refined_sites:
+                print(f"  Shared site: not refining atom {rc.atomic_sites[i]}")
+                continue
+            refined_sites.add(site)
             rc.refined_variable.append(basis.occupancy[rc.atomic_sites[i]])
             rc.refined_variable_type.append(21)
             rc.atom_refine_flag.append(rc.atomic_sites[i])
