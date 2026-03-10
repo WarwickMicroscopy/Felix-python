@@ -62,16 +62,16 @@ byte_size                 = 2
 Debye_model               = 0     
 
 # Beam selection criteria
-min_reflection_pool       = 200
-min_strong_beams          = 50
+min_reflection_pool       = 100
+min_strong_beams          = 20
 min_weak_beams            = 0
 g_limit                   = 0.0
 
 # Crystal settings
 incident_beam_direction   = [1, -1, 0]
-x_direction               = [1, 1, 0]
+x_direction               = [0, 0, -1]
 normal                    = [1, -1, 0]
-initial_thickness         = 300.0
+initial_thickness         = 2000.0
 final_thickness           = 2001.0
 delta_thickness           = 200.0
 debye_waller_constant     = 0.0
@@ -84,7 +84,7 @@ acceptance_angle          = 0.0
 
 # Output options
 image_radius              = 76
-plot                      = 3
+plot                      = 2
 image_processing          = 1
 blur_radius               = 1.1
 print_flag                = 0

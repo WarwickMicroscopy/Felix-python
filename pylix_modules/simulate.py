@@ -370,7 +370,7 @@ def optimise_pool(xtal, basis, cell, hkl, bloch, cbed, rc):
     t0 = time.time()
     simulate(xtal, basis, cell, hkl, bloch, cbed, rc)
     times.append(time.time()-t0)
-    print_LACBED(rc, 0)
+    print_LACBED(bloch, cbed, rc, 0)
     baseline = np.copy(cbed.lacbed_sim)
     cbed.diff_image = np.copy(cbed.lacbed_sim)
     # subtract mean and divide by SD
@@ -1030,7 +1030,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         else:
             print("Point 1 of 3: previous best")  # no, use the best
         rc.refined_variable = np.copy(rc.best_var)
-        print_LACBED(rc, 0)
+        print_LACBED(bloch, cbed, rc, 0)
         print("-a-----------------------------")  # "{r3_var},{r3_fom}")
 
     # First point: incoming best simulation
@@ -1109,7 +1109,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     # we have taken the principal variable to a minimum
     dydx[j] = 0.0
     print(f"    ====Refined variable {j}====")
-    print_LACBED(rc, 0)
+    print_LACBED(bloch, cbed, rc, 0)
 
     return dydx
 
