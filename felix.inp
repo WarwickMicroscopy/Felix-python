@@ -83,7 +83,7 @@ accelerating_voltage_kv   = 200.0
 acceptance_angle          = 0.0
 
 # Output options
-image_radius              = 100
+image_radius              = 76
 plot                      = 3
 image_processing          = 1
 blur_radius               = 1.1

@@ -1023,17 +1023,20 @@ def hkl_make(xtal, hkl, bloch, rc):
     # Determine shell size (smallest basis vector)
     shell = min(ar_mag, br_mag, cr_mag)
 
+    # rc.g_limit is the (fixed) input limit of g-vector magnitude
+    # g_lim is the (variable) limit of g-vector magnitude to fill the pool
     if rc.g_limit < 1e-10:
         # Use default value and set min_reflection_pool as cutoff
-        rc.g_limit = 10.0 * 2 * np.pi
+        g_lim = 10.0 * 2 * np.pi
     else:
         # Make min_reflection_pool large and use rc.g_limit as the cutoff
         rc.min_reflection_pool = 6666
+        g_lim = rc.g_limit * 1.0
 
-    # Maximum indices to consider based on rc.g_limit
-    max_h = int(np.ceil(rc.g_limit / ar_mag))
-    max_k = int(np.ceil(rc.g_limit / br_mag))
-    max_l = int(np.ceil(rc.g_limit / cr_mag))
+    # Maximum indices to consider based on g_lim
+    max_h = int(np.ceil(g_lim / ar_mag))
+    max_k = int(np.ceil(g_lim / br_mag))
+    max_l = int(np.ceil(g_lim / cr_mag))
 
     # Generate grid of h, k, l values
     h_range = np.arange(-max_h, max_h + 1)
@@ -1089,7 +1092,7 @@ def hkl_make(xtal, hkl, bloch, rc):
     mask = (g_mag <= current_g_limit) & (deviations < 0.08)
     hkl_indices = hkl_pool[mask]
     # expand until we have enough
-    while (len(hkl_indices) < rc.min_reflection_pool) and (lnd * shell < rc.g_limit):
+    while (len(hkl_indices) < rc.min_reflection_pool) and (lnd*shell < g_lim):
         lnd += 1.0
         current_g_limit = shell*lnd
         mask = (g_mag <= current_g_limit) & (deviations < 0.08)

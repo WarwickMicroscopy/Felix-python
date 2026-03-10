@@ -593,8 +593,7 @@ else:
 #         j += 1
 
 
-# %% baseline simulation or beam pool optimisation
-
+# %% baseline simulation & beam pool optimisation if required
 print("-------------------------------")
 if 'O' in rc.refine_mode:
     # diff_max, diff_mean, times = sim.optimise_pool(v)
@@ -604,6 +603,7 @@ else:
     sim.simulate(xtal, basis, cell, hkl, bloch, cbed, rc)
     # print_LACBED has options 0=sim, 1=expt, 2=difference
     sim.print_LACBED(bloch, cbed, rc, 0)
+
 
 # %% read in experimental images
 if 'S' not in rc.refine_mode:
