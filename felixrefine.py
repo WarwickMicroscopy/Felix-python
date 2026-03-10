@@ -644,6 +644,8 @@ if 'S' not in rc.refine_mode:
         sim.print_LACBED(bloch, cbed, rc, 1)
         # initialise correlation
         best_corr = np.ones(rc.n_out)
+    else:
+        raise ValueError(f"Experimental images DM3_{x_str}x{x_str} not found")
 
 # output LACBED patterns and figure of merit
 if rc.image_processing == 1:

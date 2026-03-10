@@ -81,6 +81,14 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
                 raise ValueError("No scattering factors chosen in felix.inp")
         mip = mip.item()*scatt_fac_to_volts  # NB convert array to float
 
+        # Wave vector magnitude in crystal
+        # high-energy approximation (not HOLZ compatible)
+        # K^2=k^2+U0
+        # big_k_mag = electron_wave_vector_magnitude  # version without mip
+        bloch.big_k_mag = np.sqrt(electron_wave_vector_magnitude**2+mip)
+        # k-vector for the incident beam (k is along z in the microscope frame)
+        bloch.big_k = np.array([0.0, 0.0, bloch.big_k_mag])
+
     if rc.iter_count == 0:
         print(f"  There are {cell.n_atoms} atoms in the unit cell")
         print(f"  Mean inner potential = {mip:.1f} Volts")
@@ -95,13 +103,6 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
         for i in range(cell.n_atoms):
             print(f"{cell.atom_label[i]} {cell.atom_name[i]}: {cell.atom_position[i]}")
 
-    # Wave vector magnitude in crystal
-    # high-energy approximation (not HOLZ compatible)
-    # K^2=k^2+U0
-    # big_k_mag = electron_wave_vector_magnitude  # version without mip
-    bloch.big_k_mag = np.sqrt(electron_wave_vector_magnitude**2+mip)
-    # k-vector for the incident beam (k is along z in the microscope frame)
-    bloch.big_k = np.array([0.0, 0.0, bloch.big_k_mag])
 
     # ===============================================
     # set up reference frames
