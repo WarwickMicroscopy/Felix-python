@@ -736,7 +736,7 @@ if 'S' not in rc.refine_mode:
                                                  bloch, cbed, rc, dydx, False)
         else:
             raise ValueError("No valid refine method (0,1) in felix.inp")
-        if rc.plot >= 1:
+        if rc.plot > 0:
             sim.plot_progress(rc)
 
         # Update for next iteration

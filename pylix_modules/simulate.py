@@ -493,8 +493,8 @@ def figure_of_merit(bloch, cbed, rc):
                                                        sigma=r)
                 # b_fom.append(np.mean(1.0 - zncc(cbed.lacbed_expt, blacbed)))
                 b_fom.append(np.mean(1.0 - pcc(cbed.lacbed_expt, blacbed)))
-            # if rc.plot >= 2:
-            #     plt.plot(radii, b_fom)
+            if rc.plot > 1:
+                plt.plot(radii, b_fom)
             rc.blur_radius = radii[np.argmin(b_fom)]
         if rc.image_processing != 0:
             for j in range(rc.n_out):
