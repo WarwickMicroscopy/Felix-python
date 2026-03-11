@@ -153,7 +153,7 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
         # NEEDS SOME MORE WORK TO MATCH SIM/EXPT PATTERNS if this happens
 
     # outputs
-    if rc.iter_count <= 10:
+    if rc.iter_count == 0:
         print(f"  Beam pool: {bloch.n_hkl} reflexions ({rc.min_strong_beams} strong beams)")
         # we will have larger g-vectors in g_matrix since this has
         # differences g - h
