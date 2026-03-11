@@ -738,6 +738,7 @@ if 'S' not in rc.refine_mode:
             raise ValueError("No valid refine method (0,1) in felix.inp")
         if rc.plot > 0:
             sim.plot_progress(rc)
+            sim.print_LACBED(bloch, cbed, rc, 0)
 
         # Update for next iteration
         df = rc.last_fit - rc.best_fit

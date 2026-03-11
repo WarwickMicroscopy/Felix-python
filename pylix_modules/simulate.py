@@ -719,10 +719,15 @@ def update_variables(xtal, basis, rc):
     return
 
 
-def print_montage(bloch, cbed, rc, images, lut, j=0):
+def print_montage(bloch, cbed, rc, images, image_type, j=0):
     '''
     images[wid, wid, n] = array of n images each of size [wid, wid]
+    j = thickness index in simulated pattern array
     '''
+    if image_type == 0:
+        lut = 'pink'
+    elif image_type == 1:
+        lut = 'grey'
     n = images.shape[2]
     w = int(np.ceil(np.sqrt(n)))
     h = int(np.ceil(n/w))
@@ -732,7 +737,7 @@ def print_montage(bloch, cbed, rc, images, lut, j=0):
     for i in range(n):
         img = images[:, :, i]
         # difference or LACBED pattern
-        if lut == "diff":
+        if image_type == 2:
             cmap = LinearSegmentedColormap.from_list(
                 "two_color_black_center",
                 [(0.0, "c"), (0.5, "k"), (1.0, "orange")])
@@ -748,10 +753,12 @@ def print_montage(bloch, cbed, rc, images, lut, j=0):
     for i in range(n, len(axes)):
         axes[i].axis('off')
     plt.tight_layout()
-    annotation = f"{rc.thickness[j]/10:.0f} nm"
-    plt.annotate(annotation, xy=(0.105, 0.96), xycoords='figure fraction',
-                 size=30, color='c', path_effects=[text_effect])
+    if image_type !=1:  # don't put a thickness on experimental images
+        annotation = f"{rc.thickness[j]/10:.0f} nm"
+        plt.annotate(annotation, xy=(0.105, 0.96), xycoords='figure fraction',
+                     size=30, color='c', path_effects=[text_effect])
     plt.show()
+    return
 
 
 def print_LACBED(bloch, cbed, rc, image_type):
@@ -764,16 +771,17 @@ def print_LACBED(bloch, cbed, rc, image_type):
         if rc.iter_count == 1:
             for j in range(rc.n_thickness):
                 out_image = cbed.lacbed_sim[j, :, :, :]
-                print_montage(bloch, cbed, rc, out_image, 'pink', j)
+                print_montage(bloch, cbed, rc, out_image, image_type, j)
         else:
             out_image = cbed.lacbed_sim[rc.best_t, :, :, :]
-            print_montage(bloch, cbed, rc, out_image, 'pink')
+            print_montage(bloch, cbed, rc, out_image, image_type, rc.best_t)
     elif image_type == 1:  # experiment output
         out_image = cbed.lacbed_expt
-        print_montage(bloch, cbed, rc, out_image, 'grey')
+        print_montage(bloch, cbed, rc, out_image, image_type)
     elif rc.plot >= 3:
         out_image = cbed.diff_image
-        print_montage(bloch, cbed, rc, out_image, 'diff')
+        print_montage(bloch, cbed, rc, out_image, image_type, j)
+    return
 
 
 def print_LACBED_pattern(i, j, cbed, bloch):
@@ -820,8 +828,8 @@ def print_current_var(xtal, basis, rc, i):
     formats = {
         10: ("Current Ug", "{:.3f}"),
         11: ("Current Ug", "{:.3f}"),
-        21: (f" Atom {atom_id}: {label} Current occupancy", "{:.2f}"),
-        22: (f" Atom {atom_id}: {label} Current B_iso", "{:.2f}"),
+        21: (f" Atom {atom_id}: {label} Current occupancy", "{:.3f}"),
+        22: (f" Atom {atom_id}: {label} Current B_iso", "{:.3f}"),
         23: (f" Atom {atom_id}: {label} Current U[1,1]", "{:.5f}"),
         24: (f" Atom {atom_id}: {label} Current U[2,2]", "{:.5f}"),
         25: (f" Atom {atom_id}: {label} Current U[3,3]", "{:.5f}"),
