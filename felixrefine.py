@@ -436,7 +436,7 @@ if 'S' not in rc.refine_mode:
             site = basis.mult_occ[rc.atomic_sites[i]]
             # check if we already have this site
             if site in refined_sites:
-                print(f"  Shared site: not refining atom {rc.atomic_sites[i]}")
+                print(f"  Shared site: not refining occupancy of atom {rc.atomic_sites[i]}")
                 continue
             refined_sites.add(site)
             rc.refined_variable.append(basis.occupancy[rc.atomic_sites[i]])
