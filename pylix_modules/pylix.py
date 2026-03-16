@@ -1238,6 +1238,8 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
             print(f"basis.f_g_prime [{i}]")
             print(f"{basis.f_g_prime[i, :5, :5]}")
 
+        # combine f and f'
+        basis.f_g[i, :, :] += basis.f_g_prime[i, :, :]
         # put into the unit cell
         for j in range(cell.n_atoms):
             if cell.atom_label[j] == basis.atom_label[i]:
@@ -1247,7 +1249,7 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
     Fg_matrix = np.zeros([bloch.n_hkl, bloch.n_hkl], dtype=np.complex128)
     for i in range(cell.n_atoms):
         # The Structure Factor Equation
-        Fg_matrix = Fg_matrix+((cell.f_g[i, :, :] + cell.f_g_prime[i, :, :])
+        Fg_matrix = Fg_matrix+(cell.f_g[i, :, :]
                                * phase[:, :, i]
                                * cell.occupancy[i]
                                # np.exp(-B_aniso[i, :, :] * (g_magnitude**2) /

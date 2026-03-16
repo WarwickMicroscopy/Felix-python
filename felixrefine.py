@@ -295,7 +295,7 @@ else:
 if rc.absorption_method == 0:
     print("  No absorption")
 elif rc.absorption_method == 1:
-    print(f"  Proportional absorption model, set at {xtal.absorption_per}%")
+    print(f"  Proportional absorption model, set at {rc.absorption_per}%")
 elif rc.absorption_method == 2:
     print("  Bird and King absorption model, with Thomas parameterisation")
 else:
