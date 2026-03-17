@@ -1138,7 +1138,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     return dydx
 
 
-def plot_f_g(Z):
+def plot_f_g(xtal, basis, Z):
     """
     Utility subroutine to plot scattering factors
     """
@@ -1148,7 +1148,7 @@ def plot_f_g(Z):
     style = ['-', '-.', '--', ':']
 
     g = np.arange(0.0, 10.0, 0.05)
-    for i in range(4):
+    for i in range(5):
         if i == 0:
             f_g = px.f_kirkland(Z, g)
             f = "Kirkland"
@@ -1161,9 +1161,9 @@ def plot_f_g(Z):
         elif i == 3:
             f_g = px.f_doyle_turner(Z, g)
             f = "Doyle & Turner"
-        # elif i == 4:
-            # f_g = px.f_kappa(Z, g, i, r2[i])
-            # f = "Kappa"
+        elif i == 4:
+            f_g = px.f_kappa(xtal, basis, g, i)
+            f = "Kappa"
         plt.plot(g, f_g[0, :], linestyle=style[i], label=f)
 
     ax.set_xlabel('$g$, A$^{-1}$', size=24)

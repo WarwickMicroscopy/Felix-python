@@ -1642,41 +1642,6 @@ def f_peng(z, g_pool_mag):
     return f_g
 
 
-def slater_orbitals(z, orbital, r):
-    # ok so now when we calc slater orbital we pass kappa scaled q
-    # r, distance of electron from atomic nucleus#
-    # N is normalizing constant
-    bohr_radius = 0.529177210544
-    delta = np.array(fu.slater_coefficients[z][orbital]['delta'])
-    delta = delta / bohr_radius  # convert to angstrom
-
-    C = np.array(fu.slater_coefficients[z][orbital]['coeff'])
-    nj1 = np.array(fu.slater_coefficients[z][orbital]['n'])
-
-    # for now we just state 1s contriutes to the core and 2s contributes
-    # to valence with a respective electron occupation of 2,1
-    # we need array of R values to sample the electron density from
-    # so we can actually evaluate a fourier transform integral
-    R_total = 0
-
-    # Total radial function is a superposition of these primitive radial
-    # functions and their corresponding expansion coefficent C_jln given
-    # in out hartree fock equation
-    # delta is given next to each slater type orbital in the table
-
-    # after we fourier transform radial function to get form factor we
-    # use Mott-Bethe formula to get to electron scattering factor
-    # then compare with kirkland to check agreement and upscale
-
-    for cj, zj, nj in zip(C, delta):
-        Nj = ((2*zj)**(nj+0.5))/(np.sqrt(math.factorial(2*nj)))
-        # each electron is defined by a primitive slater orbital of this form
-        S_j = Nj*r**(nj-1)*np.exp(-zj*r)
-        R_total += cj*S_j
-    # return the radial function for our atom, integrated to get form factor
-    return R_total
-
-
 @njit(fastmath=True)
 def _sinc_numba(x):
     if x == 0.0:
@@ -1738,42 +1703,83 @@ def f_xray_core(r, rho, S, pc):
     return _form_factor_kernel(r, rho, S, scale)
 
 
-def precompute_densities(Z, kappa, pv):
-    r_max = 20  # Angstroms
-    n_points = 1000
-    r = np.linspace(1e-6, r_max, n_points)
+def slater_orbitals(Z, orbital, r):
+    """
+    When we calc slater orbital we pass kappa scaled q
+    r, distance of electron from atomic nucleus#
+    N is normalizing constant
+    1s contributes to the core and 2s contributes
+    to valence with a respective electron occupation of 2, 1.
+    We need array of R values to sample the electron density
+    and then evaluate a Fourier transform integral
+    Total radial function is a superposition of these primitive radial
+    functions and their corresponding expansion coefficent C_jln given
+    in the Hartree-Fock equation.
+    delta is given next to each slater type orbital in the table.
+    After we Tourier transform the radial function to get form factor we
+    use Mott-Bethe formula to get to electron scattering factor,
+    then compare with kirkland to check agreement and upscale.
+    """
+    bohr_radius = 0.529177210544
+    data = fu.slater_coefficients[Z][orbital]
+    delta = np.asarray(data['delta']) / bohr_radius
 
-    # core_orbitals = fu.elements_info[Z]['core_orbitals']
-    # valence_orbitals = fu.elements_info[Z]['valence_orbitals']
-    orbi = orb(Z)
-    core_orbitals = orbi['core_orbitals']
-    valence_orbitals = orbi['valence_orbitals']
-    core_density = 0
-    valence_density = 0
-    n_e_core = 0
+    C = np.asarray(data['coeff'])
+    n = np.asarray(data['n'])
+    Nj = ((2*delta)**(n+0.5))/np.sqrt([math.factorial(2*ni) for ni in n])
+    r = r[None, :]        # shape (1, Nr)
+    delta = delta[:, None]
+    n = n[:, None]
+    C = C[:, None]
+    Nj = Nj[:, None]
+    S = Nj * r**(n-1) * np.exp(-delta*r)
+    R_total = np.sum(C*S, axis=0)
 
-    for i in core_orbitals:
-        n_e_core += orbi['occupation'][i]
-        R = slater_orbitals(Z, i, r)
-        core_density += (R**2)
-    core_density /= (4*np.pi)
-    core_density_n = core_density / np.trapz(4*np.pi*r**2*core_density, r)
+    # return the radial function for our atom, integrated to get form factor
+    return R_total
 
-    for i in valence_orbitals:
-        R = slater_orbitals(Z, i, r*kappa)
-        valence_density += (R**2)
-    valence_density /= (4*np.pi)
-    # need to normalize to 1 electron then scale by pv after
-    valence_density_n = valence_density / np.trapz(4*np.pi*r**2
-                                                   * valence_density, r)
-    pc = orbi['pc']
-    # p_atom(r) in kappa formalism
-    density_total = pc*core_density_n + pv*kappa**3*valence_density_n
-    integrand = density_total*np.pi*r**2
-    # mean square radius of electrons in the atom
-    r2_expect = np.trapz(r**2*integrand, x=r)/np.trapz(integrand, x=r)
 
-    return core_density_n, valence_density_n, r2_expect
+def precompute_densities(xtal, basis):
+    # def precompute_densities(Z, kappa, pv):
+    basis.core = np.zeros([basis.n_atoms, xtal.n_points], dtype=float)
+    basis.valence = np.zeros([basis.n_atoms, xtal.n_points], dtype=float)
+    basis.r2 = np.zeros(basis.n_atoms, dtype=float)
+    r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
+
+    for i in range(basis.n_atoms):
+        Z = basis.atomic_number[i]
+        kappa = basis.kappa[i]
+        n_e_core = 0.0
+        orbi = orb(basis.atomic_number[i])
+
+        core_density = 0.0
+        for j in orbi['core_orbitals']:
+            n_e_core += orbi['occupation'][j]
+            R = slater_orbitals(Z, j, r)
+            core_density += (R**2)
+        core_density /= (4*np.pi)
+        basis.core[i, :] = core_density / np.trapz(4*np.pi*r**2*core_density, r)
+
+        valence_density = 0.0
+        for j in orbi['valence_orbitals']:
+            R = slater_orbitals(Z, j, r*kappa)
+            valence_density += (R**2)
+        valence_density /= (4*np.pi)
+        # normalize to 1 electron then scale by pv after
+        basis.valence[i, :] = valence_density / np.trapz(4*np.pi*r**2 *
+                                                         valence_density, r)
+
+        basis.pv[i] = orbi["pv"]
+        basis.pc[i] = orbi["pc"]
+
+        # p_atom(r) in kappa formalism
+        density_total = (basis.pc[i]*basis.core[i, :]
+                         + basis.pv[i]*kappa**3*basis.valence[i, :])
+        integrand = density_total*np.pi*r**2
+        # mean square radius of electrons in the atom
+        basis.r2[i] = np.trapz(r**2*integrand, r)/np.trapz(integrand, x=r)
+
+    return
 
 
 def slater_f_xray(xtal, basis, q, i):

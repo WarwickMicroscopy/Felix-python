@@ -277,16 +277,7 @@ elif rc.scatter_factor_method == 4:
     # number of points in the core/valence calculation
     xtal.n_points = 1000
     xtal.r_max = 20  # Angstroms
-    basis.core = np.zeros([basis.n_atoms, xtal.n_points], dtype=float)
-    basis.valence = np.zeros([basis.n_atoms, xtal.n_points], dtype=float)
-    basis.r2 = np.zeros(basis.n_atoms, dtype=float)
-    for i in range(basis.n_atoms):
-        orbi = px.orb(basis.atomic_number[i])
-        basis.pv[i] = orbi["pv"]
-        basis.pc[i] = orbi["pc"]
-        basis.core[i, :], basis.valence[i, :], basis.r2[i] = \
-            px.precompute_densities(basis.atomic_number[i],
-                                    basis.kappa[i], basis.pv[i])
+    px.precompute_densities(xtal, basis)
     print(f"    kappa = {basis.kappa}")
     print(f"    pv = {basis.pv}")
 else:
@@ -299,7 +290,7 @@ elif rc.absorption_method == 1:
 elif rc.absorption_method == 2:
     print("  Bird and King absorption model, with Thomas parameterisation")
 else:
-    raise ValueError("Invalid absorption method (0,1,2) chosen in felix.inp")
+    raise ValueError("Invalid absorption method !(0,1,2) chosen in felix.inp")
 
 if 'S' in rc.refine_mode:
     print("Simulation only, S")
