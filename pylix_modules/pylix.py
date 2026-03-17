@@ -4,11 +4,11 @@ import sympy as sp
 import subprocess
 import numpy as np
 from scipy.constants import c
-from scipy.linalg import eig, inv, solve
+from scipy.linalg import eig, solve
 from CifFile import CifFile
 import struct
 from pylix_modules import pylix_dicts as fu
-from numba import njit, prange
+# from numba import njit, prange
 import math
 
 
@@ -1642,65 +1642,65 @@ def f_peng(z, g_pool_mag):
     return f_g
 
 
-@njit(fastmath=True)
-def _sinc_numba(x):
-    if x == 0.0:
-        return 1.0
-    pix = math.pi * x
-    return math.sin(pix) / pix
+# @njit(fastmath=True)
+# def _sinc_numba(x):
+#     if x == 0.0:
+#         return 1.0
+#     pix = math.pi * x
+#     return math.sin(pix) / pix
 
 
-@njit(fastmath=True, parallel=True)
-def _form_factor_kernel(r, rho, S, scale):
-    """
-    Multi-threaded Numba kernel.
-    Parallelized over S.
-    Computes:  f_Q(s) = scale * ∫ 4*pi*rho*r^2 * sinc(2*s*r) dr
-    """
-    Nr = r.shape[0]
-    Ns = S.shape[0]
+# @njit(fastmath=True, parallel=True)
+# def _form_factor_kernel(r, rho, S, scale):
+#     """
+#     Multi-threaded Numba kernel.
+#     Parallelized over S.
+#     Computes:  f_Q(s) = scale * ∫ 4*pi*rho*r^2 * sinc(2*s*r) dr
+#     """
+#     Nr = r.shape[0]
+#     Ns = S.shape[0]
 
-    # Precompute base = 4*pi * rho * r^2
-    base = np.empty(Nr, dtype=np.float64)
-    for j in range(Nr):
-        base[j] = 4.0 * math.pi * rho[j] * (r[j] * r[j])
+#     # Precompute base = 4*pi * rho * r^2
+#     base = np.empty(Nr, dtype=np.float64)
+#     for j in range(Nr):
+#         base[j] = 4.0 * math.pi * rho[j] * (r[j] * r[j])
 
-    out = np.zeros(Ns, dtype=np.float64)
-    # Parallel loop over S
-    for i in prange(Ns):
-        s = S[i]
-        acc = 0.0
+#     out = np.zeros(Ns, dtype=np.float64)
+#     # Parallel loop over S
+#     for i in prange(Ns):
+#         s = S[i]
+#         acc = 0.0
 
-        # manual trapezoid rule along r
-        for j in range(Nr - 1):
-            x1 = 2.0 * s * r[j]
-            x2 = 2.0 * s * r[j+1]
-            f1 = base[j] * _sinc_numba(x1)
-            f2 = base[j+1] * _sinc_numba(x2)
-            dr = r[j+1] - r[j]
-            acc += 0.5 * (f1 + f2) * dr
+#         # manual trapezoid rule along r
+#         for j in range(Nr - 1):
+#             x1 = 2.0 * s * r[j]
+#             x2 = 2.0 * s * r[j+1]
+#             f1 = base[j] * _sinc_numba(x1)
+#             f2 = base[j+1] * _sinc_numba(x2)
+#             dr = r[j+1] - r[j]
+#             acc += 0.5 * (f1 + f2) * dr
 
-        out[i] = scale * acc
+#         out[i] = scale * acc
 
-    return out
-
-
-def f_xray_valence(r, rho, S, pv, k):
-    r = np.asarray(r, dtype=np.float64)
-    rho = np.asarray(rho, dtype=np.float64)
-    S = np.asarray(S, dtype=np.float64)
-
-    scale = pv * (k**3)
-    return _form_factor_kernel(r, rho, S, scale)
+#     return out
 
 
-def f_xray_core(r, rho, S, pc):
-    r = np.asarray(r, dtype=np.float64)
-    rho = np.asarray(rho, dtype=np.float64)
-    S = np.asarray(S, dtype=np.float64)
+# def f_xray_valence(r, rho, S, pv, k):
+#     r = np.asarray(r, dtype=np.float64)
+#     rho = np.asarray(rho, dtype=np.float64)
+#     S = np.asarray(S, dtype=np.float64)
 
-    scale = pc
-    return _form_factor_kernel(r, rho, S, scale)
+#     scale = pv * (k**3)
+#     return _form_factor_kernel(r, rho, S, scale)
+
+
+# def f_xray_core(r, rho, S, pc):
+#     r = np.asarray(r, dtype=np.float64)
+#     rho = np.asarray(rho, dtype=np.float64)
+#     S = np.asarray(S, dtype=np.float64)
+
+#     scale = pc
+#     return _form_factor_kernel(r, rho, S, scale)
 
 
 def slater_orbitals(Z, orbital, r):
@@ -1782,68 +1782,86 @@ def precompute_densities(xtal, basis):
     return
 
 
-def slater_f_xray(xtal, basis, q, i):
-    """
-    calculates x-ray scattering factr using Slater functions for electron
-    density
-    i : int, index of atom in the basis
-    Returns f_x_total x-ray scattering factor
-    """
-    rho_core = basis.core[i]
-    rho_val = basis.valence[i]
-    r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
-    pc = basis.pc[i]
-    # precomputed densities
-    f_valence = f_xray_valence(r, rho_val, q, basis.pv[i], basis.kappa[i])
-    f_core = f_xray_core(r, rho_core, q, pc)
-    # fourier transform of the calculated radial funciton in 3d from 0 to inf
-    f_x_total = f_core + f_valence
+# def f_xray_slater(xtal, basis, g, i):
+#     """
+#     calculates x-ray scattering factr using Slater functions for electron
+#     density
+#     i : int, index of atom in the basis
+#     Returns f_x_total x-ray scattering factor
+#     """
+#     q = 0.5*g/np.pi
+#     rho_core = basis.core[i]
+#     rho_val = basis.valence[i]
+#     r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
+#     pc = basis.pc[i]
+#     # precomputed densities
+#     f_valence = f_xray_valence(r, rho_val, q, basis.pv[i], basis.kappa[i])
+#     f_core = f_xray_core(r, rho_core, q, pc)
+#     # fourier transform of the calculated radial funciton in 3d from 0 to inf
+#     f_x_total = f_core + f_valence
 
-    return f_x_total
+#     return f_x_total
 
 
-def mott_bethe(Z, f_x, q):  # now redundant
-    Bohr = 0.52917721067  # in angstrom
-    q = np.asarray(q)
-    f_x = np.asarray(f_x)
+# def form_factor_numpy(r, rho, S, scale):
+#     r = np.asarray(r, dtype=float)
+#     rho = np.asarray(rho, dtype=float)
+#     S = np.asarray(S, dtype=float)
 
-    # Output array
-    f_e = np.zeros_like(q, dtype=float)
+#     # Precompute radial part
+#     base = 4.0 * np.pi * rho * r**2  # shape (Nr,)
 
-    # Mask where q == 0
-    mask0 = (q == 0)
-    maskN = ~mask0  # q ≠ 0
+#     # Build 2D grid: (Ns, Nr)
+#     sr = 2.0 * np.outer(S, r)
 
-    # Special case for q = 0 (Ibers correction)
-    r2 = fu.elements_info[Z]["r2"]
-    f_e[mask0] = (Z * r2) / (3 * Bohr)
+#     # sinc(x) = sin(pi x)/(pi x) → we need sin(x)/x
+#     # so use np.sinc(x/pi)
+#     sinc_term = np.sinc(sr / np.pi)
 
-    # Mott–Bethe formula
-    f_e[maskN] = (Z - f_x[maskN]) / (2 * np.pi**2 * Bohr * q[maskN]**2)
+#     integrand = base * sinc_term  # broadcast (Ns, Nr)
 
-    return f_e
+#     # trapezoidal integration over r axis
+#     result = np.trapz(integrand, r, axis=1)
+
+#     return scale * result
 
 
 def f_kappa(xtal, basis, g, i):
-    # now includes the mott_bethe subroutine
+    # includes the Mott-Bethe conversion
     Bohr = 0.52917721067  # in angstrom
-    orig_shape = g.shape
-    g_flat = g.flatten()
-    S = g_flat / (2*np.pi)
-    q = np.asarray(S)
-    f_x = np.asarray(slater_f_xray(xtal, basis, S, i))
-    f_out = np.zeros_like(g_flat, dtype=float)
 
-    # Mask where q == 0
-    mask0 = (q == 0)
-    maskN = ~mask0  # q ≠ 0
-    # Special case for q = 0 (Ibers correction)
+    r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
+    # radial weights
+    base_core = 4.0 * np.pi * basis.core[i] * r**2
+    base_val = 4.0 * np.pi * basis.valence[i] * r**2
+
+    # physics to crystallographic convention, woo
+    q = 0.5 * g / np.pi
+    q_flat = q.ravel()
+
+    # Build (Ns × Nr) grid
+    sr = 2.0 * np.outer(q_flat, r)
+
+    # sinc(x) = sin(x)/x → np.sinc(x/pi)
+    sinc_term = np.sinc(sr / np.pi)
+
+    # Integrate to get x-ray scattering factors
+    f_x_core = basis.pc[i] * np.trapz(base_core * sinc_term, r, axis=1)
+    f_x_val = (basis.pv[i] * (basis.kappa[i]**3) *
+               np.trapz(base_val * sinc_term, r, axis=1))
+
+    f_x = (f_x_core + f_x_val).reshape(g.shape)
+
+    f_out = np.empty_like(g, dtype=float)
+
+    # g = 0 (Ibers correction)
+    mask0 = (g == 0)
     f_out[mask0] = (basis.atomic_number[i] * basis.r2[i]) / (3 * Bohr)
-    # Mott–Bethe formula
-    f_out[maskN] = (basis.atomic_number[i] - f_x[maskN]) \
-        / (2 * np.pi**2 * Bohr * q[maskN]**2)
+    # g ≠ 0 (Mott–Bethe formula)
+    f_out[~mask0] = (basis.atomic_number[i] - f_x[~mask0]) \
+        / (2 * np.pi**2 * Bohr * g[~mask0]**2)
 
-    return f_out.reshape(orig_shape)
+    return f_out
 
 
 def four_gauss(s, a):

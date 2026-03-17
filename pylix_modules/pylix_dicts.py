@@ -2054,38 +2054,9 @@ slater_coefficients = {  # From Bunge Barrientos & Bunge, Atomic Data and Nuclea
         '4d': {
             'delta': [26.9243, 15.6155, 5.9399, 3.9812, 2.5304],
             'coeff': [-0.015706, 0.009349, 1.1e-05, 0.000439, -0.000133],
-            'n': [4, 4, 4, 4, 4]
-        },
-    }
-}
-
-# r_grid = []
-# rho_core = []
-# rho_valence = []
-# r2 = 0
-
-# precomputed_densities = {
-    # 3: {
-        # "r": r_grid,
-        # "core": rho_core,
-        # "valence": rho_valence,
-        # "r2": r2
-    # },
-
-    # 8: {
-        # "r": r_grid,
-        # "core": rho_core,
-        # "valence": rho_valence,
-        # "r2": r2
-    # },
-
-    # 41: {
-        # "r": r_grid,
-        # "core": rho_core,
-        # "valence": rho_valence,
-        # "r2": r2
-    # }
-# }
+            'n': [4, 4, 4, 4, 4]}
+            }
+        }
 
 
 # set up some libraries
@@ -2108,6 +2079,7 @@ atomic_number_map = {'H': 1, 'He': 2, 'Li': 3, 'Be': 4, 'B': 5, 'C': 6, 'N': 7,
                      'Ac': 89, 'Th': 90, 'Pa': 91, 'U': 92, 'Np': 93, 'Pu': 94,
                      'Am': 95, 'Cm': 96, 'Bk': 97, 'Cf': 98, 'Es': 99,
                      'Fm': 100, 'Md': 101, 'No': 102, 'Lr': 103}
+
 space_groups = {"P1": 1, "P-1": 2, "P2": 3, "P21": 4, "C2": 5, "Pm": 6,
     "Pc": 7, "Cm": 8, "Cc": 9, "P2/m": 10, "P21/m": 11, "C2/m": 12,
     "P2/c": 13, "P21/c": 14, "C2/c": 15, "P222": 16, "P2221": 17,
