@@ -228,6 +228,7 @@ class Crystal:
     # kappa model
     n_points: NDArray[np.floating] | None = None
     r_max: float = 20.0  # Angstroms
+    bohr_radius: float = 0.529177210544  # Angstroms
 
 
 @dataclass

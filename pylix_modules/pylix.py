@@ -1716,21 +1716,21 @@ def slater_orbitals(Z, orbital, r):
     functions and their corresponding expansion coefficent C_jln given
     in the Hartree-Fock equation.
     delta is given next to each slater type orbital in the table.
-    After we Tourier transform the radial function to get form factor we
+    After we Fourier transform the radial function to get form factor we
     use Mott-Bethe formula to get to electron scattering factor,
     then compare with kirkland to check agreement and upscale.
     """
+    r = r[None, :]  # shape (1, Nr)
     bohr_radius = 0.529177210544
     data = fu.slater_coefficients[Z][orbital]
     delta = np.asarray(data['delta']) / bohr_radius
+    delta = delta[:, None]  # shape (Nr, 1)
 
     C = np.asarray(data['coeff'])
-    n = np.asarray(data['n'])
-    Nj = ((2*delta)**(n+0.5))/np.sqrt([math.factorial(2*ni) for ni in n])
-    r = r[None, :]        # shape (1, Nr)
-    delta = delta[:, None]
-    n = n[:, None]
     C = C[:, None]
+    n = np.asarray(data['n'])
+    n = n[:, None]
+    Nj = ((2*delta)**(n+0.5))/np.sqrt([math.factorial(2*ni) for ni in n])
     Nj = Nj[:, None]
     S = Nj * r**(n-1) * np.exp(-delta*r)
     R_total = np.sum(C*S, axis=0)
@@ -1756,15 +1756,16 @@ def precompute_densities(xtal, basis):
         for j in orbi['core_orbitals']:
             n_e_core += orbi['occupation'][j]
             R = slater_orbitals(Z, j, r)
-            core_density += (R**2)
-        core_density /= (4*np.pi)
+            core_density += (R**2)/(4*np.pi)
         basis.core[i, :] = core_density / np.trapz(4*np.pi*r**2*core_density, r)
 
         valence_density = 0.0
         for j in orbi['valence_orbitals']:
             R = slater_orbitals(Z, j, r*kappa)
-            valence_density += (R**2)
-        valence_density /= (4*np.pi)
+            plt.plot(R)
+            valence_density += (R**2)/(4*np.pi)
+        plt.show()
+
         # normalize to 1 electron then scale by pv after
         basis.valence[i, :] = valence_density / np.trapz(4*np.pi*r**2 *
                                                          valence_density, r)
@@ -1830,27 +1831,34 @@ def f_kappa(xtal, basis, g, i):
     # includes the Mott-Bethe conversion
     Bohr = 0.52917721067  # in angstrom
 
-    r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
+    # physics to crystallographic convention, woo
+    q = 0.5 * g / np.pi
+    q_flat = q.ravel()
+    q_max = np.max(q)
+    dr = np.pi / (10 * q_max)
+    n_points = int(xtal.r_max / dr)
+
+    r = np.linspace(1e-6, xtal.r_max, n_points)
     # radial weights
     base_core = 4.0 * np.pi * basis.core[i] * r**2
     base_val = 4.0 * np.pi * basis.valence[i] * r**2
 
-    # physics to crystallographic convention, woo
-    q = 0.5 * g / np.pi
-    q_flat = q.ravel()
+    k = basis.kappa[i]
 
-    # Build (Ns × Nr) grid
-    sr = 2.0 * np.outer(q_flat, r)
+    # Build (Ns × Nr) grids
+    sr_core = 2.0 * np.outer(q_flat, r)
+    sr_valence = 2.0 * np.outer(q_flat / k, r)
 
     # sinc(x) = sin(x)/x → np.sinc(x/pi)
-    sinc_term = np.sinc(sr / np.pi)
+    sinc_core = np.sinc(sr_core / np.pi)
+    sinc_valence = np.sinc(sr_valence / np.pi)
 
     # Integrate to get x-ray scattering factors
-    f_x_core = basis.pc[i] * np.trapz(base_core * sinc_term, r, axis=1)
-    f_x_val = (basis.pv[i] * (basis.kappa[i]**3) *
-               np.trapz(base_val * sinc_term, r, axis=1))
+    f_x_core = basis.pc[i] * np.trapz(base_core * sinc_core, r, axis=1)
+    f_x_valence = (basis.pv[i] *  # (basis.kappa[i]**3) *
+                   np.trapz(base_val * sinc_valence, r, axis=1))
 
-    f_x = (f_x_core + f_x_val).reshape(g.shape)
+    f_x = (f_x_core + f_x_valence).reshape(g.shape)
 
     f_out = np.empty_like(g, dtype=float)
 
@@ -1859,7 +1867,7 @@ def f_kappa(xtal, basis, g, i):
     f_out[mask0] = (basis.atomic_number[i] * basis.r2[i]) / (3 * Bohr)
     # g ≠ 0 (Mott–Bethe formula)
     f_out[~mask0] = (basis.atomic_number[i] - f_x[~mask0]) \
-        / (2 * np.pi**2 * Bohr * g[~mask0]**2)
+        / (2 * np.pi**2 * Bohr * q[~mask0]**2)
 
     return f_out
 
