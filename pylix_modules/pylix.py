@@ -9,6 +9,7 @@ from CifFile import CifFile
 import struct
 from pylix_modules import pylix_dicts as fu
 # from numba import njit, prange
+import matplotlib.pyplot as plt
 import math
 
 
@@ -1720,23 +1721,19 @@ def slater_orbitals(Z, orbital, r):
     use Mott-Bethe formula to get to electron scattering factor,
     then compare with kirkland to check agreement and upscale.
     """
-    # r = r[None, :]  # shape (1, Nr)
     bohr_radius = 0.529177210544
     data = fu.slater_coefficients[Z][orbital]
     delta = np.asarray(data['delta']) / bohr_radius
-    # delta = delta[:, None]  # shape (Nr, 1)
 
     C = np.asarray(data['coeff'])
-    # C = C[:, None]
     n = np.asarray(data['n'])
-    # n = n[:, None]
-    Nj = ((2*delta)**(n+0.5))/np.sqrt([math.factorial(2*ni) for ni in n])
-    # Nj = Nj[:, None]
-    S = Nj * r**(n-1) * np.exp(-delta*r)
-    R_total = np.sum(C*S, axis=0)
+    Nj = ((2*delta)**(n+0.5))/np.sqrt([np.math.factorial(2*ni) for ni in n])
+    # radial electron density
+    R = np.zeros_like(r, dtype=float)
+    for i in range(len(n)):
+        R += C[i]*Nj[i] * r**(n[i]-1) * np.exp(-delta[i]*r)
 
-    # return the radial function for our atom, integrated to get form factor
-    return R_total
+    return R
 
 
 def precompute_densities(xtal, basis):
