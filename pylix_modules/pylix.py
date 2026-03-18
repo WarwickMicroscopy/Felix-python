@@ -1720,18 +1720,18 @@ def slater_orbitals(Z, orbital, r):
     use Mott-Bethe formula to get to electron scattering factor,
     then compare with kirkland to check agreement and upscale.
     """
-    r = r[None, :]  # shape (1, Nr)
+    # r = r[None, :]  # shape (1, Nr)
     bohr_radius = 0.529177210544
     data = fu.slater_coefficients[Z][orbital]
     delta = np.asarray(data['delta']) / bohr_radius
-    delta = delta[:, None]  # shape (Nr, 1)
+    # delta = delta[:, None]  # shape (Nr, 1)
 
     C = np.asarray(data['coeff'])
-    C = C[:, None]
+    # C = C[:, None]
     n = np.asarray(data['n'])
-    n = n[:, None]
+    # n = n[:, None]
     Nj = ((2*delta)**(n+0.5))/np.sqrt([math.factorial(2*ni) for ni in n])
-    Nj = Nj[:, None]
+    # Nj = Nj[:, None]
     S = Nj * r**(n-1) * np.exp(-delta*r)
     R_total = np.sum(C*S, axis=0)
 
@@ -1838,7 +1838,7 @@ def f_kappa(xtal, basis, g, i):
     dr = np.pi / (10 * q_max)
     n_points = int(xtal.r_max / dr)
 
-    r = np.linspace(1e-6, xtal.r_max, n_points)
+    r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
     # radial weights
     base_core = 4.0 * np.pi * basis.core[i] * r**2
     base_val = 4.0 * np.pi * basis.valence[i] * r**2
