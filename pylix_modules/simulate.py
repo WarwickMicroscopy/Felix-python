@@ -1150,21 +1150,21 @@ def plot_f_g(xtal, basis, Z):
     g = np.arange(0.0, 10.0, 0.05)
     for i in range(5):
         if i == 0:
-            f_g = px.f_kirkland(Z, g)
+            f_g = px.f_kirkland(Z, g).ravel()
             f = "Kirkland"
         elif i == 1:
-            f_g = px.f_lobato(Z, g)
+            f_g = px.f_lobato(Z, g).ravel()
             f = "Lobato"
         elif i == 2:
-            f_g = px.f_peng(Z, g)
+            f_g = px.f_peng(Z, g).ravel()
             f = "Peng"
         elif i == 3:
-            f_g = px.f_doyle_turner(Z, g)
+            f_g = px.f_doyle_turner(Z, g).ravel()
             f = "Doyle & Turner"
         elif i == 4:
-            f_g = px.f_kappa(xtal, basis, g, i)
+            f_g = px.f_kappa(xtal, basis, g, 0)
             f = "Kappa"
-        plt.plot(g, f_g[0, :], linestyle=style[i], label=f)
+        plt.plot(g, f_g, linestyle=style[0], label=f)
 
     ax.set_xlabel('$g$, A$^{-1}$', size=24)
     ax.set_ylabel('$f_g$', size=24)
