@@ -1704,36 +1704,44 @@ def f_peng(z, g_pool_mag):
 #     return _form_factor_kernel(r, rho, S, scale)
 
 
-def slater_orbitals(Z, orbital, r):
+def bunge_sto(Z, orbital, r):
     """
-    When we calc slater orbital we pass kappa scaled q
-    r, distance of electron from atomic nucleus#
-    N is normalizing constant
-    1s contributes to the core and 2s contributes
-    to valence with a respective electron occupation of 2, 1.
-    We need array of R values to sample the electron density
-    and then evaluate a Fourier transform integral
+    slater-type orbitals using the parameterisation of Bunge et al
+    Atomic Data and Nuclear Data Tables 53, 113 (1993)
+
+    Each sto is given by
+
+    S_jl = N_jl*r^(n_jl-1)*exp(-Z_jl*r)
+
+    where r is distance from nucleus and N_jl is the normalization constant
+
+    N_jl = (2Z_jl)^(n_jl+1/2)/[(2n_jl)!]^1/2
+
+    and
+
+    n_jl is the principal quantum number
+    Z_jl is the orbital exponent
+
     Total radial function is a superposition of these primitive radial
-    functions and their corresponding expansion coefficent C_jln given
-    in the Hartree-Fock equation.
-    delta is given next to each slater type orbital in the table.
-    After we Fourier transform the radial function to get form factor we
-    use Mott-Bethe formula to get to electron scattering factor,
-    then compare with kirkland to check agreement and upscale.
+    functions multiplied by the expansion coefficent C_jln, i.e.
+    sum over j [C_jln * Sjl]
+
+    *_* what's the Bohr radius doing here???
     """
+
     bohr_radius = 0.529177210544
     data = fu.slater_coefficients[Z][orbital]
-    delta = np.asarray(data['delta']) / bohr_radius
-
-    C = np.asarray(data['coeff'])
+    C_jln = np.asarray(data['C_jln']) / bohr_radius
+    Z_jl = np.asarray(data['Z_jl'])
     n = np.asarray(data['n'])
-    Nj = ((2*delta)**(n+0.5))/np.sqrt([np.math.factorial(2*ni) for ni in n])
-    # radial electron density
-    R = np.zeros_like(r, dtype=float)
-    for i in range(len(n)):
-        R += C[i]*Nj[i] * r**(n[i]-1) * np.exp(-delta[i]*r)
 
-    return R
+    # radial electron density
+    rho = np.zeros_like(r, dtype=float)
+    for j in range(len(n)):
+        N_jl = ((2*Z_jl[j])**(n[j]+0.5))/np.sqrt([np.math.factorial(2*n[j])])
+        rho += C_jln[j]*N_jl * r**(n[j]-1) * np.exp(-Z_jl[j]*r)
+
+    return rho
 
 
 def precompute_densities(xtal, basis):
@@ -1752,13 +1760,13 @@ def precompute_densities(xtal, basis):
         core_density = 0.0
         for j in orbi['core_orbitals']:
             n_e_core += orbi['occupation'][j]
-            R = slater_orbitals(Z, j, r)
+            R = bunge_sto(Z, j, r)
             core_density += (R**2)/(4*np.pi)
         basis.core[i, :] = core_density / np.trapz(4*np.pi*r**2*core_density, r)
 
         valence_density = 0.0
         for j in orbi['valence_orbitals']:
-            R = slater_orbitals(Z, j, r*kappa)
+            R = bunge_sto(Z, j, r*kappa)
             plt.plot(R)
             valence_density += (R**2)/(4*np.pi)
         plt.show()
