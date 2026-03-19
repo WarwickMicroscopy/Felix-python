@@ -1725,14 +1725,11 @@ def bunge_R_nl(Z, orbital, r):
     Total radial function is a superposition of these primitive radial
     functions multiplied by the expansion coefficent C_jln, i.e.
     sum over j [C_jln * Sjl]
-
-    *_* what's the Bohr radius doing here???
     """
 
-    # bohr_radius = 0.529177210544
-    C_jln = np.asarray(fu.bunge_coefficients[Z][orbital])  # / bohr_radius
-    Z_jl = np.asarray(fu.bunge_coefficients[Z]['Z_jl'])
-    n = np.asarray(fu.bunge_coefficients[Z]['n'])
+    C_jln = np.asarray(fu.bunge_coefficients[Z][orbital]['C_jln'])
+    Z_jl = np.asarray(fu.bunge_coefficients[Z][orbital]['Z_jl'])
+    n = np.asarray(fu.bunge_coefficients[Z][orbital]['n'])
 
     # radial orbital
     R_nl = np.zeros_like(r, dtype=float)
