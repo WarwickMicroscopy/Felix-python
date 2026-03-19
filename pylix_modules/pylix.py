@@ -1498,54 +1498,6 @@ def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list,
     return
 
 
-def electron_configuration(Z):
-    # electron occupation of orbitals for element number Z
-    occ = {}
-    remaining = Z
-    for orb in fu.orbital_order:
-        if remaining <= 0:
-            break
-        cap = fu.orbital_capacity[orb[-1]]
-        n = min(cap, remaining)
-        occ[orb] = n
-        remaining -= n
-
-    return occ
-
-
-def core_valence(occ, Z):
-    # identifies core vs valence orbitals
-    orbitals = list(occ.keys())
-    max_n = max(int(o[0]) for o in orbitals)
-    # Main group
-    if Z <= 20 or Z >= 31 and Z <= 36 or Z >= 49 and Z <= 54 or Z >= 81:
-        valence = [o for o in orbitals if int(o[0]) == max_n]
-    else:
-        # Transition / f-block
-        valence = [o for o in orbitals
-                   if int(o[0]) == max_n or int(o[0]) == max_n - 1]
-    core = [o for o in orbitals if o not in valence]
-
-    return core, valence
-
-
-def orb(Z):
-    # gives lists of orbitals, core and valence, pc and pv
-    occ = electron_configuration(Z)
-    core, valence = core_valence(occ, Z)
-    pc = sum(occ[o] for o in core)
-    pv = sum(occ[o] for o in valence)
-    orb = {
-        'orbitals': list(occ.keys()),
-        'core_orbitals': core,
-        'valence_orbitals': valence,
-        'occupation': occ,
-        'pc': pc,
-        'pv': pv
-    }
-    return orb
-
-
 def f_kirkland(z, g_pool_mag):
     """
     calculates atomic scattering factor using the Kirkland model.
@@ -1704,12 +1656,60 @@ def f_peng(z, g_pool_mag):
 #     return _form_factor_kernel(r, rho, S, scale)
 
 
-def bunge_sto(Z, orbital, r):
+def electron_configuration(Z):
+    # electron occupation of orbitals for element number Z
+    occ = {}
+    remaining = Z
+    for orb in fu.orbital_order:
+        if remaining <= 0:
+            break
+        cap = fu.orbital_capacity[orb[-1]]
+        n = min(cap, remaining)
+        occ[orb] = n
+        remaining -= n
+
+    return occ
+
+
+def core_valence(occ, Z):
+    # identifies core vs valence orbitals
+    orbitals = list(occ.keys())
+    max_n = max(int(o[0]) for o in orbitals)
+    # Main group
+    if Z <= 20 or Z >= 31 and Z <= 36 or Z >= 49 and Z <= 54 or Z >= 81:
+        valence = [o for o in orbitals if int(o[0]) == max_n]
+    else:
+        # Transition / f-block
+        valence = [o for o in orbitals
+                   if int(o[0]) == max_n or int(o[0]) == max_n - 1]
+    core = [o for o in orbitals if o not in valence]
+
+    return core, valence
+
+
+def orb(Z):
+    # gives lists of orbitals, core and valence, pc and pv
+    occ = electron_configuration(Z)
+    core, valence = core_valence(occ, Z)
+    pc = sum(occ[o] for o in core)
+    pv = sum(occ[o] for o in valence)
+    orb = {
+        'orbitals': list(occ.keys()),
+        'core_orbitals': core,
+        'valence_orbitals': valence,
+        'occupation': occ,
+        'pc': pc,
+        'pv': pv
+    }
+    return orb
+
+
+def bunge_R_nl(Z, orbital, r):
     """
-    slater-type orbitals using the parameterisation of Bunge et al
+    radial orbitals using the parameterisation of Bunge et al
     Atomic Data and Nuclear Data Tables 53, 113 (1993)
 
-    Each sto is given by
+    Each slater-type orbitals sto is given by
 
     S_jl = N_jl*r^(n_jl-1)*exp(-Z_jl*r)
 
@@ -1729,19 +1729,19 @@ def bunge_sto(Z, orbital, r):
     *_* what's the Bohr radius doing here???
     """
 
-    bohr_radius = 0.529177210544
-    data = fu.slater_coefficients[Z][orbital]
-    C_jln = np.asarray(data['C_jln']) / bohr_radius
-    Z_jl = np.asarray(data['Z_jl'])
-    n = np.asarray(data['n'])
+    # bohr_radius = 0.529177210544
+    C_jln = np.asarray(fu.bunge_coefficients[Z][orbital])  # / bohr_radius
+    Z_jl = np.asarray(fu.bunge_coefficients[Z]['Z_jl'])
+    n = np.asarray(fu.bunge_coefficients[Z]['n'])
 
-    # radial electron density
-    rho = np.zeros_like(r, dtype=float)
+    # radial orbital
+    R_nl = np.zeros_like(r, dtype=float)
     for j in range(len(n)):
-        N_jl = ((2*Z_jl[j])**(n[j]+0.5))/np.sqrt([np.math.factorial(2*n[j])])
-        rho += C_jln[j]*N_jl * r**(n[j]-1) * np.exp(-Z_jl[j]*r)
+        N_jl = ((2*Z_jl[j])**(n[j]+0.5))/np.sqrt([math.factorial(2*n[j])])
+        R_nl += C_jln[j]*N_jl * r**(n[j]-1) * np.exp(-Z_jl[j]*r)
+        print(f"{n[j]}, {R_nl}")
 
-    return rho
+    return R_nl
 
 
 def precompute_densities(xtal, basis):
@@ -1760,13 +1760,13 @@ def precompute_densities(xtal, basis):
         core_density = 0.0
         for j in orbi['core_orbitals']:
             n_e_core += orbi['occupation'][j]
-            R = bunge_sto(Z, j, r)
+            R = bunge_R_nl(Z, j, r)
             core_density += (R**2)/(4*np.pi)
         basis.core[i, :] = core_density / np.trapz(4*np.pi*r**2*core_density, r)
 
         valence_density = 0.0
         for j in orbi['valence_orbitals']:
-            R = bunge_sto(Z, j, r*kappa)
+            R = bunge_R_nl(Z, j, r*kappa)
             plt.plot(R)
             valence_density += (R**2)/(4*np.pi)
         plt.show()
