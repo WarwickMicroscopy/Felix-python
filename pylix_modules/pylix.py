@@ -8,7 +8,6 @@ from scipy.linalg import eig, solve
 from CifFile import CifFile
 import struct
 from pylix_modules import pylix_dicts as fu
-# from numba import njit, prange
 import matplotlib.pyplot as plt
 import math
 
@@ -1736,7 +1735,7 @@ def bunge_R_nl(Z, orbital, r):
     for j in range(len(n)):
         N_jl = ((2*Z_jl[j])**(n[j]+0.5))/np.sqrt([math.factorial(2*n[j])])
         R_nl += C_jln[j]*N_jl * r**(n[j]-1) * np.exp(-Z_jl[j]*r)
-        print(f"{n[j]}, {R_nl}")
+        # print(f"{n[j]}, {N_jl}")
 
     return R_nl
 
@@ -1749,6 +1748,7 @@ def precompute_densities(xtal, basis):
     r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
 
     for i in range(basis.n_atoms):
+        print("spoinkit")
         Z = basis.atomic_number[i]
         kappa = basis.kappa[i]
         n_e_core = 0.0
@@ -1759,19 +1759,29 @@ def precompute_densities(xtal, basis):
             n_e_core += orbi['occupation'][j]
             R = bunge_R_nl(Z, j, r)
             core_density += (R**2)/(4*np.pi)
-        basis.core[i, :] = core_density / np.trapz(4*np.pi*r**2*core_density, r)
 
         valence_density = 0.0
         for j in orbi['valence_orbitals']:
             R = bunge_R_nl(Z, j, r*kappa)
-            plt.plot(R)
             valence_density += (R**2)/(4*np.pi)
+        print("spoink")
+        fig, ax = plt.subplots(1, 1)
+        w_f = 10
+        fig.set_size_inches(w_f, w_f)
+        plt.plot(r, core_density, label='core')
+        plt.plot(r, valence_density, label='valence')
+        ax.set_xlabel('$r$, A', size=24)
+        ax.set_ylabel('$\rho$', size=24)
+        ax.legend(loc='best', bbox_to_anchor=(1, 0.5), fontsize=12)
+        plt.xticks(fontsize=22)
+        plt.yticks(fontsize=22)
         plt.show()
 
         # normalize to 1 electron then scale by pv after
+        basis.core[i, :] = core_density
+        # / np.trapz(4*np.pi*r**2*core_density, r)
         basis.valence[i, :] = valence_density / np.trapz(4*np.pi*r**2 *
                                                          valence_density, r)
-
         basis.pv[i] = orbi["pv"]
         basis.pc[i] = orbi["pc"]
 
