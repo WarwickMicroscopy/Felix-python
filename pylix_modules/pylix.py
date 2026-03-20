@@ -1748,7 +1748,6 @@ def precompute_densities(xtal, basis):
     r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
 
     for i in range(basis.n_atoms):
-        print("spoinkit")
         Z = basis.atomic_number[i]
         kappa = basis.kappa[i]
         n_e_core = 0.0
@@ -1764,24 +1763,28 @@ def precompute_densities(xtal, basis):
         for j in orbi['valence_orbitals']:
             R = bunge_R_nl(Z, j, r*kappa)
             valence_density += (R**2)/(4*np.pi)
-        print("spoink")
+
+        # normalize to 1 electron then scale by pv after
+        basis.core[i, :] = core_density / np.trapz(4*np.pi*r**2 *
+                                                   core_density, r)
+        basis.valence[i, :] = valence_density / np.trapz(4*np.pi*r**2 *
+                                                         valence_density, r)
+
         fig, ax = plt.subplots(1, 1)
         w_f = 10
         fig.set_size_inches(w_f, w_f)
         plt.plot(r, core_density, label='core')
         plt.plot(r, valence_density, label='valence')
-        ax.set_xlabel('$r$, A', size=24)
-        ax.set_ylabel('$\rho$', size=24)
-        ax.legend(loc='best', bbox_to_anchor=(1, 0.5), fontsize=12)
+        ax.set_ylim(bottom=1e-06)
+        ax.set_xlim(left=0)
+        ax.set_xlabel(r'$r$, Å', size=24)
+        ax.set_ylabel(r'$\rho$', size=24)
+        ax.legend(loc='best', bbox_to_anchor=(1, 0.5), fontsize=22)
         plt.xticks(fontsize=22)
         plt.yticks(fontsize=22)
+        plt.yscale('log')
+        plt.title(basis.atom_label[i], fontsize=30)
         plt.show()
-
-        # normalize to 1 electron then scale by pv after
-        basis.core[i, :] = core_density
-        # / np.trapz(4*np.pi*r**2*core_density, r)
-        basis.valence[i, :] = valence_density / np.trapz(4*np.pi*r**2 *
-                                                         valence_density, r)
         basis.pv[i] = orbi["pv"]
         basis.pc[i] = orbi["pc"]
 
