@@ -277,7 +277,7 @@ elif rc.scatter_factor_method == 4:
     # number of points in the core/valence calculation
     xtal.n_points = 1000
     xtal.r_max = 12  # max radius to calculate electron density, Angstroms
-    px.precompute_densities(xtal, basis)
+    px.electron_density(xtal, basis)
     print(f"    kappa = {basis.kappa}")
     print(f"    pv = {basis.pv}")
 else:

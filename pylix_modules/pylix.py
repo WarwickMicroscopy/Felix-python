@@ -1740,8 +1740,14 @@ def bunge_R_nl(Z, orbital, r):
     return R_nl
 
 
-def precompute_densities(xtal, basis):
-    # def precompute_densities(Z, kappa, pv):
+def electron_density(xtal, basis):
+    """
+    Calculates radial electron densities in core and valence shells
+    Uses Bunge parameterisation of Slater-type orbitals (3 < Z < 53)
+    Result is normalized to 1 electron
+    (to be scaled by pv & pc in kappa refinement)
+
+    """
     basis.core = np.zeros([basis.n_atoms, xtal.n_points], dtype=float)
     basis.valence = np.zeros([basis.n_atoms, xtal.n_points], dtype=float)
     basis.r2 = np.zeros(basis.n_atoms, dtype=float)
@@ -1753,28 +1759,39 @@ def precompute_densities(xtal, basis):
         n_e_core = 0.0
         orbi = orb(basis.atomic_number[i])
 
-        core_density = 0.0
+        # electron density rho, R_nl^2/4pi
+        rho_core = 0.0
         for j in orbi['core_orbitals']:
             n_e_core += orbi['occupation'][j]
             R = bunge_R_nl(Z, j, r)
-            core_density += (R**2)/(4*np.pi)
+            rho_core += (R**2)/(4*np.pi)
 
-        valence_density = 0.0
+        rho_valence = 0.0
         for j in orbi['valence_orbitals']:
             R = bunge_R_nl(Z, j, r*kappa)
-            valence_density += (R**2)/(4*np.pi)
+            rho_valence += (R**2)/(4*np.pi)
 
-        # normalize to 1 electron then scale by pv after
-        basis.core[i, :] = core_density / np.trapz(4*np.pi*r**2 *
-                                                   core_density, r)
-        basis.valence[i, :] = valence_density / np.trapz(4*np.pi*r**2 *
-                                                         valence_density, r)
+        # normalize to 1 electron then scale by pv & pc after
+        basis.core[i, :] = rho_core / np.trapz(4*np.pi*r**2 *
+                                                   rho_core, r)
+        basis.valence[i, :] = rho_valence / np.trapz(4*np.pi*r**2 *
+                                                         rho_valence, r)
+        basis.pv[i] = orbi["pv"]
+        basis.pc[i] = orbi["pc"]
 
+        # p_atom(r) in kappa formalism
+        rho_total = (basis.pc[i]*basis.core[i, :]
+                         + basis.pv[i]*kappa**3*basis.valence[i, :])
+        integrand = rho_total*np.pi*r**2
+        # mean square radius of electron density
+        basis.r2[i] = np.trapz(r**2*integrand, r)/np.trapz(integrand, x=r)
+
+        # plot
         fig, ax = plt.subplots(1, 1)
         w_f = 10
         fig.set_size_inches(w_f, w_f)
-        plt.plot(r, core_density, label='core')
-        plt.plot(r, valence_density, label='valence')
+        plt.plot(r, rho_core, label='core')
+        plt.plot(r, rho_valence, label='valence')
         ax.set_ylim(bottom=1e-06)
         ax.set_xlim(left=0)
         ax.set_xlabel(r'$r$, Å', size=24)
@@ -1785,15 +1802,6 @@ def precompute_densities(xtal, basis):
         plt.yscale('log')
         plt.title(basis.atom_label[i], fontsize=30)
         plt.show()
-        basis.pv[i] = orbi["pv"]
-        basis.pc[i] = orbi["pc"]
-
-        # p_atom(r) in kappa formalism
-        density_total = (basis.pc[i]*basis.core[i, :]
-                         + basis.pv[i]*kappa**3*basis.valence[i, :])
-        integrand = density_total*np.pi*r**2
-        # mean square radius of electrons in the atom
-        basis.r2[i] = np.trapz(r**2*integrand, r)/np.trapz(integrand, x=r)
 
     return
 
