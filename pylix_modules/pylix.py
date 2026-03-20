@@ -1124,10 +1124,6 @@ def hkl_make(xtal, hkl, bloch, rc):
 
 
 def Fg_matrix(xtal, basis, cell, bloch, rc):
-# def Fg_matrix(n_hkl, scatter_factor_method, basis_atom_label, atom_label,
-#               atom_coordinate, atomic_number, occupancy, u_aniso, g_matrix,
-#               absorption_method, absorption_per, electron_velocity, kappas, pv,
-#               r2, debug):
     """
     Parameters
     ----------
@@ -1139,7 +1135,7 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
     atomic_number : int, size [n_cell], number of atoms in the cell
     occupancy : float, size [n_cell]
     u_aniso : float array of ADPs, size [n_cell,3,3]
-    bloch.g_matrix : array of g-vectors in the microscope frame, size [n_hkl,n_hkl]
+    g_matrix : array of g-vectors in the microscope frame, size [n_hkl,n_hkl]
     absorption_method : int, flag for absorption calculation
     absorption_per : float, % absorption, if that method is used
     electron_velocity : float
@@ -1153,7 +1149,8 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
 
     Returns
     -------
-    Fg_matrix : size [n_hkl,n_hkl]
+    bloch.g_matrix : size [n_hkl,n_hkl]
+    bloch.g_dot_norm : size [n_hkl,n_hkl]
     """
     # initialise g-vector matrix, array [n_hkl, n_hkl, 3]
     bloch.g_matrix = np.zeros((bloch.n_hkl, bloch.n_hkl, 3))
@@ -1261,7 +1258,7 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
     # matrix of dot products with the surface normal
     bloch.g_dot_norm = np.dot(bloch.g_pool, xtal.norm_dir_m)
 
-    return  # Fg_matrix
+    return
 
 
 def deviation_parameter(bloch, rc):
@@ -1849,16 +1846,25 @@ def electron_density(xtal, basis):
 #     return scale * result
 
 
-def f_kappa(xtal, basis, g, i):
-    # includes the Mott-Bethe conversion
-    Bohr = 0.52917721067  # in angstrom
+def f_kappa(xtal, basis, g_magnitude, i):
+    """
+    Calculates an array of electron structure factors using the kappa
+    formalism, from min(g) to max(g)
+    The structure factors for actual g's are then found by linear
+    interpolation between calculated values
+    g_magnitude : 2d float array of g magnitudes size [n_hkl, n_hkl]
+    i : index of atom in the basis
 
-    # physics to crystallographic convention, woo
-    q = 0.5 * g / np.pi
-    q_flat = q.ravel()
-    q_max = np.max(q)
-    dr = np.pi / (10 * q_max)
-    n_points = int(xtal.r_max / dr)
+    Returns
+    f_kappa : structure factors to match g, size [n_hkl, n_hkl]
+
+    """
+    # physics to crystallographic convention, q array
+    q_min = np.min(g_magnitude[g_magnitude != 0]) / (2*np.pi)
+    q_max = np.max(g_magnitude) / (2*np.pi)
+    q = np.linspace(q_min, q_max, 1000)
+    
+    
 
     r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
     # radial weights
@@ -1868,8 +1874,8 @@ def f_kappa(xtal, basis, g, i):
     k = basis.kappa[i]
 
     # Build (Ns × Nr) grids
-    sr_core = 2.0 * np.outer(q_flat, r)
-    sr_valence = 2.0 * np.outer(q_flat / k, r)
+    sr_core = 2.0 * np.outer(q, r)
+    sr_valence = 2.0 * np.outer(q / k, r)
 
     # sinc(x) = sin(x)/x → np.sinc(x/pi)
     sinc_core = np.sinc(sr_core / np.pi)
@@ -1884,6 +1890,8 @@ def f_kappa(xtal, basis, g, i):
 
     f_out = np.empty_like(g, dtype=float)
 
+    # includes the Mott-Bethe conversion
+    Bohr = 0.52917721067  # in angstrom
     # g = 0 (Ibers correction)
     mask0 = (g == 0)
     f_out[mask0] = (basis.atomic_number[i] * basis.r2[i]) / (3 * Bohr)
