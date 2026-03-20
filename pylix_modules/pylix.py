@@ -1771,17 +1771,16 @@ def electron_density(xtal, basis):
             R = bunge_R_nl(Z, j, r*kappa)
             rho_valence += (R**2)/(4*np.pi)
 
-        # normalize to 1 electron then scale by pv & pc after
-        basis.core[i, :] = rho_core / np.trapz(4*np.pi*r**2 *
-                                                   rho_core, r)
+        # normalize to 1 electron (we will scale by pv & pc later)
+        basis.core[i, :] = rho_core / np.trapz(4*np.pi*r**2 * rho_core, r)
         basis.valence[i, :] = rho_valence / np.trapz(4*np.pi*r**2 *
-                                                         rho_valence, r)
+                                                     rho_valence, r)
         basis.pv[i] = orbi["pv"]
         basis.pc[i] = orbi["pc"]
 
         # p_atom(r) in kappa formalism
         rho_total = (basis.pc[i]*basis.core[i, :]
-                         + basis.pv[i]*kappa**3*basis.valence[i, :])
+                     + basis.pv[i]*kappa**3*basis.valence[i, :])
         integrand = rho_total*np.pi*r**2
         # mean square radius of electron density
         basis.r2[i] = np.trapz(r**2*integrand, r)/np.trapz(integrand, x=r)
