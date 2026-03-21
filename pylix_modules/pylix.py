@@ -1162,13 +1162,22 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
     # exp(i g.r) [n_hkl, n_hkl, cell.n_atoms]
     phase = np.exp(-1j * g_dot_r)
 
-    # NB scattering factor methods accept and return 2D[n_hkl, n_hkl] array of
+    # NB scattering factor methods accept and return
+    # up to 2D[n_hkl, n_hkl] array of
     # g magnitudes but only one atom type.
+    # NB it's much more efficient to calculate
+    # scattering factors for unique g magnitudes and map
+    # them back onto the g_matrix
 
     # g-vector magnitudes, size [n_hkl, n_hkl]
     g_magnitude = np.sqrt(np.sum(bloch.g_matrix**2, axis=2))
+    tol = 1e-6  # tolerance for considering g's equal
+    g_magnitude = np.round(g_magnitude / tol) * tol
+    # get unique g's and + mapping back
+    uniq_gmag, inverse = np.unique(g_magnitude,
+                                   return_inverse=True)
 
-    # anisotropic DP U*g[i]*g[j], size [cell.n_atoms, n_hkl, n_hkl]
+    # anisotropic ADP U*g[i]*g[j], size [cell.n_atoms, n_hkl, n_hkl]
     Ugg = np.einsum('ijm, a mn, ij n -> aij', bloch.g_matrix,
                     cell.u_aniso, bloch.g_matrix)
     # equivalent anisotropic B, size [cell.n_atoms, n_hkl, n_hkl]
@@ -1195,28 +1204,31 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
     basis.f_g_prime = np.zeros([basis.n_atoms, bloch.n_hkl, bloch.n_hkl],
                                dtype=np.complex128)
     cell.f_g = np.zeros([cell.n_atoms, bloch.n_hkl, bloch.n_hkl],
-                   dtype=np.complex128)
+                        dtype=np.complex128)
     cell.f_g_prime = np.zeros([cell.n_atoms, bloch.n_hkl, bloch.n_hkl],
-                         dtype=np.complex128)
+                              dtype=np.complex128)
     for i in range(basis.n_atoms):
         # get the scattering factor for the basis basis.f_g
         if rc.scatter_factor_method == 0:
-            basis.f_g[i, :, :] = f_kirkland(basis.atomic_number[i],
-                                            g_magnitude)
+            uniq_q = f_kirkland(basis.atomic_number[i],
+                                uniq_gmag).ravel()
         elif rc.scatter_factor_method == 1:
-            basis.f_g[i, :, :] = f_lobato(basis.atomic_number[i],
-                                          g_magnitude)
+            uniq_q = f_lobato(basis.atomic_number[i],
+                              uniq_gmag).ravel()
         elif rc.scatter_factor_method == 2:
-            basis.f_g[i, :, :] = f_peng(basis.atomic_number[i],
-                                        g_magnitude)
+            uniq_q = f_peng(basis.atomic_number[i],
+                            uniq_gmag).ravel()
         elif rc.scatter_factor_method == 3:
-            basis.f_g[i, :, :] = f_doyle_turner(basis.atomic_number[i],
-                                                g_magnitude)
+            uniq_q = f_doyle_turner(basis.atomic_number[i],
+                                    uniq_gmag).ravel()
         elif rc.scatter_factor_method == 4:
             print(f"Calculating kappa factor for atom {i+1}/{cell.n_atoms}")
-            basis.f_g[i, :, :] = f_kappa(xtal, basis, g_magnitude, i)
+            uniq_q = f_kappa(xtal, basis, uniq_gmag, i)
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
+
+        # map back into basis.f_g
+        basis.f_g[i, :, :] = (uniq_q[inverse].reshape(g_magnitude.shape))
 
         # get the absorptive scattering factor for the basis basis.f_g_prime
         if rc.absorption_method == 0:  # no absorption
@@ -1846,25 +1858,22 @@ def electron_density(xtal, basis):
 #     return scale * result
 
 
-def f_kappa(xtal, basis, g_magnitude, i):
+def f_kappa(xtal, basis, g, i):
     """
-    Calculates an array of electron structure factors using the kappa
-    formalism, from min(g) to max(g)
-    The structure factors for actual g's are then found by linear
-    interpolation between calculated values
-    g_magnitude : 2d float array of g magnitudes size [n_hkl, n_hkl]
+    Calculates an array of electron structure factors using
+    the kappa formalism, over values in g_magnitude
+
+    g : 1d float array of g magnitudes,
     i : index of atom in the basis
 
     Returns
-    f_kappa : structure factors to match g, size [n_hkl, n_hkl]
+    f_kappa : structure factors to match g,
+    size [n_hkl, n_hkl]
 
     """
-    # physics to crystallographic convention, q array
-    q_min = np.min(g_magnitude[g_magnitude != 0]) / (2*np.pi)
-    q_max = np.max(g_magnitude) / (2*np.pi)
-    q = np.linspace(q_min, q_max, 1000)
-    
-    
+
+    # physics to crystallographic convention, non-zero
+    q = g / (2*np.pi)
 
     r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
     # radial weights
