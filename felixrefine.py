@@ -21,8 +21,8 @@ Started August 2024, converted from MPI Fortran version
 # %% modules and subroutines
 
 import os
-import numpy as np
 import time
+import numpy as np
 
 # felix modules
 from pylix_modules import pylix as px  # most calculations found here
@@ -232,7 +232,7 @@ if rc.debug:
         print(f"{basis.atom_label[i]}:  u_ij =\n {basis.u_aniso[i, :, :]}")
 
 # thickness array
-if (rc.final_thickness > rc.initial_thickness + rc.delta_thickness):
+if rc.final_thickness > rc.initial_thickness + rc.delta_thickness:
     rc.thickness = np.arange(rc.initial_thickness, rc.final_thickness,
                              rc.delta_thickness)
     rc.n_thickness = len(rc.thickness)
@@ -301,7 +301,7 @@ elif 'A' in rc.refine_mode:
     # incompatible with anything else")
 else:  # atom-specific refinements can be done simultaneously
     atm = 0  # flag for atom-specific refinements
-    if (len(rc.atomic_sites) > basis.n_atoms):
+    if len(rc.atomic_sites) > basis.n_atoms:
         raise ValueError("Number of atomic sites to refine is larger than the \
                          number of atoms")
     if 'B' in rc.refine_mode:
@@ -390,10 +390,10 @@ rc.n_out = len(hkl.input_hkls)+1  # we expect 000 NOT to be in the hkl list
 # 50 J = Kappa
 # 51 K = valence electrons
 rc.n_variables = 0
-rc.refined_variable = ([])  # array of floats, values to be refined
-rc.refined_variable_type = ([])  # array of integers corresponding to above
-rc.atom_refine_flag = ([])  # the index of the atom in the .cif, -1 if none
-rc.atom_refine_vec = ([])  # the direction of atom movement, [0,0,0] if none
+rc.refined_variable = []  # array of floats, values to be refined
+rc.refined_variable_type = []  # array of integers corresponding to above
+rc.atom_refine_flag = []  # the index of the atom in the .cif, -1 if none
+rc.atom_refine_vec = []  # the direction of atom movement, [0,0,0] if none
 nullvec = np.array([0, 0, 0])  # null vector for above
 if 'S' not in rc.refine_mode:
     n_sites = len(rc.atomic_sites)
