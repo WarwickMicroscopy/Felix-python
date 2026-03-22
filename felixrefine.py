@@ -268,7 +268,7 @@ elif rc.scatter_factor_method == 3:
     print("  Using Doyle & Turner scattering factors")
 elif rc.scatter_factor_method == 4:
     print("  Using orbital Hartree-Fock scattering factors with Kappa")
-    print("    Precomputing atom core and valence densities")
+    # print("    Precomputing atom core and valence densities")
     # initialise pv, pc, kappa and mean_sq_radius of electron density
     basis.pv = np.zeros(basis.n_atoms, dtype=float)
     basis.pc = np.zeros(basis.n_atoms, dtype=float)
@@ -278,8 +278,8 @@ elif rc.scatter_factor_method == 4:
     xtal.n_points = 1000
     xtal.r_max = 12  # max radius to calculate electron density, Angstroms
     px.electron_density(xtal, basis)
-    print(f"    kappa = {basis.kappa}")
-    print(f"    pv = {basis.pv}")
+    # print(f"    kappa = {basis.kappa}")
+    # print(f"    pv = {basis.pv}")
 else:
     raise ValueError("No scattering factors chosen in felix.inp")
 

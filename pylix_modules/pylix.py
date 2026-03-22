@@ -1220,7 +1220,7 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
             uniq_q = f_doyle_turner(basis.atomic_number[i],
                                     bloch.uniq_gmag).ravel()
         elif rc.scatter_factor_method == 4:
-            print(f"Calculating kappa factor for atom {i+1}/{cell.n_atoms}")
+            print(f"Calculating kappa factor for atom {i+1}/{basis.n_atoms}")
             uniq_q = f_kappa(xtal, basis, bloch.uniq_gmag, i)
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
@@ -1731,7 +1731,7 @@ def electron_density(xtal, basis):
         # atomic charge
         integrand = 4 * np.pi * rho_total * r**2
         n_electrons = np.trapz(integrand, r)
-        print(f"  Net charge on atom {basis.atom_label[i]} = {(Z-n_electrons):.2f} electrons")
+        print(f"    Net charge on atom {basis.atom_label[i]} = {(Z-n_electrons):.2f} electrons")
 
         # mean square radius of electron density for Ibers formula
         basis.mean_sq_r2[i] = (np.trapz(r**2*integrand, r) / n_electrons)
