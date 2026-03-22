@@ -10,7 +10,7 @@ Returns the simulated LACBED patterns
 
 """
 import numpy as np
-from scipy.constants import c, h, e, m_e, angstrom
+from scipy.constants import c, h, e, m_e, angstrom, epsilon_0
 from scipy.ndimage import gaussian_filter
 from skimage.registration import phase_cross_correlation
 from scipy.ndimage import fourier_shift
@@ -35,8 +35,8 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     # some setup calculations
     # Electron velocity in metres per second
     bloch.electron_velocity = (c * np.sqrt(1.0 - ((m_e * c**2) /
-                         (e * rc.accelerating_voltage_kv*1000.0 +
-                          m_e * c**2))**2))
+                               (e * rc.accelerating_voltage_kv*1000.0 +
+                                m_e * c**2))**2))
     # Electron wavelength in Angstroms
     electron_wavelength = h / (
         np.sqrt(2.0 * m_e * e * rc.accelerating_voltage_kv*1000.0) *
@@ -45,15 +45,18 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     # Wavevector magnitude k
     electron_wave_vector_magnitude = 2.0 * np.pi / electron_wavelength
     # Relativistic correction
-    bloch.relativistic_correction = 1.0 / np.sqrt(1.0 - (bloch.electron_velocity / c)**2)
+    bloch.relativistic_correction = (1.0 / np.sqrt(1.0 -
+                                     (bloch.electron_velocity / c)**2))
     # Cell volume
     xtal.cell_volume = (xtal.cell_a*xtal.cell_b*xtal.cell_c
-                   * np.sqrt(1.-np.cos(xtal.cell_alpha)**2
-                             - np.cos(xtal.cell_beta)**2
-                             - np.cos(xtal.cell_gamma)**2
-                             + 2.0*np.cos(xtal.cell_alpha)
-                             * np.cos(xtal.cell_beta) * np.cos(xtal.cell_gamma)))
+                        * np.sqrt(1.-np.cos(xtal.cell_alpha)**2 -
+                                  np.cos(xtal.cell_beta)**2 -
+                                  np.cos(xtal.cell_gamma)**2 +
+                                  2.0*np.cos(xtal.cell_alpha) *
+                                  np.cos(xtal.cell_beta) *
+                                  np.cos(xtal.cell_gamma)))
     # Conversion from scattering factor to volts
+    xtal.mott = m_e * e**2 * angstrom / (8.0 * np.pi * epsilon_0 * h**2)
     scatt_fac_to_volts = (h**2 /
                           (2.0*np.pi * m_e * e * xtal.cell_volume *
                            angstrom**2))
@@ -201,6 +204,7 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     # g-vectors in g_matrix and convert to Ug
     # any change results in recalculation
     px.Fg_matrix(xtal, basis, cell, bloch, rc)
+    plot_f_g(xtal, basis, bloch, 0)
 
     if rc.iter_count == 0:
         print("    Ug matrix constructed")
@@ -1138,39 +1142,40 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     return dydx
 
 
-def plot_f_g(xtal, basis, Z):
+def plot_f_g(xtal, basis, bloch, j=0):
     """
     Utility subroutine to plot scattering factors
     """
+    Z = basis.atomic_number[j]
+
+    g = np.linspace(0, 10, 200)
+    # g = bloch.uniq_gmag
+    f_g = px.f_kappa(xtal, basis, g, 0).ravel()
+    f0 = f_g[0]
+
     fig, ax = plt.subplots(1, 1)
     w_f = 10
     fig.set_size_inches(w_f, w_f)
-    style = ['-', '-.', '--', ':']
 
-    g = np.arange(0.0, 10.0, 0.05)
-    for i in range(5):
-        if i == 0:
-            f_g = px.f_kirkland(Z, g).ravel()
-            f = "Kirkland"
-        elif i == 1:
-            f_g = px.f_lobato(Z, g).ravel()
-            f = "Lobato"
-        elif i == 2:
-            f_g = px.f_peng(Z, g).ravel()
-            f = "Peng"
-        elif i == 3:
-            f_g = px.f_doyle_turner(Z, g).ravel()
-            f = "Doyle & Turner"
-        elif i == 4:
-            f_g = px.f_kappa(xtal, basis, g, 0)
-            f = "Kappa"
-        plt.plot(g, f_g, linestyle=style[0], label=f)
+    plt.plot(g, f_g, linestyle='-', label='Kappa')
+    f_g = px.f_kirkland(Z, g).ravel()
+    f1 = f_g[0]
+    plt.plot(g, f_g, linestyle='-', label='Kirkland')
+    f_g = px.f_lobato(Z, g).ravel()
+    plt.plot(g, f_g, linestyle='-.', label='Lobato')
+    f_g = px.f_peng(Z, g).ravel()
+    plt.plot(g, f_g, linestyle='--', label='Peng')
+    f_g = px.f_doyle_turner(Z, g).ravel()
+    plt.plot(g, f_g, linestyle=':', label='Doyle & Turner')
 
     ax.set_xlabel('$g$, A$^{-1}$', size=24)
     ax.set_ylabel('$f_g$', size=24)
-    ax.legend(loc='best', bbox_to_anchor=(1, 0.5), fontsize=12)
+    ax.legend(loc='best', fontsize=12)
     plt.xticks(fontsize=22)
     plt.yticks(fontsize=22)
+    plt.grid()
     plt.show()
+
+    print(f"kappa/kirkland = {f0/f1}")
 
     return

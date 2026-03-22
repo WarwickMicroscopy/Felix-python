@@ -113,6 +113,7 @@ class Bloch:
     g_pool: NDArray[np.floating] | None = None
     g_pool_mag: NDArray[np.floating] | None = None
     g_matrix: NDArray[np.floating] | None = None
+    uniq_gmag: NDArray[np.floating] | None = None
     ug_matrix: NDArray[np.floating] | None = None
     g_dot_norm: NDArray[np.floating] | None = None
     s_g: NDArray[np.floating] | None = None
@@ -124,7 +125,6 @@ class Bloch:
     strong_beam: NDArray[np.integer] | None = None
     gamma: NDArray[np.complex128] | None = None
     eigenvecs: NDArray[np.complex128] | None = None
-    # inv_eigenvecs: NDArray[np.floating] | None = None
     n_beams: int = 0
     strong_beam_indices: NDArray[np.integer] | None = None
 
@@ -229,6 +229,7 @@ class Crystal:
     n_points: NDArray[np.floating] | None = None
     r_max: float = 20.0  # Angstroms
     bohr_radius: float = 0.529177210544  # Angstroms
+    mott: float = 0.02393366096322682  # prefactor in Mott-Bethe formula
 
 
 @dataclass
@@ -254,7 +255,7 @@ class Basis:
     valence: NDArray[np.floating] | None = None
     pc: NDArray[np.floating] | None = None
     pv: NDArray[np.floating] | None = None
-    r2: NDArray[np.floating] | None = None
+    mean_sq_r2: NDArray[np.floating] | None = None
 
 
 @dataclass
@@ -280,7 +281,7 @@ class Cell:
     valence: NDArray[np.floating] | None = None
     pc: NDArray[np.floating] | None = None
     pv: NDArray[np.floating] | None = None
-    r2: NDArray[np.floating] | None = None
+    mean_sq_r2: NDArray[np.floating] | None = None
 
 
 # -----------------------------------------------

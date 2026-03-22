@@ -269,7 +269,7 @@ elif rc.scatter_factor_method == 3:
 elif rc.scatter_factor_method == 4:
     print("  Using orbital Hartree-Fock scattering factors with Kappa")
     print("    Precomputing atom core and valence densities")
-    # initialise pv, pc, kappa and r2
+    # initialise pv, pc, kappa and mean_sq_radius of electron density
     basis.pv = np.zeros(basis.n_atoms, dtype=float)
     basis.pc = np.zeros(basis.n_atoms, dtype=float)
     # initial kappa is 1.0 for a neutral atom

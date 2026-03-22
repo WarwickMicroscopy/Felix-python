@@ -326,7 +326,7 @@ def unique_atom_positions(xtal, basis, cell, rc):
     if rc.scatter_factor_method == 4:
         all_kappa = np.tile(basis.kappa, n_symops)
         all_pv = np.tile(basis.pv, n_symops)
-        all_r2 = np.tile(basis.r2, n_symops)
+        all_mean_sq_r2 = np.tile(basis.mean_sq_r2, n_symops)
 
     # Generate all equivalent positions by applying symmetry
     symmetry_applied = \
@@ -374,15 +374,14 @@ def unique_atom_positions(xtal, basis, cell, rc):
     if rc.scatter_factor_method == 4:
         cell.kappa = all_kappa[i]
         cell.pv = all_pv[i]
-        cell.r2 = all_r2[i]
+        cell.mean_sq_r2 = all_mean_sq_r2[i]
     cell.n_atoms = len(cell.atom_name)
     if rc.debug:
         np.set_printoptions(precision=5, suppress=True)
         for i in range(3):
             print(f"Anisotropic u_aniso [{i}]")
             print(f"{cell.u_aniso[i, :5, :5]}")
-    # return atom_position, atom_label,atom_type, atom_name, u_aniso,
-    # occupancy, pv, kappa, r2
+
     return
 
 
@@ -1174,8 +1173,7 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
     tol = 1e-6  # tolerance for considering g's equal
     g_magnitude = np.round(g_magnitude / tol) * tol
     # get unique g's and + mapping back
-    uniq_gmag, inverse = np.unique(g_magnitude,
-                                   return_inverse=True)
+    bloch.uniq_gmag, inverse = np.unique(g_magnitude, return_inverse=True)
 
     # anisotropic ADP U*g[i]*g[j], size [cell.n_atoms, n_hkl, n_hkl]
     Ugg = np.einsum('ijm, a mn, ij n -> aij', bloch.g_matrix,
@@ -1211,19 +1209,19 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
         # get the scattering factor for the basis basis.f_g
         if rc.scatter_factor_method == 0:
             uniq_q = f_kirkland(basis.atomic_number[i],
-                                uniq_gmag).ravel()
+                                bloch.uniq_gmag).ravel()
         elif rc.scatter_factor_method == 1:
             uniq_q = f_lobato(basis.atomic_number[i],
-                              uniq_gmag).ravel()
+                              bloch.uniq_gmag).ravel()
         elif rc.scatter_factor_method == 2:
             uniq_q = f_peng(basis.atomic_number[i],
-                            uniq_gmag).ravel()
+                            bloch.uniq_gmag).ravel()
         elif rc.scatter_factor_method == 3:
             uniq_q = f_doyle_turner(basis.atomic_number[i],
-                                    uniq_gmag).ravel()
+                                    bloch.uniq_gmag).ravel()
         elif rc.scatter_factor_method == 4:
             print(f"Calculating kappa factor for atom {i+1}/{cell.n_atoms}")
-            uniq_q = f_kappa(xtal, basis, uniq_gmag, i)
+            uniq_q = f_kappa(xtal, basis, bloch.uniq_gmag, i)
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
 
@@ -1603,67 +1601,6 @@ def f_peng(z, g_pool_mag):
     return f_g
 
 
-# @njit(fastmath=True)
-# def _sinc_numba(x):
-#     if x == 0.0:
-#         return 1.0
-#     pix = math.pi * x
-#     return math.sin(pix) / pix
-
-
-# @njit(fastmath=True, parallel=True)
-# def _form_factor_kernel(r, rho, S, scale):
-#     """
-#     Multi-threaded Numba kernel.
-#     Parallelized over S.
-#     Computes:  f_Q(s) = scale * ∫ 4*pi*rho*r^2 * sinc(2*s*r) dr
-#     """
-#     Nr = r.shape[0]
-#     Ns = S.shape[0]
-
-#     # Precompute base = 4*pi * rho * r^2
-#     base = np.empty(Nr, dtype=np.float64)
-#     for j in range(Nr):
-#         base[j] = 4.0 * math.pi * rho[j] * (r[j] * r[j])
-
-#     out = np.zeros(Ns, dtype=np.float64)
-#     # Parallel loop over S
-#     for i in prange(Ns):
-#         s = S[i]
-#         acc = 0.0
-
-#         # manual trapezoid rule along r
-#         for j in range(Nr - 1):
-#             x1 = 2.0 * s * r[j]
-#             x2 = 2.0 * s * r[j+1]
-#             f1 = base[j] * _sinc_numba(x1)
-#             f2 = base[j+1] * _sinc_numba(x2)
-#             dr = r[j+1] - r[j]
-#             acc += 0.5 * (f1 + f2) * dr
-
-#         out[i] = scale * acc
-
-#     return out
-
-
-# def f_xray_valence(r, rho, S, pv, k):
-#     r = np.asarray(r, dtype=np.float64)
-#     rho = np.asarray(rho, dtype=np.float64)
-#     S = np.asarray(S, dtype=np.float64)
-
-#     scale = pv * (k**3)
-#     return _form_factor_kernel(r, rho, S, scale)
-
-
-# def f_xray_core(r, rho, S, pc):
-#     r = np.asarray(r, dtype=np.float64)
-#     rho = np.asarray(rho, dtype=np.float64)
-#     S = np.asarray(S, dtype=np.float64)
-
-#     scale = pc
-#     return _form_factor_kernel(r, rho, S, scale)
-
-
 def electron_configuration(Z):
     # electron occupation of orbitals for element number Z
     occ = {}
@@ -1759,7 +1696,7 @@ def electron_density(xtal, basis):
     """
     basis.core = np.zeros([basis.n_atoms, xtal.n_points], dtype=float)
     basis.valence = np.zeros([basis.n_atoms, xtal.n_points], dtype=float)
-    basis.r2 = np.zeros(basis.n_atoms, dtype=float)
+    basis.mean_sq_r2 = np.zeros(basis.n_atoms, dtype=float)
     r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
 
     for i in range(basis.n_atoms):
@@ -1788,82 +1725,67 @@ def electron_density(xtal, basis):
         basis.pc[i] = orbi["pc"]
 
         # p_atom(r) in kappa formalism
-        rho_total = (basis.pc[i]*basis.core[i, :]
-                     + basis.pv[i]*kappa**3*basis.valence[i, :])
-        integrand = rho_total*np.pi*r**2
-        # mean square radius of electron density
-        basis.r2[i] = np.trapz(r**2*integrand, r)/np.trapz(integrand, x=r)
+        rho_total = (basis.pc[i] * basis.core[i, :]
+                     + basis.pv[i] * basis.valence[i, :] * kappa**3)
+
+        # atomic charge
+        integrand = 4 * np.pi * rho_total * r**2
+        n_electrons = np.trapz(integrand, r)
+        print(f"  Net charge on atom {basis.atom_label[i]} = {(Z-n_electrons):.2f} electrons")
+
+        # mean square radius of electron density for Ibers formula
+        basis.mean_sq_r2[i] = (np.trapz(r**2*integrand, r) / n_electrons)
 
         # plot
+        # fig, ax = plt.subplots(1, 1)
+        # w_f = 10
+        # fig.set_size_inches(w_f, w_f)
+        # plt.plot(r, rho_core, label='core')
+        # plt.plot(r, rho_valence, label='valence')
+        # ax.set_ylim(bottom=1e-06)
+        # ax.set_xlim(left=0)
+        # ax.set_xlabel(r'$r$, Å', size=24)
+        # ax.set_ylabel(r'$\rho$', size=24)
+        # ax.legend(loc='best', bbox_to_anchor=(1, 0.5), fontsize=22)
+        # plt.xticks(fontsize=22)
+        # plt.yticks(fontsize=22)
+        # plt.yscale('log')
+        # plt.title(basis.atom_label[i], fontsize=30)
+        # plt.show()
+
         fig, ax = plt.subplots(1, 1)
         w_f = 10
         fig.set_size_inches(w_f, w_f)
-        plt.plot(r, rho_core, label='core')
-        plt.plot(r, rho_valence, label='valence')
-        ax.set_ylim(bottom=1e-06)
+        cd_core = 4*np.pi*rho_core*r*r
+        cd_valence = 4*np.pi*rho_valence*r*r
+        rmax = 300
+        plt.plot(r[:rmax], cd_core[:rmax], label='core')
+        plt.plot(r[:rmax], cd_valence[:rmax], label='valence')
+        # plt.yscale('log')
+        # ax.set_ylim(bottom=1e-06)
         ax.set_xlim(left=0)
+        ax.set_ylim(top=10)
         ax.set_xlabel(r'$r$, Å', size=24)
-        ax.set_ylabel(r'$\rho$', size=24)
-        ax.legend(loc='best', bbox_to_anchor=(1, 0.5), fontsize=22)
+        ax.set_ylabel(r'Charge density, electrons/Å', size=24)
+        ax.legend(loc='best', fontsize=22)
         plt.xticks(fontsize=22)
         plt.yticks(fontsize=22)
-        plt.yscale('log')
-        plt.title(basis.atom_label[i], fontsize=30)
+        tit = f"Radial charge density for atom {basis.atom_label[i]}"
+        plt.title(tit, fontsize=24)
         plt.show()
 
     return
 
 
-# def f_xray_slater(xtal, basis, g, i):
-#     """
-#     calculates x-ray scattering factr using Slater functions for electron
-#     density
-#     i : int, index of atom in the basis
-#     Returns f_x_total x-ray scattering factor
-#     """
-#     q = 0.5*g/np.pi
-#     rho_core = basis.core[i]
-#     rho_val = basis.valence[i]
-#     r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
-#     pc = basis.pc[i]
-#     # precomputed densities
-#     f_valence = f_xray_valence(r, rho_val, q, basis.pv[i], basis.kappa[i])
-#     f_core = f_xray_core(r, rho_core, q, pc)
-#     # fourier transform of the calculated radial funciton in 3d from 0 to inf
-#     f_x_total = f_core + f_valence
-
-#     return f_x_total
-
-
-# def form_factor_numpy(r, rho, S, scale):
-#     r = np.asarray(r, dtype=float)
-#     rho = np.asarray(rho, dtype=float)
-#     S = np.asarray(S, dtype=float)
-
-#     # Precompute radial part
-#     base = 4.0 * np.pi * rho * r**2  # shape (Nr,)
-
-#     # Build 2D grid: (Ns, Nr)
-#     sr = 2.0 * np.outer(S, r)
-
-#     # sinc(x) = sin(pi x)/(pi x) → we need sin(x)/x
-#     # so use np.sinc(x/pi)
-#     sinc_term = np.sinc(sr / np.pi)
-
-#     integrand = base * sinc_term  # broadcast (Ns, Nr)
-
-#     # trapezoidal integration over r axis
-#     result = np.trapz(integrand, r, axis=1)
-
-#     return scale * result
-
-
-def f_kappa(xtal, basis, g, i):
+def f_kappa(xtal, basis, g_pool_mag, i):
     """
-    Calculates an array of electron structure factors using
-    the kappa formalism, over values in g_magnitude
+    Calculates an array of electron scattering factors using
+    the kappa formalism, over values in g_pool_mag.
+    We first obtain the X-ray scattering factor by integrating
+    ∫ 4*pi*rho*r^2 * sinc(2*s*r) dr from 0 upwards, where rho is electron
+    density
 
-    g : 1d float array of g magnitudes,
+    g_pool_mag : 1d float array of g magnitudes,
     i : index of atom in the basis
 
     Returns
@@ -1872,43 +1794,55 @@ def f_kappa(xtal, basis, g, i):
 
     """
 
-    # physics to crystallographic convention, non-zero
-    q = g / (2*np.pi)
+    # physics to crystallographic convention
+    # my g = 2*pi*g' where g' is the crystallographic convention
+    # x-ray structure factors are given in s = sin(theta)/lambda = 1/2d =g'/2
+    # so s = g/(4*pi)
+    s = g_pool_mag / (4*np.pi)
 
+    # array in real space to calculate integral
+    # may need more points at small r?
     r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
-    # radial weights
-    base_core = 4.0 * np.pi * basis.core[i] * r**2
-    base_val = 4.0 * np.pi * basis.valence[i] * r**2
 
-    k = basis.kappa[i]
+    # integrate to get the structure factor
+    # NB we use sinc(qr) = sinc(2sr) ???
+    qr = 2 * np.outer(s, r)
+    base_core = 4.0 * np.pi * basis.core[i] * np.sinc(qr) * r**2
+    base_val = 4.0 * np.pi * basis.valence[i] * np.sinc(qr) * r**2
+    f_x_core = basis.pc[i] * np.trapz(base_core, r, axis=1)
+    f_x_valence = basis.pv[i] * np.trapz(base_val, r, axis=1)
+    f_x = f_x_core + f_x_valence
 
-    # Build (Ns × Nr) grids
-    sr_core = 2.0 * np.outer(q, r)
-    sr_valence = 2.0 * np.outer(q / k, r)
+    f_kappa = np.zeros_like(g_pool_mag, dtype=float)
 
-    # sinc(x) = sin(x)/x → np.sinc(x/pi)
-    sinc_core = np.sinc(sr_core / np.pi)
-    sinc_valence = np.sinc(sr_valence / np.pi)
+    # g ≠ 0, the Mott-Bethe conversion
+    mask = (g_pool_mag != 0)
+    f_kappa[mask] = xtal.mott*(basis.atomic_number[i] -
+                               f_x[mask]) / (s[mask]**2)
+    # g = 0 (Ibers formula)
+    f_kappa[0] = (basis.atomic_number[i] *
+                  basis.mean_sq_r2[i]) / (3 * xtal.bohr_radius)
 
-    # Integrate to get x-ray scattering factors
-    f_x_core = basis.pc[i] * np.trapz(base_core * sinc_core, r, axis=1)
-    f_x_valence = (basis.pv[i] *  # (basis.kappa[i]**3) *
-                   np.trapz(base_val * sinc_valence, r, axis=1))
+    fig, ax = plt.subplots(1, 1)
+    w_f = 10
+    fig.set_size_inches(w_f, w_f)
+    smax = 1000
+    plt.plot(s[:smax], f_kappa[:smax], label='$f_e$')
+    plt.plot(s[:smax], f_x[:smax], label='$f_X$')
+    # plt.yscale('log')
+    ax.set_ylim(bottom=0)
+    ax.set_xlim(left=0)
+    # ax.set_ylim(top=10)
+    ax.set_xlabel(r'$s$ /Å', size=24)
+    ax.set_ylabel(r'$f$', size=24)
+    ax.legend(loc='best', fontsize=22)
+    plt.xticks(fontsize=22)
+    plt.yticks(fontsize=22)
+    tit = f"Scattering factor for atom {basis.atom_label[i]}"
+    plt.title(tit, fontsize=24)
+    plt.show()
 
-    f_x = (f_x_core + f_x_valence).reshape(g.shape)
-
-    f_out = np.empty_like(g, dtype=float)
-
-    # includes the Mott-Bethe conversion
-    Bohr = 0.52917721067  # in angstrom
-    # g = 0 (Ibers correction)
-    mask0 = (g == 0)
-    f_out[mask0] = (basis.atomic_number[i] * basis.r2[i]) / (3 * Bohr)
-    # g ≠ 0 (Mott–Bethe formula)
-    f_out[~mask0] = (basis.atomic_number[i] - f_x[~mask0]) \
-        / (2 * np.pi**2 * Bohr * q[~mask0]**2)
-
-    return f_out
+    return f_kappa
 
 
 def four_gauss(s, a):
