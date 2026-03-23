@@ -204,7 +204,7 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     # g-vectors in g_matrix and convert to Ug
     # any change results in recalculation
     px.Fg_matrix(xtal, basis, cell, bloch, rc)
-    plot_f_g(xtal, basis, bloch, 0)
+    # plot_f_g(xtal, basis, bloch, 0)
 
     if rc.iter_count == 0:
         print("    Ug matrix constructed")
