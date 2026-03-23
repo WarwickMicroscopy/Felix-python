@@ -243,7 +243,7 @@ else:
 
 # convert arrays to numpy
 rc.incident_beam_direction = np.array(rc.incident_beam_direction,
-                                       dtype='float')
+                                      dtype='float')
 rc.normal = np.array(rc.normal, dtype='float')
 rc.x_direction = np.array(rc.x_direction, dtype='float')
 rc.atomic_sites = np.array(rc.atomic_sites, dtype='int')
