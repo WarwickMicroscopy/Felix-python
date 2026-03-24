@@ -322,8 +322,9 @@ def phase_d_xy(A, B):
     xm1, xp1 = (x0 - 1) % nx, (x0 + 1) % nx
     dy = y0 + subpix(r[ym1, x0], r[y0, x0], r[yp1, x0])
     dx = x0 + subpix(r[y0, xm1], r[y0, x0], r[y0, xp1])
+    shift_ = (dx, dy)
 
-    return dy, dx
+    return shift_
 
 
 def pcc(stack1, stack2):
@@ -344,16 +345,17 @@ def pcc(stack1, stack2):
         img2 = stack2[:, :, i]
 
         # Estimate sub-pixel shift
-        up = 10  # shifts are accurate to 1/upsample_factor
-        shift, error, diffphase = phase_cross_correlation(img1, img2,
+        up = 50  # shifts are accurate to 1/upsample_factor
+        shift_, error, diffphase = phase_cross_correlation(img1, img2,
                                                           upsample_factor=up)
-        shifts[i] = shift
 
-        # Shift img2 in Fourier space
-        img2_shifted = np.real(ifftn(fourier_shift(fftn(img2), shift)))
-
-        # Compute correlation coefficient
-        pcc[i] = np.corrcoef(img1.ravel(), img2_shifted.ravel())[0, 1]
+        # only accept shifts smaller than 5 pixels
+        if np.linalg.norm(shift_) < 5.0:
+            # Shift img2 in Fourier space
+            img2_shifted = np.real(ifftn(fourier_shift(fftn(img2), shift_)))
+            # correlation coefficient
+            pcc[i] = np.corrcoef(img1.ravel(), img2_shifted.ravel())[0, 1]
+            # shifts[i] = shift_
 
     return pcc  # , shifts
 
@@ -516,9 +518,11 @@ def figure_of_merit(bloch, cbed, rc):
                     a = (a0 - np.mean(a0))/np.std(a0)
                     b = (b0 - np.mean(b0))/np.std(b0)
                     # the shift
-                    dy, dx = phase_d_xy(a, b)
-                    c = shift(b, shift=(dy, dx), order=3,
-                              mode="constant", cval=0)
+                    shift_ = phase_d_xy(a, b)
+                    # only accept shifts smaller than 5 pixels
+                    if np.linalg.norm(shift_) < 5.0:
+                        c = shift(b, shift=shift_, order=3,
+                                  mode="constant", cval=0)
                     # replace empty experimental pixels with simulation
                     # (which )prevents them from contribution to the zncc)
                     c[c == 0] = a[c == 0]
