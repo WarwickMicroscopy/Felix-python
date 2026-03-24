@@ -788,7 +788,7 @@ def print_LACBED(bloch, cbed, rc, image_type):
         print_montage(bloch, cbed, rc, out_image, image_type)
     elif rc.plot >= 3:
         out_image = cbed.diff_image
-        print_montage(bloch, cbed, rc, out_image, image_type, j)
+        print_montage(bloch, cbed, rc, out_image, image_type)
     return
 
 
