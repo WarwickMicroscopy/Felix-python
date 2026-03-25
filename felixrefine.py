@@ -240,6 +240,8 @@ else:
     # need np.array rather than float so wave_functions works for 1 or many t's
     rc.thickness = np.atleast_1d(rc.initial_thickness)
     rc.n_thickness = 1
+# give best thickness a value of 0 for the case of only one t 
+rc.best_t = 0
 
 # convert arrays to numpy
 rc.incident_beam_direction = np.array(rc.incident_beam_direction,

@@ -12,7 +12,10 @@ Returns the simulated LACBED patterns
 import numpy as np
 from scipy.constants import c, h, e, m_e, angstrom, epsilon_0
 from scipy.ndimage import gaussian_filter
+from skimage import transform, registration
 from skimage.registration import phase_cross_correlation
+from skimage.transform import warp, AffineTransform
+from skimage.filters import sobel
 from scipy.ndimage import fourier_shift
 from scipy.ndimage import shift
 from scipy.fft import fftn, ifftn
@@ -347,7 +350,7 @@ def pcc(stack1, stack2):
         # Estimate sub-pixel shift
         up = 50  # shifts are accurate to 1/upsample_factor
         shift_, error, diffphase = phase_cross_correlation(img1, img2,
-                                                          upsample_factor=up)
+                                                           upsample_factor=up)
 
         # only accept shifts smaller than 5 pixels
         if np.linalg.norm(shift_) < 5.0:
@@ -358,6 +361,97 @@ def pcc(stack1, stack2):
             # shifts[i] = shift_
 
     return pcc  # , shifts
+
+
+def stretch(d, w):
+    s = np.array([[1+d[0], 0, -0.5*d[0]*w],
+                  [0, 1+d[1], -0.5*d[1]*w],
+                  [0, 0, 1]])
+    return AffineTransform(s)
+
+
+def shif(d, w):
+    s = np.array([[1, 0, d[0]*w],
+                  [0, 1, d[1]*w],
+                  [0, 0, 1]])
+    return AffineTransform(s)
+
+
+def affine(cbed, rc):
+    """
+    Determines the affine transformation to fit the 000 experimental LACBED
+    pattern to the best fit simulation using sobel-filtered versions
+    Then applies it to all experimental LACBED patterns
+    """
+    expt000 = sobel(cbed.lacbed_expt_raw[:, :, 0])
+    sim000 = sobel(cbed.lacbed_sim[rc.best_t, :, :, 0])
+    plt.imshow(expt000)
+    plt.show()
+    plt.imshow(sim000)
+    plt.show()
+    w = expt000.shape[0]
+    xy_range = np.arange(-0.1, 0.1, 0.002)
+
+    # best y-shift
+    best_fit = -np.inf
+    for dsy in xy_range:
+        expt000T = warp(expt000, inverse_map=shif(([0, dsy]), w).inverse)
+        # fit = pcc(sim000, expt000T)
+        fit = np.corrcoef(sim000.ravel(), expt000T.ravel())[0, 1]
+        if fit > best_fit:
+            best_fit = fit
+            best_dsy = dsy
+    expt000 = warp(expt000, inverse_map=shif(([0, best_dsy]), w).inverse)
+    # plt.imshow(expt000)
+    # plt.show()
+
+    # best x-shift
+    best_fit = -np.inf
+    for dsx in xy_range:
+        expt000T = warp(expt000, inverse_map=shif(([dsx, 0]), w).inverse)
+        # fit = pcc(sim000, expt000T)
+        fit = np.corrcoef(sim000.ravel(), expt000T.ravel())[0, 1]
+        if fit > best_fit:
+            best_fit = fit
+            best_dsx = dsx
+    expt000 = warp(expt000, inverse_map=shif(([best_dsx, 0]), w).inverse)
+    # plt.imshow(expt000)
+    # plt.show()
+
+    # best y-stretch
+    best_fit = -np.inf
+    for dy in xy_range:
+        expt000T = warp(expt000, inverse_map=stretch(([0, dy]), w).inverse)
+        # fit = pcc(sim000, expt000T)
+        fit = np.corrcoef(sim000.ravel(), expt000T.ravel())[0, 1]
+        if fit > best_fit:
+            best_fit = fit
+            best_dy = dy
+    expt000 = warp(expt000, inverse_map=stretch(([0, best_dy]), w).inverse)
+    # plt.imshow(expt000)
+    # plt.show()
+
+    # best x-stretch
+    best_fit = -np.inf
+    f = []
+    for dx in xy_range:
+        expt000T = warp(expt000, inverse_map=stretch(([dx, 0]), w).inverse)
+        fit = np.corrcoef(sim000.ravel(), expt000T.ravel())[0, 1]
+        f.append(fit)
+        # fit = pcc(sim000, expt000T)
+        if fit > best_fit:
+            best_fit = fit
+            best_dx = dx
+    expt000 = warp(expt000, inverse_map=stretch(([best_dx, 0]), w).inverse)
+
+    # apply best transformation
+    s = np.array([[1+best_dx, 0, (best_dsx-0.5*best_dx)*w],
+                  [0, 1+best_dy, (best_dsy-0.5*best_dy)*w],
+                  [0, 0, 1]])
+    tform = AffineTransform(s)
+    for i in range(cbed.lacbed_expt.shape[2]):
+        cbed.lacbed_expt[:, :, i] = warp(cbed.lacbed_expt_raw[:, :, i],
+                                         inverse_map=tform.inverse)
 
 
 def optimise_pool(xtal, basis, cell, hkl, bloch, cbed, rc):
@@ -528,18 +622,22 @@ def figure_of_merit(bloch, cbed, rc):
                     c[c == 0] = a[c == 0]
                     cbed.lacbed_expt[:, :, j] = c
 
-        # figure of merit
-        if rc.correlation_type == 0 or 2:
-            fom_array[i, :] = 1.0 - zncc(cbed.lacbed_expt,
-                                         cbed.lacbed_sim[i, :, :, :])
-        elif rc.correlation_type == 1:
+        # affine transformation option
+        if rc.correlation_type == 3:
+            affine(cbed, rc)
+
+            # figure of merit
+        if rc.correlation_type == 0:
             fom_array[i, :] = 1.0 - pcc(cbed.lacbed_expt,
                                         cbed.lacbed_sim[i, :, :, :])
+        elif rc.correlation_type > 0:
+            fom_array[i, :] = 1.0 - zncc(cbed.lacbed_expt,
+                                         cbed.lacbed_sim[i, :, :, :])
         else:
             raise ValueError("Invalid correlation_type !(0 or 1) in felix.inp")
 
         # difference images
-        if rc.plot ==3:
+        if rc.plot == 3:
             for j in range(rc.n_out):
                 a0 = cbed.lacbed_sim[i, :, :, j]
                 b0 = cbed.lacbed_expt[:, :, j]
@@ -749,6 +847,7 @@ def print_montage(bloch, cbed, rc, images, image_type, j=0):
             cmap = LinearSegmentedColormap.from_list(
                 "two_color_black_center",
                 [(0.0, "c"), (0.5, "k"), (1.0, "orange")])
+            # two colour look up table
             norm = TwoSlopeNorm(vmin=img.min(), vcenter=0.0, vmax=img.max())
             axes[i].imshow(img, cmap=cmap, norm=norm)
         else:

@@ -36,9 +36,10 @@ Refine method:
 	Multiparameter, vector gradient descent, parabolic, 1
 
 Correlation type:
-    Pearson (zncc), 0
-    Phase (Fourier), 1
+    Phase (Fourier), 0
+    Pearson (zncc), 1
     Pearson (zncc) with sub-pixel alignment, 2
+    Pearson (zncc) with affine transform, 3
 
 Image processing:
     None, 0
@@ -54,7 +55,7 @@ Plot:
 
 # Control flags
 write_flag                = 1
-scatter_factor_method     = 4
+scatter_factor_method     = 0
 holz_flag                 = 0
 absorption_method         = 2
 byte_size                 = 2
@@ -63,8 +64,8 @@ byte_size                 = 2
 Debye_model               = 0     
 
 # Beam selection criteria
-min_reflection_pool       = 600
-min_strong_beams          = 200
+min_reflection_pool       = 100
+min_strong_beams          = 50
 min_weak_beams            = 0
 g_limit                   = 0.0
 
@@ -72,30 +73,30 @@ g_limit                   = 0.0
 incident_beam_direction   = [1, -1, 0]
 x_direction               = [0, 0, -1]
 normal                    = [1, -1, 0]
-initial_thickness         = 1000.0
-final_thickness           = 1001.0
-delta_thickness           = 10.0
+initial_thickness         = 1500.0
+final_thickness           = 1501.0
+delta_thickness           = 20.0
 debye_waller_constant     = 0.0
 absorption_per            = 10.0
 
 # Microscope settings
-convergence_angle         = 0.6208
+convergence_angle         = 0.65376
 accelerating_voltage_kv   = 200.0
 acceptance_angle          = 0.0
 
 # Output options
 image_radius              = 76
-plot                      = 2
+plot                      = 3
 image_processing          = 1
 blur_radius               = 1.0
 print_flag                = 0
 debug                     = 0
 
 # Refinement specific flags
-refine_mode               = 'D'
+refine_mode               = 'C'
 refine_method             = 0
 refinement_scale          = 0.04
-correlation_type          = 0
+correlation_type          = 3
 atomic_sites              = [0]
 exit_criteria             = 0.00005
 precision                 = 0.00002

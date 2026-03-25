@@ -3,7 +3,7 @@
 data_121532-ICSD
 _database_code_ICSD 121532
 _audit_creation_date 2021-08-01
-_chemical_name_common 'Germanium - Î±'
+_chemical_name_common 'Germanium'
 _chemical_formula_structural GeSn
 _chemical_formula_sum Ge98Sn2
 _chemical_name_structure_type C(cF8)
@@ -11,9 +11,9 @@ _exptl_crystal_density_diffrn 5.33
 _citation_title
 
 loop_
-_cell_length_a 5.68043
-_cell_length_b 5.68043
-_cell_length_c 5.68043
+_cell_length_a 5.431
+_cell_length_b 5.431
+_cell_length_c 5.431
 _cell_angle_alpha 90.
 _cell_angle_beta 90.
 _cell_angle_gamma 90.
@@ -219,7 +219,7 @@ _space_group_symop_operation_xyz
 loop_
 _atom_type_symbol
 _atom_type_oxidation_number
-Ge0+ 0
+Si0+ 0
 loop_
 _atom_site_label
 _atom_site_type_symbol
@@ -230,5 +230,5 @@ _atom_site_fract_y
 _atom_site_fract_z
 _atom_site_B_iso_or_equiv
 _atom_site_occupancy
-Ge1 Ge0+ 8 a 0 0 0 0.352 0.7
+Si1 Si0+ 8 a 0 0 0 0.421 0.9895
 #End of data
