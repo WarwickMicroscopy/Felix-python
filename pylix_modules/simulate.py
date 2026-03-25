@@ -583,6 +583,9 @@ def figure_of_merit(bloch, cbed, rc):
         plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1.0))
         plt.xticks(fontsize=22)
         plt.yticks(fontsize=22)
+    # affine transformation option, once we have a best thickness
+    if rc.correlation_type == 3 and rc.iter_count > 1:
+        affine(cbed, rc)
     # loop over thicknesses
     for i in range(rc.n_thickness):
         # image processing = 2 -> find the best blur
@@ -625,11 +628,7 @@ def figure_of_merit(bloch, cbed, rc):
                     c[c == 0] = a[c == 0]
                     cbed.lacbed_expt[:, :, j] = c
 
-        # affine transformation option
-        if rc.correlation_type == 3:
-            affine(cbed, rc)
-
-            # figure of merit
+        # figure of merit
         if rc.correlation_type == 0:
             fom_array[i, :] = 1.0 - pcc(cbed.lacbed_expt,
                                         cbed.lacbed_sim[i, :, :, :])
