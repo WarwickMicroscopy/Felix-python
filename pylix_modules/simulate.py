@@ -429,7 +429,7 @@ def affine(cbed, rc):
     expt000 = warp(expt000, inverse_map=stretch(([best_dx, 0]), w).inverse)
 
     # outputs
-    if rc.iter_count != 0:
+    if rc.iter_count != 0 and rc.plot > 2:
         print(f"    Image stretch x={100*best_dx:.1f}%,  y={100*best_dy:.1f}%")
 
         text_effect = withStroke(linewidth=3, foreground='black')
@@ -649,12 +649,10 @@ def figure_of_merit(bloch, cbed, rc):
             for j in range(rc.n_out):
                 a0 = cbed.lacbed_sim[i, :, :, j]
                 b0 = cbed.lacbed_expt[:, :, j]
-    
                 # zero mean normalise the images
                 a = (a0 - np.mean(a0))/np.std(a0)
                 b = (b0 - np.mean(b0))/np.std(b0)
                 cbed.diff_image[:, :, j] = a-b
-            print_LACBED(bloch, cbed, rc, 2)
 
     # plot of blur fit when rc.image_processing == 2
     if rc.plot >= 2 and rc.image_processing == 2:
@@ -833,7 +831,7 @@ def update_variables(xtal, basis, rc):
     return
 
 
-def print_montage(bloch, cbed, rc, images, image_type, j=0):
+def print_montage(bloch, cbed, rc, images, image_type, j):
     '''
     images[wid, wid, n] = array of n images each of size [wid, wid]
     j = thickness index in simulated pattern array
@@ -890,12 +888,12 @@ def print_LACBED(bloch, cbed, rc, image_type):
         else:
             out_image = cbed.lacbed_sim[rc.best_t, :, :, :]
             print_montage(bloch, cbed, rc, out_image, image_type, rc.best_t)
+            if rc.plot >= 3:
+                out_image = cbed.diff_image
+                print_montage(bloch, cbed, rc, out_image, 2, rc.best_t)
     elif image_type == 1:  # experiment output
         out_image = cbed.lacbed_expt
-        print_montage(bloch, cbed, rc, out_image, image_type)
-    elif rc.plot >= 3:
-        out_image = cbed.diff_image
-        print_montage(bloch, cbed, rc, out_image, image_type)
+        print_montage(bloch, cbed, rc, out_image, image_type, 0)
     return
 
 
@@ -1170,6 +1168,9 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
             print("Point 1 of 3: previous best")  # no, use the best
         rc.refined_variable = np.copy(rc.best_var)
         print_LACBED(bloch, cbed, rc, 0)
+        if rc.plot == 3:  # also do difference image
+            print_LACBED(bloch, cbed, rc, 2)
+
         print("-a-----------------------------")  # "{r3_var},{r3_fom}")
 
     # First point: incoming best simulation
@@ -1249,6 +1250,8 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     dydx[j] = 0.0
     print(f"    ====Refined variable {j}====")
     print_LACBED(bloch, cbed, rc, 0)
+    if rc.plot == 3:  # also do difference image
+        print_LACBED(bloch, cbed, rc, 2)
 
     return dydx
 
