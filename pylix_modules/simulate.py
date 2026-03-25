@@ -379,70 +379,73 @@ def shif(d, w):
 
 def affine(cbed, rc):
     """
-    Determines the affine transformation to fit the 000 experimental LACBED
+    Determines the x-y stretch to fit the 000 experimental LACBED
     pattern to the best fit simulation using sobel-filtered versions
     Then applies it to all experimental LACBED patterns
     """
     expt000 = sobel(cbed.lacbed_expt_raw[:, :, 0])
     sim000 = sobel(cbed.lacbed_sim[rc.best_t, :, :, 0])
-    plt.imshow(expt000)
-    plt.show()
-    plt.imshow(sim000)
-    plt.show()
     w = expt000.shape[0]
-    xy_range = np.arange(-0.1, 0.1, 0.002)
+    xy_range = np.arange(-0.1, 0.1, 0.001)  # -10% to 10% steps of 1%
 
     # best y-shift
     best_fit = -np.inf
     for dsy in xy_range:
         expt000T = warp(expt000, inverse_map=shif(([0, dsy]), w).inverse)
-        # fit = pcc(sim000, expt000T)
         fit = np.corrcoef(sim000.ravel(), expt000T.ravel())[0, 1]
         if fit > best_fit:
             best_fit = fit
             best_dsy = dsy
     expt000 = warp(expt000, inverse_map=shif(([0, best_dsy]), w).inverse)
-    # plt.imshow(expt000)
-    # plt.show()
 
     # best x-shift
     best_fit = -np.inf
     for dsx in xy_range:
         expt000T = warp(expt000, inverse_map=shif(([dsx, 0]), w).inverse)
-        # fit = pcc(sim000, expt000T)
         fit = np.corrcoef(sim000.ravel(), expt000T.ravel())[0, 1]
         if fit > best_fit:
             best_fit = fit
             best_dsx = dsx
     expt000 = warp(expt000, inverse_map=shif(([best_dsx, 0]), w).inverse)
-    # plt.imshow(expt000)
-    # plt.show()
 
     # best y-stretch
     best_fit = -np.inf
     for dy in xy_range:
         expt000T = warp(expt000, inverse_map=stretch(([0, dy]), w).inverse)
-        # fit = pcc(sim000, expt000T)
         fit = np.corrcoef(sim000.ravel(), expt000T.ravel())[0, 1]
         if fit > best_fit:
             best_fit = fit
             best_dy = dy
     expt000 = warp(expt000, inverse_map=stretch(([0, best_dy]), w).inverse)
-    # plt.imshow(expt000)
-    # plt.show()
 
     # best x-stretch
     best_fit = -np.inf
-    f = []
     for dx in xy_range:
         expt000T = warp(expt000, inverse_map=stretch(([dx, 0]), w).inverse)
         fit = np.corrcoef(sim000.ravel(), expt000T.ravel())[0, 1]
-        f.append(fit)
-        # fit = pcc(sim000, expt000T)
         if fit > best_fit:
             best_fit = fit
             best_dx = dx
     expt000 = warp(expt000, inverse_map=stretch(([best_dx, 0]), w).inverse)
+
+    # outputs
+    print(f"    Image stretch x={100*best_dx:.1f}%,  y={100*best_dy:.1f}%")
+    text_effect = withStroke(linewidth=3, foreground='black')
+    fig, ax = plt.subplots(1, 1)
+    ax.imshow(sim000)
+    ax.axis('off')
+    annotation = "Simulation"
+    ax.annotate(annotation, xy=(5, 5), xycoords='axes pixels',
+                size=30, color='w', path_effects=[text_effect])
+    plt.show()
+
+    fig, ax = plt.subplots(1, 1)
+    ax.imshow(expt000)
+    ax.axis('off')
+    annotation = "Experiment"
+    ax.annotate(annotation, xy=(5, 5), xycoords='axes pixels',
+                size=30, color='w', path_effects=[text_effect])
+    plt.show()
 
     # apply best transformation
     s = np.array([[1+best_dx, 0, (best_dsx-0.5*best_dx)*w],
