@@ -429,23 +429,25 @@ def affine(cbed, rc):
     expt000 = warp(expt000, inverse_map=stretch(([best_dx, 0]), w).inverse)
 
     # outputs
-    print(f"    Image stretch x={100*best_dx:.1f}%,  y={100*best_dy:.1f}%")
-    text_effect = withStroke(linewidth=3, foreground='black')
-    fig, ax = plt.subplots(1, 1)
-    ax.imshow(sim000)
-    ax.axis('off')
-    annotation = "Simulation"
-    ax.annotate(annotation, xy=(5, 5), xycoords='axes pixels',
-                size=30, color='w', path_effects=[text_effect])
-    plt.show()
+    if rc.iter_count != 0:
+        print(f"    Image stretch x={100*best_dx:.1f}%,  y={100*best_dy:.1f}%")
 
-    fig, ax = plt.subplots(1, 1)
-    ax.imshow(expt000)
-    ax.axis('off')
-    annotation = "Experiment"
-    ax.annotate(annotation, xy=(5, 5), xycoords='axes pixels',
-                size=30, color='w', path_effects=[text_effect])
-    plt.show()
+        text_effect = withStroke(linewidth=3, foreground='black')
+        fig, ax = plt.subplots(1, 1)
+        ax.imshow(sim000)
+        ax.axis('off')
+        annotation = "Simulation"
+        ax.annotate(annotation, xy=(5, 5), xycoords='axes pixels',
+                    size=30, color='w', path_effects=[text_effect])
+        plt.show()
+
+        fig, ax = plt.subplots(1, 1)
+        ax.imshow(expt000)
+        ax.axis('off')
+        annotation = "Experiment"
+        ax.annotate(annotation, xy=(5, 5), xycoords='axes pixels',
+                    size=30, color='w', path_effects=[text_effect])
+        plt.show()
 
     # apply best transformation
     s = np.array([[1+best_dx, 0, (best_dsx-0.5*best_dx)*w],
@@ -627,6 +629,10 @@ def figure_of_merit(bloch, cbed, rc):
                     # (which )prevents them from contribution to the zncc)
                     c[c == 0] = a[c == 0]
                     cbed.lacbed_expt[:, :, j] = c
+
+        # affine transformation option, once we have a best thickness
+        if rc.correlation_type == 3 and rc.iter_count == 0:
+            affine(cbed, rc)
 
         # figure of merit
         if rc.correlation_type == 0:
