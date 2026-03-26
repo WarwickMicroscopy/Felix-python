@@ -359,11 +359,15 @@ else:  # atom-specific refinements can be done simultaneously
         print("Beam pool optimisation, O")
 
     if rc.correlation_type == 0:
-        print("  Using Pearson correlation")
-    elif rc.correlation_type == 1:
         print("  Using phase correlation")
+    elif rc.correlation_type == 1:
+        print("  Using Pearson correlation")
     elif rc.correlation_type == 2:
-        print("  Using Pearson correlation, applying sub-pixel alignment")
+        print("  Using Pearson correlation with affine transform")
+    elif rc.correlation_type == 3:
+        print("  Using Pearson correlation with affine transform and sub-pixel alignment")
+    else:
+        raise ValueError("Correlation type invalid in felix.inp")
 
 
 # %% read felix.hkl

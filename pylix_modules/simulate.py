@@ -286,18 +286,18 @@ def zncc(img1, img2):
     return cc
 
 
-def phase_d_xy(A, B):
+def phase_d_xy(img1, img2):
     """
-    Sub-pixel shift to align B to A using Fourier phase correlation.
+    Sub-pixel shift to align img2 to img1 using Fourier phase correlation.
 
     Returns dy, dx : float
-        Shift to apply to B so it aligns with A
+        Shift to apply to img2 so it aligns with img1
     """
 
-    A = A.astype(np.float64)
-    B = B.astype(np.float64)
-    FA = np.fft.fft2(A)
-    FB = np.fft.fft2(B)
+    img1 = img1.astype(np.float64)
+    img2 = img2.astype(np.float64)
+    FA = np.fft.fft2(img1)
+    FB = np.fft.fft2(img2)
     # Cross power spectrum
     R = FA * np.conj(FB)
     R /= np.abs(R) + 1e-12   # normalize, avoid divide-by-zero
@@ -375,6 +375,42 @@ def shif(d, w):
                   [0, 1, d[1]*w],
                   [0, 0, 1]])
     return AffineTransform(s)
+
+
+def cc_d_xy(img1, img2):
+    """
+    Sub-pixel shift to align img2 to img1 using sobel-filtered
+    Pearson correlation.
+
+    Returns dy, dx : float
+        Shift to apply to img2 so it aligns with img1
+    """
+    e0 = sobel(img2)  # experimental
+    s0 = sobel(img1)  # simulation
+    w = e0.shape[0]
+    xy_range = np.arange(-0.1, 0.1, 0.001)  # -10% to 10% steps of 1%
+
+    # best y-shift
+    best_fit = -np.inf
+    for dsy in xy_range:
+        e1 = warp(e0, inverse_map=shif(([0, dsy]), w).inverse)
+        fit = np.corrcoef(s0.ravel(), e1.ravel())[0, 1]
+        if fit > best_fit:
+            best_fit = fit
+            best_dsy = dsy
+    e0 = warp(e0, inverse_map=shif(([0, best_dsy]), w).inverse)
+
+    # best x-shift
+    best_fit = -np.inf
+    for dsx in xy_range:
+        e1 = warp(e0, inverse_map=shif(([dsx, 0]), w).inverse)
+        fit = np.corrcoef(s0.ravel(), e1.ravel())[0, 1]
+        if fit > best_fit:
+            best_fit = fit
+            best_dsx = dsx
+    e0 = warp(e0, inverse_map=shif(([best_dsx, 0]), w).inverse)
+    shift_ = (best_dsx, best_dsy)
+    return shift_
 
 
 def affine(cbed, rc):
@@ -586,7 +622,7 @@ def figure_of_merit(bloch, cbed, rc):
         plt.xticks(fontsize=22)
         plt.yticks(fontsize=22)
     # affine transformation option, once we have a best thickness
-    if rc.correlation_type == 3 and rc.iter_count > 1:
+    if rc.correlation_type > 1 and rc.iter_count > 1:
         affine(cbed, rc)
     # loop over thicknesses
     for i in range(rc.n_thickness):
@@ -610,7 +646,7 @@ def figure_of_merit(bloch, cbed, rc):
                                                            sigma=rc.blur_radius)
         rc.lacbed_expt = np.copy(cbed.lacbed_expt_raw)
         # sub-pixel shift for correlation if required
-        if rc.correlation_type == 2:
+        if rc.correlation_type == 3:
             for j in range(rc.n_out):
                 # we only do this for zncc images that exist
                 if np.sum(cbed.lacbed_expt_raw[j]) != 0:
@@ -620,18 +656,19 @@ def figure_of_merit(bloch, cbed, rc):
                     a = (a0 - np.mean(a0))/np.std(a0)
                     b = (b0 - np.mean(b0))/np.std(b0)
                     # the shift
-                    shift_ = phase_d_xy(a, b)
+                    # shift_ = phase_d_xy(a, b)
+                    shift_ = cc_d_xy(a, b)
                     # only accept shifts smaller than 5 pixels
-                    if np.linalg.norm(shift_) < 5.0:
-                        c = shift(b, shift=shift_, order=3,
-                                  mode="constant", cval=0)
+                    # if np.linalg.norm(shift_) < 5.0:
+                    c = shift(b, shift=shift_, order=3,
+                              mode="constant", cval=0)
                     # replace empty experimental pixels with simulation
                     # (which )prevents them from contribution to the zncc)
                     c[c == 0] = a[c == 0]
                     cbed.lacbed_expt[:, :, j] = c
 
-        # affine transformation option, once we have a best thickness
-        if rc.correlation_type == 3 and rc.iter_count == 0:
+        # affine transformation option without a best thickness
+        if rc.correlation_type == 2 and rc.iter_count == 0:
             affine(cbed, rc)
 
         # figure of merit
@@ -641,8 +678,6 @@ def figure_of_merit(bloch, cbed, rc):
         elif rc.correlation_type > 0:
             fom_array[i, :] = 1.0 - zncc(cbed.lacbed_expt,
                                          cbed.lacbed_sim[i, :, :, :])
-        else:
-            raise ValueError("Invalid correlation_type !(0 or 1) in felix.inp")
 
         # difference images
         if rc.plot == 3:
