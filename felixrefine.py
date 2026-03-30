@@ -366,6 +366,8 @@ else:  # atom-specific refinements can be done simultaneously
         print("  Using Pearson correlation with affine transform")
     elif rc.correlation_type == 3:
         print("  Using Pearson correlation with affine transform and sub-pixel alignment")
+    elif rc.correlation_type == 3:
+        print("  Using Pearson correlation with Sobel filter")
     else:
         raise ValueError("Correlation type invalid in felix.inp")
 

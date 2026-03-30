@@ -392,25 +392,39 @@ def cc_d_xy(img1, img2):
 
     # best y-shift
     best_fit = -np.inf
-    for dsy in xy_range:
-        e1 = warp(e0, inverse_map=shif(([0, dsy]), w).inverse)
-        fit = np.corrcoef(s0.ravel(), e1.ravel())[0, 1]
-        if fit > best_fit:
-            best_fit = fit
-            best_dsy = dsy
-    e0 = warp(e0, inverse_map=shif(([0, best_dsy]), w).inverse)
+    for dy in xy_range:
+        for dx in xy_range:
+            e1 = warp(e0, inverse_map=shif(([dx, dy]), w).inverse)
+            fit = np.corrcoef(s0.ravel(), e1.ravel())[0, 1]
+            if fit > best_fit:
+                best_fit = fit
+                t_ii = (dx, dy)
+    return t_ii
 
-    # best x-shift
+
+def cc_s_xy(img1, img2):
+    """
+    Sub-pixel stretch to align img2 to img1 using sobel-filtered
+    Pearson correlation.
+
+    Returns dy, dx : float
+        Shift to apply to img2 so it aligns with img1
+    """
+    e0 = sobel(img2)  # experimental
+    s0 = sobel(img1)  # simulation
+    w = e0.shape[0]
+    xy_range = np.arange(-0.1, 0.1, 0.001)  # -10% to 10% steps of 1%
+
+    # best y-shift
     best_fit = -np.inf
-    for dsx in xy_range:
-        e1 = warp(e0, inverse_map=shif(([dsx, 0]), w).inverse)
-        fit = np.corrcoef(s0.ravel(), e1.ravel())[0, 1]
-        if fit > best_fit:
-            best_fit = fit
-            best_dsx = dsx
-    e0 = warp(e0, inverse_map=shif(([best_dsx, 0]), w).inverse)
-    shift_ = (best_dsx, best_dsy)
-    return shift_
+    for dy in xy_range:
+        for dx in xy_range:
+            e1 = warp(e0, inverse_map=stretch(([dx, dy]), w).inverse)
+            fit = np.corrcoef(s0.ravel(), e1.ravel())[0, 1]
+            if fit > best_fit:
+                best_fit = fit
+                s_ii = (dx, dy)
+    return s_ii
 
 
 def affine(cbed, rc):
@@ -419,58 +433,26 @@ def affine(cbed, rc):
     pattern to the best fit simulation using sobel-filtered versions
     Then applies it to all experimental LACBED patterns
     """
-    expt000 = sobel(cbed.lacbed_expt_raw[:, :, 0])
-    sim000 = sobel(cbed.lacbed_sim[rc.best_t, :, :, 0])
+    expt000 = cbed.lacbed_expt_raw[:, :, 0]
+    sim000 = cbed.lacbed_sim[rc.best_t, :, :, 0]
     w = expt000.shape[0]
-    xy_range = np.arange(-0.1, 0.1, 0.001)  # -10% to 10% steps of 1%
+    # xy_range = np.arange(-0.1, 0.1, 0.001)  # -10% to 10% steps of 1%
 
-    # best y-shift
-    best_fit = -np.inf
-    for dsy in xy_range:
-        expt000T = warp(expt000, inverse_map=shif(([0, dsy]), w).inverse)
-        fit = np.corrcoef(sim000.ravel(), expt000T.ravel())[0, 1]
-        if fit > best_fit:
-            best_fit = fit
-            best_dsy = dsy
-    expt000 = warp(expt000, inverse_map=shif(([0, best_dsy]), w).inverse)
-
-    # best x-shift
-    best_fit = -np.inf
-    for dsx in xy_range:
-        expt000T = warp(expt000, inverse_map=shif(([dsx, 0]), w).inverse)
-        fit = np.corrcoef(sim000.ravel(), expt000T.ravel())[0, 1]
-        if fit > best_fit:
-            best_fit = fit
-            best_dsx = dsx
-    expt000 = warp(expt000, inverse_map=shif(([best_dsx, 0]), w).inverse)
+    # translation
+    t_ii = cc_d_xy(sim000, expt000)
+    expt000 = warp(expt000, inverse_map=shif(t_ii, w).inverse)
 
     # best y-stretch
-    best_fit = -np.inf
-    for dy in xy_range:
-        expt000T = warp(expt000, inverse_map=stretch(([0, dy]), w).inverse)
-        fit = np.corrcoef(sim000.ravel(), expt000T.ravel())[0, 1]
-        if fit > best_fit:
-            best_fit = fit
-            best_dy = dy
-    expt000 = warp(expt000, inverse_map=stretch(([0, best_dy]), w).inverse)
-
-    # best x-stretch
-    best_fit = -np.inf
-    for dx in xy_range:
-        expt000T = warp(expt000, inverse_map=stretch(([dx, 0]), w).inverse)
-        fit = np.corrcoef(sim000.ravel(), expt000T.ravel())[0, 1]
-        if fit > best_fit:
-            best_fit = fit
-            best_dx = dx
-    expt000 = warp(expt000, inverse_map=stretch(([best_dx, 0]), w).inverse)
+    s_ii = cc_s_xy(sim000, expt000)
+    expt000 = warp(expt000, inverse_map=stretch(s_ii, w).inverse)
 
     # outputs
     if rc.iter_count != 0 and rc.plot > 2:
-        print(f"    Image stretch x={100*best_dx:.1f}%,  y={100*best_dy:.1f}%")
+        print(f"    Image stretch x={100*s_ii[0]:.1f}%,  y={100*s_ii[1]:.1f}%")
 
         text_effect = withStroke(linewidth=3, foreground='black')
         fig, ax = plt.subplots(1, 1)
-        ax.imshow(sim000)
+        ax.imshow(sobel(sim000))
         ax.axis('off')
         annotation = "Simulation"
         ax.annotate(annotation, xy=(5, 5), xycoords='axes pixels',
@@ -486,8 +468,8 @@ def affine(cbed, rc):
         plt.show()
 
     # apply best transformation
-    s = np.array([[1+best_dx, 0, (best_dsx-0.5*best_dx)*w],
-                  [0, 1+best_dy, (best_dsy-0.5*best_dy)*w],
+    s = np.array([[1+s_ii[0], 0, (t_ii[0]-0.5*s_ii[0])*w],
+                  [0, 1+s_ii[1], (t_ii[1]-0.5*s_ii[1])*w],
                   [0, 0, 1]])
     tform = AffineTransform(s)
     for i in range(cbed.lacbed_expt.shape[2]):
@@ -625,6 +607,7 @@ def figure_of_merit(bloch, cbed, rc):
     if rc.correlation_type > 1 and rc.iter_count > 1:
         affine(cbed, rc)
     # loop over thicknesses
+    lacbed_sobel = np.empty_like(cbed.lacbed_sim)
     for i in range(rc.n_thickness):
         # image processing = 2 -> find the best blur
         if rc.image_processing == 2:
@@ -675,9 +658,15 @@ def figure_of_merit(bloch, cbed, rc):
         if rc.correlation_type == 0:
             fom_array[i, :] = 1.0 - pcc(cbed.lacbed_expt,
                                         cbed.lacbed_sim[i, :, :, :])
-        elif rc.correlation_type > 0:
+        elif rc.correlation_type < 4:
             fom_array[i, :] = 1.0 - zncc(cbed.lacbed_expt,
                                          cbed.lacbed_sim[i, :, :, :])
+        else:  # correlation_type = 4
+            lacbed_sobel = np.empty_like(cbed.lacbed_sim)
+            for j in range(rc.n_out):
+                lacbed_sobel[i, :, :, j] = sobel(cbed.lacbed_sim[i, :, :, j])
+            fom_array[i, :] = 1.0 - zncc(sobel(cbed.lacbed_expt),
+                                         lacbed_sobel[i, :, :, :])
 
         # difference images
         if rc.plot == 3:
