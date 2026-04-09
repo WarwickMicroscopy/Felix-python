@@ -1845,6 +1845,53 @@ def f_kappa(xtal, basis, g_pool_mag, i):
     return f_kappa
 
 
+def f0_test(xtal):
+    bohr_radius = 0.529177210544
+    f0 = []
+    z = []
+    f_kappa = []
+    r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
+    for Z in range(3, 45):
+        n_e_core = 0.0
+        orbi = orb(Z)
+
+        # electron density rho, R_nl^2/4pi
+        rho_core = 0.0
+        for j in orbi['core_orbitals']:
+            n_e_core += orbi['occupation'][j]
+            R = bunge_R_nl(Z, j, r)
+            rho_core += (R**2)/(4*np.pi)
+
+        rho_valence = 0.0
+        for j in orbi['valence_orbitals']:
+            R = bunge_R_nl(Z, j, r)
+            rho_valence += (R**2)/(4*np.pi)
+
+        # normalize to 1 electron (we will scale by pv & pc later)
+        core = rho_core / np.trapz(4*np.pi*r**2 * rho_core, r)
+        valence = rho_valence / np.trapz(4*np.pi*r**2 * rho_valence, r)
+        pv = orbi["pv"]
+        pc = orbi["pc"]
+
+        # p_atom(r) in kappa formalism
+        rho_total = rho_core + rho_valence
+        # rho_total = (pc * core + pv * valence)
+
+        # atomic charge
+        integrand = 4 * np.pi * rho_total * r**2
+        n_electrons = np.trapz(integrand, r)
+        print(f"element {Z} has {n_electrons} electrons")
+
+        # mean square radius of electron density for Ibers formula
+        mean_sq_r2 = (np.trapz(r**2*integrand, r) / n_electrons)
+        z.append(Z)
+        f0.append(f_kirkland(Z, 0)[0][0])
+        f_kappa.append((Z * mean_sq_r2) / (3 * bohr_radius))
+
+    plt.plot(z, f0)
+    plt.plot(z, f_kappa)
+    plt.show()
+
 def four_gauss(s, a):
     """
     sum of four Gaussians & a constant for Thomas f_prime

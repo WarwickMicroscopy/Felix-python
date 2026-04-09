@@ -460,7 +460,7 @@ def affine(cbed, rc):
         plt.show()
 
         fig, ax = plt.subplots(1, 1)
-        ax.imshow(expt000)
+        ax.imshow(sobel(expt000))
         ax.axis('off')
         annotation = "Experiment"
         ax.annotate(annotation, xy=(5, 5), xycoords='axes pixels',
