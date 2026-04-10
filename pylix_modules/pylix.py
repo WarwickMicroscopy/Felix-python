@@ -1602,9 +1602,9 @@ def f_peng(z, g_pool_mag):
 
 
 def electron_configuration(Z):
-    # electron occupation of orbitals for element number Z
     occ = {}
     remaining = Z
+
     for orb in fu.orbital_order:
         if remaining <= 0:
             break
@@ -1613,20 +1613,45 @@ def electron_configuration(Z):
         occ[orb] = n
         remaining -= n
 
+    # ---- FIXES FOR KNOWN EXCEPTIONS ----
+    exceptions = {
+        24: ('3d', '4s', 5, 1),   # Cr: 3d5 4s1
+        29: ('3d', '4s', 10, 1),  # Cu: 3d10 4s1
+        41: ('4d', '5s', 4, 1),   # Nb
+        42: ('4d', '5s', 5, 1),   # Mo
+        44: ('4d', '5s', 7, 1),   # Ru
+        45: ('4d', '5s', 8, 1),   # Rh
+        46: ('4d', '5s', 10, 0),  # Pd
+        47: ('4d', '5s', 10, 1),  # Ag
+        78: ('5d', '6s', 9, 1),   # Pt
+        79: ('5d', '6s', 10, 1),  # Au
+    }
+
+    if Z in exceptions:
+        d, s, d_occ, s_occ = exceptions[Z]
+        occ[d] = d_occ
+        occ[s] = s_occ
+
     return occ
 
 
 def core_valence(occ, Z):
-    # identifies core vs valence orbitals
-    orbitals = list(occ.keys())
+    # only include occupied orbitals
+    orbitals = [o for o in occ if occ[o] > 0]
+
     max_n = max(int(o[0]) for o in orbitals)
+
     # Main group
-    if Z <= 20 or Z >= 31 and Z <= 36 or Z >= 49 and Z <= 54 or Z >= 81:
+    if Z <= 20 or 31 <= Z <= 36 or 49 <= Z <= 54 or Z >= 81:
         valence = [o for o in orbitals if int(o[0]) == max_n]
     else:
         # Transition / f-block
-        valence = [o for o in orbitals
-                   if int(o[0]) == max_n or int(o[0]) == max_n - 1]
+        valence = [
+            o for o in orbitals
+            if int(o[0]) == max_n or
+               (int(o[0]) == max_n - 1 and o[1] in ['d', 'f'])
+        ]
+
     core = [o for o in orbitals if o not in valence]
 
     return core, valence
@@ -1670,6 +1695,8 @@ def bunge_R_nl(Z, orbital, r):
     Total radial function is a superposition of these primitive radial
     functions multiplied by the expansion coefficent C_jln, i.e.
     sum over j [C_jln * Sjl]
+    
+    Returns R_nl, float array same shape as r
     """
 
     C_jln = np.asarray(fu.bunge_coefficients[Z][orbital]['C_jln'])
@@ -1851,39 +1878,53 @@ def f0_test(xtal):
     z = []
     f_kappa = []
     r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
-    for Z in range(3, 45):
-        n_e_core = 0.0
+    for Z in range(47, 54):
         orbi = orb(Z)
+        print(" ")
+        print(Z)
 
         # electron density rho, R_nl^2/4pi
         rho_core = 0.0
+        n_e_core = 0.0
         for j in orbi['core_orbitals']:
-            n_e_core += orbi['occupation'][j]
+            n_c_j = orbi['occupation'][j]
+            n_e_core += n_c_j
+            print(f"{j}, {n_c_j}, {n_e_core}")
             R = bunge_R_nl(Z, j, r)
-            rho_core += (R**2)/(4*np.pi)
+            rho_core += (R**2) * n_c_j
+            print(np.trapz(rho_core * r**2, r))
 
         rho_valence = 0.0
+        n_e_valence = 0.0
         for j in orbi['valence_orbitals']:
+            n_v_j = orbi['occupation'][j]
+            n_e_valence += n_v_j
+            print(f"{j}, {n_v_j}, {n_e_valence}")
             R = bunge_R_nl(Z, j, r)
-            rho_valence += (R**2)/(4*np.pi)
+            rho_valence += (R**2) * n_v_j
+            print(np.trapz(rho_valence * r**2, r))
 
-        # normalize to 1 electron (we will scale by pv & pc later)
-        core = rho_core / np.trapz(4*np.pi*r**2 * rho_core, r)
-        valence = rho_valence / np.trapz(4*np.pi*r**2 * rho_valence, r)
-        pv = orbi["pv"]
-        pc = orbi["pc"]
+        # # normalize to 1 electron (we will scale by pv & pc later)
+        # core = rho_core / np.trapz(r**2 * rho_core, r)
+        # valence = rho_valence / np.trapz(r**2 * rho_valence, r)
+        # pv = orbi["pv"]
+        # pc = orbi["pc"]
 
         # p_atom(r) in kappa formalism
         rho_total = rho_core + rho_valence
         # rho_total = (pc * core + pv * valence)
 
         # atomic charge
-        integrand = 4 * np.pi * rho_total * r**2
-        n_electrons = np.trapz(integrand, r)
-        print(f"element {Z} has {n_electrons} electrons")
+        n_c = np.trapz(rho_core * r**2, r)
+        print(f"{Z} has {n_c:.1f} core e-, should be {int(n_e_core)}")
+        n_v = np.trapz(rho_valence * r**2, r)
+        print(f"{Z} has {n_v:.1f} valence e-, should be {int(n_e_valence)}")
+        integrand = rho_total * r**2
+        n_e = np.trapz(integrand, r)
+        print(f"element {Z} has {n_e:.1f} total electrons")
 
         # mean square radius of electron density for Ibers formula
-        mean_sq_r2 = (np.trapz(r**2*integrand, r) / n_electrons)
+        mean_sq_r2 = (np.trapz(r**2*integrand, r) / n_e)
         z.append(Z)
         f0.append(f_kirkland(Z, 0)[0][0])
         f_kappa.append((Z * mean_sq_r2) / (3 * bohr_radius))
