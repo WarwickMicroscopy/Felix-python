@@ -508,7 +508,7 @@ if 'S' not in rc.refine_mode:
 
     if 'J' in rc.refine_mode:
         for i in range(n_sites):
-            rc.refined_variable.append(rc.kappa[rc.atomic_sites[i]])
+            rc.refined_variable.append(basis.kappa[rc.atomic_sites[i]])
             rc.refined_variable_type.append(50)
             rc.atom_refine_flag.append(rc.atomic_sites[i])
             rc.atom_refine_vec.append(nullvec)  # no atom movement

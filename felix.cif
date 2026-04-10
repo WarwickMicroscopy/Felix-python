@@ -227,5 +227,5 @@ _atom_site_fract_y
 _atom_site_fract_z
 _atom_site_B_iso_or_equiv
 _atom_site_occupancy
-Si1 Si0+ 8 a 0 0 0 0.421 0.2
+Si1 Si0+ 8 a 0 0 0 0.421 1.0
 #End of data
