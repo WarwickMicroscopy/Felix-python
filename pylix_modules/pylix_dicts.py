@@ -69,6 +69,13 @@ neutral_valence_states = {
 }
 
 bunge_coefficients = {  # From Bunge Barrientos & Bunge, Atomic Data and Nuclear Data Tables 53, 113 (1993)
+    2: {
+        '1s': {
+            'Z_jl': [1.4595, 5.3244, 2.6298, 1.7504],
+            'C_jln': [1.3479, -0.001613, -0.100506, -0.270779],
+            'n': [1, 3, 2, 2]
+        },
+    },
     3: {
         '1s': {
             'Z_jl': [4.3069, 2.4573, 6.785, 7.4527, 1.8504, 0.7667, 0.6364],

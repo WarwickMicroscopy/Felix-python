@@ -1220,7 +1220,7 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
             uniq_q = f_doyle_turner(basis.atomic_number[i],
                                     bloch.uniq_gmag).ravel()
         elif rc.scatter_factor_method == 4:
-            print(f"Calculating kappa factor for atom {i+1}/{basis.n_atoms}")
+            # print(f"Calculating kappa factor for atom {i+1}/{basis.n_atoms}")
             uniq_q = f_kappa(xtal, basis, bloch.uniq_gmag, i)
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
@@ -1737,7 +1737,6 @@ def electron_density(xtal, basis):
         for j in orbi['core_orbitals']:
             n_c_j = orbi['occupation'][j]
             n_e_core += n_c_j
-            print(f"{j}, {n_c_j}, {n_e_core}")
             R = bunge_R_nl(Z, j, r)
             rho_core += (R**2) * n_c_j
 
@@ -1746,35 +1745,37 @@ def electron_density(xtal, basis):
         for j in orbi['valence_orbitals']:
             n_v_j = orbi['occupation'][j]
             n_e_valence += n_v_j
-            print(f"{j}, {n_v_j}, {n_e_valence}")
             R = bunge_R_nl(Z, j, r)
             rho_valence += (R**2) * n_v_j
- 
-        # normalize to 1 electron (we will scale by pv & pc later)
-        basis.core[i, :] = rho_core / np.trapz(rho_core * r**2, r)
-        basis.valence[i, :] = rho_valence / np.trapz(rho_valence * r**2, r)
+
+        # normalize and scale by pv & pc
         basis.pv[i] = orbi["pv"]
         basis.pc[i] = orbi["pc"]
+        basis.core[i, :] = basis.pc[i] * rho_core \
+            / np.trapz(rho_core * r**2, r)
+        basis.valence[i, :] = basis.pv[i] * rho_valence \
+            / np.trapz(rho_valence * r**2, r)
 
         # p_atom(r) in kappa formalism
-        rho_total = (basis.pc[i] * basis.core[i, :]
-                     + basis.pv[i] * basis.valence[i, :] * kappa**3)
+        rho_total = (basis.core[i, :] + basis.valence[i, :] * kappa**3)
 
         # atomic charge
-        integrand = rho_total * r**2
-        n_electrons = np.trapz(integrand, r)
+        n_electrons = np.trapz(rho_total * r**2, r)
         print(f"    Net charge on atom {basis.atom_label[i]} = {(Z-n_electrons):.2f} electrons")
 
         # mean square radius of electron density for Ibers formula
-        basis.mean_sq_r2[i] = (np.trapz(r**2*integrand, r) / n_electrons)
+        basis.mean_sq_r2[i] = (np.trapz(rho_total * r**3, r) / n_electrons)**2
 
         fig, ax = plt.subplots(1, 1)
         w_f = 10
         fig.set_size_inches(w_f, w_f)
-        cd_core = rho_core*r*r
-        cd_valence = rho_valence*r*r
+        # charge densities
+        cd_core = basis.core[i, :] * r**2
+        cd_valence = basis.valence[i, :] * r**2
+        cd_total = cd_core + cd_valence
         plt.plot(r, cd_core, label='core')
         plt.plot(r, cd_valence, label='valence')
+        plt.plot(r, cd_total, label='total')
         # plt.yscale('log')
         # ax.set_ylim(bottom=1e-06)
         ax.set_xlim(left=1e-02)
@@ -1790,6 +1791,7 @@ def electron_density(xtal, basis):
         plt.title(tit, fontsize=24)
         plt.show()
 
+    # sim.plot_charge_density(xtal, basis)
     return
 
 
@@ -1823,10 +1825,12 @@ def f_kappa(xtal, basis, g_pool_mag, i):
     # integrate to get the structure factor
     # NB we use sinc(qr) = sinc(2sr) ???
     qr = 2 * np.outer(s, r)
-    base_core = 4.0 * np.pi * basis.core[i] * np.sinc(qr) * r**2
-    base_val = 4.0 * np.pi * basis.valence[i] * np.sinc(qr) * r**2
-    f_x_core = basis.pc[i] * np.trapz(base_core, r, axis=1)
-    f_x_valence = basis.pv[i] * np.trapz(base_val, r, axis=1)
+    base_core = basis.core[i] * np.sinc(qr) * r**2
+    base_val = basis.valence[i] * np.sinc(qr) * r**2
+    # base_core = 4.0 * np.pi * basis.core[i] * np.sinc(qr) * r**2
+    # base_val = 4.0 * np.pi * basis.valence[i] * np.sinc(qr) * r**2
+    f_x_core = np.trapz(base_core, r, axis=1)
+    f_x_valence = np.trapz(base_val, r, axis=1)
     f_x = f_x_core + f_x_valence
 
     f_kappa = np.zeros_like(g_pool_mag, dtype=float)
@@ -1835,28 +1839,38 @@ def f_kappa(xtal, basis, g_pool_mag, i):
     mask = (g_pool_mag != 0)
     f_kappa[mask] = xtal.mott*(basis.atomic_number[i] -
                                f_x[mask]) / (s[mask]**2)
-    # g = 0 (Ibers formula)
-    f_kappa[0] = (basis.atomic_number[i] *
-                  basis.mean_sq_r2[i]) / (3 * xtal.bohr_radius)
 
-    fig, ax = plt.subplots(1, 1)
-    w_f = 10
-    fig.set_size_inches(w_f, w_f)
-    smax = 1000
-    plt.plot(s[:smax], f_kappa[:smax], label='$f_e$')
-    plt.plot(s[:smax], f_x[:smax], label='$f_X$')
-    # plt.yscale('log')
-    ax.set_ylim(bottom=0)
-    ax.set_xlim(left=0)
-    # ax.set_ylim(top=10)
-    ax.set_xlabel(r'$s$ /Å', size=24)
-    ax.set_ylabel(r'$f$', size=24)
-    ax.legend(loc='best', fontsize=22)
-    plt.xticks(fontsize=22)
-    plt.yticks(fontsize=22)
-    tit = f"Scattering factor for atom {basis.atom_label[i]}"
-    plt.title(tit, fontsize=24)
-    plt.show()
+    # # g = 0 (Ibers formula, Kirkland Eq. C8-10)
+    # # added a factor of 0.5 here - still not great, why?
+    # f_kappa[0] = 0.5 * (basis.atomic_number[i] *
+    #                     basis.mean_sq_r2[i]) / (3 * xtal.bohr_radius)
+
+    # alternative using kirkland f[0]
+    f_kappa[0] = f_kirkland(basis.atomic_number[i], 0)
+
+    # # inverse Mott-Bethe to check (Kirkland Eq C.16)
+    # f_xx = basis.atomic_number[i] \
+    #     - 2*np.pi**2 * xtal.bohr_radius * f_kappa * (2*s)**2
+
+    # fig, ax = plt.subplots(1, 1)
+    # w_f = 10
+    # fig.set_size_inches(w_f, w_f)
+    # smax = 1000
+    # plt.plot(s[:smax], f_kappa[:smax], label='$f_e$')
+    # plt.plot(s[:smax], f_x[:smax], label='$f_X$')
+    # plt.plot(s[:smax], f_xx[:smax], linestyle='-.', label='$f_X(e)$')
+    # # plt.yscale('log')
+    # ax.set_ylim(bottom=0)
+    # ax.set_xlim(left=0)
+    # # ax.set_ylim(top=10)
+    # ax.set_xlabel(r'$s$ (Å$^{-1}$)', size=24)
+    # ax.set_ylabel(r'$f$', size=24)
+    # ax.legend(loc='best', fontsize=22)
+    # plt.xticks(fontsize=22)
+    # plt.yticks(fontsize=22)
+    # tit = f"Scattering factor for atom {basis.atom_label[i]}"
+    # plt.title(tit, fontsize=24)
+    # plt.show()
 
     return f_kappa
 
@@ -1866,9 +1880,9 @@ def f0_test(xtal):
     bohr_radius = 0.529177210544
     f0 = []
     z = []
-    f_kappa = []
+    f0_ibers = []
     r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
-    for Z in range(47, 54):
+    for Z in range(2, 54):
         orbi = orb(Z)
         print(" ")
         print(Z)
@@ -1879,20 +1893,20 @@ def f0_test(xtal):
         for j in orbi['core_orbitals']:
             n_c_j = orbi['occupation'][j]
             n_e_core += n_c_j
-            print(f"{j}, {n_c_j}, {n_e_core}")
+            # print(f"{j}, {n_c_j}, {n_e_core}")
             R = bunge_R_nl(Z, j, r)
             rho_core += (R**2) * n_c_j
-            print(np.trapz(rho_core * r**2, r))
+            # print(np.trapz(rho_core * r**2, r))
 
         rho_valence = 0.0
         n_e_valence = 0.0
         for j in orbi['valence_orbitals']:
             n_v_j = orbi['occupation'][j]
             n_e_valence += n_v_j
-            print(f"{j}, {n_v_j}, {n_e_valence}")
+            # print(f"{j}, {n_v_j}, {n_e_valence}")
             R = bunge_R_nl(Z, j, r)
             rho_valence += (R**2) * n_v_j
-            print(np.trapz(rho_valence * r**2, r))
+            # print(np.trapz(rho_valence * r**2, r))
 
         # # normalize to 1 electron (we will scale by pv & pc later)
         # core = rho_core / np.trapz(r**2 * rho_core, r)
@@ -1914,14 +1928,32 @@ def f0_test(xtal):
         print(f"element {Z} has {n_e:.1f} total electrons")
 
         # mean square radius of electron density for Ibers formula
-        mean_sq_r2 = (np.trapz(r**2*integrand, r) / n_e)
+        # p_atom(r) in kappa formalism
+        rho_total = rho_core + rho_valence
+
+        # atomic charge
+        n_electrons = np.trapz(rho_total * r**2, r)
+        print(f"    {(n_electrons):.1f} electrons")
+
+        # mean square radius of electron density for Ibers formula
+        mean_sq_r2 = (np.trapz(rho_total * r**3, r) / n_electrons)**2
         z.append(Z)
         f0.append(f_kirkland(Z, 0)[0][0])
-        f_kappa.append((Z * mean_sq_r2) / (3 * bohr_radius))
+        # added a factor of 0.5 here - still not great, why?
+        f0_ibers.append(0.5*(Z * mean_sq_r2) / (3 * bohr_radius))
 
-    plt.plot(z, f0)
-    plt.plot(z, f_kappa)
+    f0_ibers = np.array(f0_ibers)
+    f0 = np.array(f0)
+    fig, ax = plt.subplots(1, 1)
+    w_f = 10
+    fig.set_size_inches(w_f, w_f)
+    plt.plot(z, f0, label='f(0) Kirkland')
+    plt.plot(z, f0_ibers, label='f(0) Ibers')
+    ax.legend(loc='best', fontsize=22)
+    plt.xticks(fontsize=22)
+    plt.yticks(fontsize=22)
     plt.show()
+    print(f"{f0_ibers/f0}")
 
 
 def four_gauss(s, a):

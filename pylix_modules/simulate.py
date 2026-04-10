@@ -578,6 +578,33 @@ def plot_progress(rc):
     return
 
 
+def plot_charge_density(xtal, basis):
+    # plots radial charge density of atom i in the basis
+    r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
+    for i in range(basis.n_atoms):
+        fig, ax = plt.subplots(1, 1)
+        w_f = 10
+        fig.set_size_inches(w_f, w_f)
+        cd_core = basis.core[i, :]*r*r
+        cd_valence = basis.valence[i, :]*r*r
+        plt.plot(r, cd_core, label='core')
+        plt.plot(r, cd_valence, label='valence')
+        # plt.yscale('log')
+        # ax.set_ylim(bottom=1e-06)
+        ax.set_xlim(left=1e-02)
+        ax.set_ylim(bottom=1e-04)
+        ax.set_xlabel(r'$r$, Å', size=24)
+        ax.set_ylabel(r'Charge density, electrons/Å$^3$', size=24)
+        ax.legend(loc='best', fontsize=22)
+        plt.yscale('log')
+        plt.xscale('log')
+        plt.xticks(fontsize=22)
+        plt.yticks(fontsize=22)
+        tit = f"Radial charge density for atom {basis.atom_label[i]}"
+        plt.title(tit, fontsize=24)
+        plt.show()
+
+
 def figure_of_merit(bloch, cbed, rc):
     """
     takes as an input cbed.lacbed_sim, shape [n_thickness, pix_x, pix_y, n_out]
