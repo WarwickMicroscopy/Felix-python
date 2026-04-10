@@ -1729,25 +1729,30 @@ def electron_density(xtal, basis):
     for i in range(basis.n_atoms):
         Z = basis.atomic_number[i]
         kappa = basis.kappa[i]
-        n_e_core = 0.0
         orbi = orb(basis.atomic_number[i])
 
-        # electron density rho, R_nl^2/4pi
+        # electron density rho, R_nl^2
+        n_e_core = 0.0
         rho_core = 0.0
         for j in orbi['core_orbitals']:
-            n_e_core += orbi['occupation'][j]
+            n_c_j = orbi['occupation'][j]
+            n_e_core += n_c_j
+            print(f"{j}, {n_c_j}, {n_e_core}")
             R = bunge_R_nl(Z, j, r)
-            rho_core += (R**2)/(4*np.pi)
+            rho_core += (R**2) * n_c_j
 
         rho_valence = 0.0
+        n_e_valence = 0.0
         for j in orbi['valence_orbitals']:
-            R = bunge_R_nl(Z, j, r*kappa)
-            rho_valence += (R**2)/(4*np.pi)
-
+            n_v_j = orbi['occupation'][j]
+            n_e_valence += n_v_j
+            print(f"{j}, {n_v_j}, {n_e_valence}")
+            R = bunge_R_nl(Z, j, r)
+            rho_valence += (R**2) * n_v_j
+ 
         # normalize to 1 electron (we will scale by pv & pc later)
-        basis.core[i, :] = rho_core / np.trapz(4*np.pi*r**2 * rho_core, r)
-        basis.valence[i, :] = rho_valence / np.trapz(4*np.pi*r**2 *
-                                                     rho_valence, r)
+        basis.core[i, :] = rho_core / np.trapz(rho_core * r**2, r)
+        basis.valence[i, :] = rho_valence / np.trapz(rho_valence * r**2, r)
         basis.pv[i] = orbi["pv"]
         basis.pc[i] = orbi["pc"]
 
@@ -1756,45 +1761,29 @@ def electron_density(xtal, basis):
                      + basis.pv[i] * basis.valence[i, :] * kappa**3)
 
         # atomic charge
-        integrand = 4 * np.pi * rho_total * r**2
+        integrand = rho_total * r**2
         n_electrons = np.trapz(integrand, r)
         print(f"    Net charge on atom {basis.atom_label[i]} = {(Z-n_electrons):.2f} electrons")
 
         # mean square radius of electron density for Ibers formula
         basis.mean_sq_r2[i] = (np.trapz(r**2*integrand, r) / n_electrons)
 
-        # plot
-        # fig, ax = plt.subplots(1, 1)
-        # w_f = 10
-        # fig.set_size_inches(w_f, w_f)
-        # plt.plot(r, rho_core, label='core')
-        # plt.plot(r, rho_valence, label='valence')
-        # ax.set_ylim(bottom=1e-06)
-        # ax.set_xlim(left=0)
-        # ax.set_xlabel(r'$r$, Å', size=24)
-        # ax.set_ylabel(r'$\rho$', size=24)
-        # ax.legend(loc='best', bbox_to_anchor=(1, 0.5), fontsize=22)
-        # plt.xticks(fontsize=22)
-        # plt.yticks(fontsize=22)
-        # plt.yscale('log')
-        # plt.title(basis.atom_label[i], fontsize=30)
-        # plt.show()
-
         fig, ax = plt.subplots(1, 1)
         w_f = 10
         fig.set_size_inches(w_f, w_f)
-        cd_core = 4*np.pi*rho_core*r*r
-        cd_valence = 4*np.pi*rho_valence*r*r
-        rmax = 300
-        plt.plot(r[:rmax], cd_core[:rmax], label='core')
-        plt.plot(r[:rmax], cd_valence[:rmax], label='valence')
+        cd_core = rho_core*r*r
+        cd_valence = rho_valence*r*r
+        plt.plot(r, cd_core, label='core')
+        plt.plot(r, cd_valence, label='valence')
         # plt.yscale('log')
         # ax.set_ylim(bottom=1e-06)
-        ax.set_xlim(left=0)
-        ax.set_ylim(top=10)
+        ax.set_xlim(left=1e-02)
+        ax.set_ylim(bottom=1e-04)
         ax.set_xlabel(r'$r$, Å', size=24)
-        ax.set_ylabel(r'Charge density, electrons/Å', size=24)
+        ax.set_ylabel(r'Charge density, electrons/Å$^3$', size=24)
         ax.legend(loc='best', fontsize=22)
+        plt.yscale('log')
+        plt.xscale('log')
         plt.xticks(fontsize=22)
         plt.yticks(fontsize=22)
         tit = f"Radial charge density for atom {basis.atom_label[i]}"
@@ -1873,6 +1862,7 @@ def f_kappa(xtal, basis, g_pool_mag, i):
 
 
 def f0_test(xtal):
+    # utility subroutine to check the bunge tables
     bohr_radius = 0.529177210544
     f0 = []
     z = []
@@ -1932,6 +1922,7 @@ def f0_test(xtal):
     plt.plot(z, f0)
     plt.plot(z, f_kappa)
     plt.show()
+
 
 def four_gauss(s, a):
     """
