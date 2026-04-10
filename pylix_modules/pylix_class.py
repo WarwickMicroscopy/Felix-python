@@ -226,7 +226,7 @@ class Crystal:
     t_mat_o2m: NDArray[np.floating] | None = None
     t_mat_c2o: NDArray[np.floating] | None = None
     # kappa model
-    n_points: int = 2400
+    n_points: int = 12000
     r_max: float = 12.0  # max radius to calculate electron density, Angstroms
     bohr_radius: float = 0.529177210544  # Angstroms
     mott: float = 0.02393366096322682  # prefactor in Mott-Bethe formula

@@ -1315,7 +1315,9 @@ def plot_f_g(xtal, basis, bloch, j=0):
 
     g = np.linspace(0, 10, 200)
     # g = bloch.uniq_gmag
-    f_g = px.f_kappa(xtal, basis, g, 0).ravel()
+    f_g = px.f_kappa(xtal, basis, g, j).ravel()
+    f_g_k = px.f_kirkland(Z, g).ravel()
+    f0_k = f_g_k[0]
     f0 = f_g[0]
 
     fig, ax = plt.subplots(1, 1)
@@ -1323,15 +1325,13 @@ def plot_f_g(xtal, basis, bloch, j=0):
     fig.set_size_inches(w_f, w_f)
 
     plt.plot(g, f_g, linestyle='-', label='Kappa')
-    f_g = px.f_kirkland(Z, g).ravel()
-    f1 = f_g[0]
-    plt.plot(g, f_g, linestyle='-', label='Kirkland')
-    f_g = px.f_lobato(Z, g).ravel()
-    plt.plot(g, f_g, linestyle='-.', label='Lobato')
-    f_g = px.f_peng(Z, g).ravel()
-    plt.plot(g, f_g, linestyle='--', label='Peng')
-    f_g = px.f_doyle_turner(Z, g).ravel()
-    plt.plot(g, f_g, linestyle=':', label='Doyle & Turner')
+    plt.plot(g, f_g_k, linestyle='-', label='Kirkland')
+    # f_g = px.f_lobato(Z, g).ravel()
+    # plt.plot(g, f_g, linestyle='-.', label='Lobato')
+    # f_g = px.f_peng(Z, g).ravel()
+    # plt.plot(g, f_g, linestyle='--', label='Peng')
+    # f_g = px.f_doyle_turner(Z, g).ravel()
+    # plt.plot(g, f_g, linestyle=':', label='Doyle & Turner')
 
     ax.set_xlabel('$g$, A$^{-1}$', size=24)
     ax.set_ylabel('$f_g$', size=24)
@@ -1341,6 +1341,20 @@ def plot_f_g(xtal, basis, bloch, j=0):
     plt.grid()
     plt.show()
 
-    print(f"kappa/kirkland = {f0/f1}")
+    diff = (f_g - f_g_k)  #/f_g_k
+    fig, ax = plt.subplots(1, 1)
+    w_f = 10
+    fig.set_size_inches(w_f, w_f)
+
+    plt.plot(g, diff, linestyle='-', label='difference')
+    ax.set_xlabel('$g$, A$^{-1}$', size=24)
+    ax.set_ylabel('$f_g$', size=24)
+    ax.legend(loc='best', fontsize=12)
+    plt.xticks(fontsize=22)
+    plt.yticks(fontsize=22)
+    plt.grid()
+    plt.show()
+
+    print(f"kappa/kirkland = {f0/f0_k}")
 
     return

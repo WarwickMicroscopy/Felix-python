@@ -1717,8 +1717,7 @@ def electron_density(xtal, basis):
     """
     Calculates radial electron densities in core and valence shells
     Uses Bunge parameterisation of Slater-type orbitals (3 < Z < 53)
-    Result is normalized to 1 electron
-    (to be scaled by pv & pc in kappa refinement)
+    Result is normalized and scaled by pv & pc in kappa refinement
 
     """
     basis.core = np.zeros([basis.n_atoms, xtal.n_points], dtype=float)
@@ -1751,6 +1750,8 @@ def electron_density(xtal, basis):
         # normalize and scale by pv & pc
         basis.pv[i] = orbi["pv"]
         basis.pc[i] = orbi["pc"]
+        # basis.core[i, :] = rho_core
+        # basis.valence[i, :] = rho_valence
         basis.core[i, :] = basis.pc[i] * rho_core \
             / np.trapz(rho_core * r**2, r)
         basis.valence[i, :] = basis.pv[i] * rho_valence \
@@ -1827,8 +1828,6 @@ def f_kappa(xtal, basis, g_pool_mag, i):
     qr = 2 * np.outer(s, r)
     base_core = basis.core[i] * np.sinc(qr) * r**2
     base_val = basis.valence[i] * np.sinc(qr) * r**2
-    # base_core = 4.0 * np.pi * basis.core[i] * np.sinc(qr) * r**2
-    # base_val = 4.0 * np.pi * basis.valence[i] * np.sinc(qr) * r**2
     f_x_core = np.trapz(base_core, r, axis=1)
     f_x_valence = np.trapz(base_val, r, axis=1)
     f_x = f_x_core + f_x_valence
@@ -1845,13 +1844,15 @@ def f_kappa(xtal, basis, g_pool_mag, i):
     # f_kappa[0] = 0.5 * (basis.atomic_number[i] *
     #                     basis.mean_sq_r2[i]) / (3 * xtal.bohr_radius)
 
-    # alternative using kirkland f[0]
-    f_kappa[0] = f_kirkland(basis.atomic_number[i], 0)
+    # alternative using  f[1]
+    # f_kappa[0] = f_kirkland(basis.atomic_number[i], 0)
+    f_kappa[0] = f_kappa[1]
 
     # # inverse Mott-Bethe to check (Kirkland Eq C.16)
     # f_xx = basis.atomic_number[i] \
     #     - 2*np.pi**2 * xtal.bohr_radius * f_kappa * (2*s)**2
 
+    # # plot the scattering factor
     # fig, ax = plt.subplots(1, 1)
     # w_f = 10
     # fig.set_size_inches(w_f, w_f)
@@ -1908,16 +1909,8 @@ def f0_test(xtal):
             rho_valence += (R**2) * n_v_j
             # print(np.trapz(rho_valence * r**2, r))
 
-        # # normalize to 1 electron (we will scale by pv & pc later)
-        # core = rho_core / np.trapz(r**2 * rho_core, r)
-        # valence = rho_valence / np.trapz(r**2 * rho_valence, r)
-        # pv = orbi["pv"]
-        # pc = orbi["pc"]
-
         # p_atom(r) in kappa formalism
         rho_total = rho_core + rho_valence
-        # rho_total = (pc * core + pv * valence)
-
         # atomic charge
         n_c = np.trapz(rho_core * r**2, r)
         print(f"{Z} has {n_c:.1f} core e-, should be {int(n_e_core)}")
@@ -1928,8 +1921,6 @@ def f0_test(xtal):
         print(f"element {Z} has {n_e:.1f} total electrons")
 
         # mean square radius of electron density for Ibers formula
-        # p_atom(r) in kappa formalism
-        rho_total = rho_core + rho_valence
 
         # atomic charge
         n_electrons = np.trapz(rho_total * r**2, r)
