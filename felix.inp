@@ -65,8 +65,8 @@ byte_size                 = 2
 Debye_model               = 0     
 
 # Beam selection criteria
-min_reflection_pool       = 600
-min_strong_beams          = 200
+min_reflection_pool       = 200
+min_strong_beams          = 80
 min_weak_beams            = 0
 g_limit                   = 0.0
 
@@ -97,7 +97,7 @@ debug                     = 0
 refine_mode               = 'J'
 refine_method             = 0
 refinement_scale          = 0.02
-correlation_type          = 2
+correlation_type          = 1
 atomic_sites              = [0]
 exit_criteria             = 0.00005
 precision                 = 0.00002
