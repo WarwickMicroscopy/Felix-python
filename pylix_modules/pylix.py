@@ -1823,7 +1823,7 @@ def electron_density(xtal, basis, rc):
         plt.plot(r, cd_core, label='core')
         plt.plot(r, cd_valence, label='valence')
         plt.plot(r, cd_total, label='total')
-        ax.set_xlim(left=1e-03)
+        ax.set_xlim(left=1e-02)
         ax.set_ylim(bottom=1e-02)
         ax.set_xlabel(r'$r$, Å', size=24)
         ax.set_ylabel(r'Charge density, electrons/Å$^3$', size=24)
@@ -1898,13 +1898,17 @@ def f_kappa(xtal, basis, g_pool_mag, i):
     # f_xx = basis.atomic_number[i] \
     #     - 2*np.pi**2 * xtal.bohr_radius * f_kappa * (2*s)**2
 
+    # kirkland for comparison
+    f_k = f_kirkland(basis.atomic_number[i], g_pool_mag).ravel()
+
     # plot the scattering factor
     fig, ax = plt.subplots(1, 1)
     w_f = 10
     fig.set_size_inches(w_f, w_f)
     smax = 1000
     plt.plot(s[:smax], f_kappa[:smax], label='$f_e$')
-    plt.plot(s[:smax], f_x[:smax], label='$f_X$')
+    # plt.plot(s[:smax], f_x[:smax], label='$f_X$')
+    plt.plot(s[:smax], f_k[:smax], linestyle='-.', label='$f_e(0)$')
     # plt.plot(s[:smax], f_xx[:smax], linestyle='-.', label='$f_X(e)$')
     # plt.yscale('log')
     ax.set_ylim(bottom=0)

@@ -1009,7 +1009,7 @@ def print_current_var(xtal, basis, rc, i):
         40: ("Current convergence angle", "{:.3f} Å^-1"),
         41: ("Current accelerating voltage", "{:.1f} kV"),
         50: (f" Atom {atom_id}: Current Kappa", "{:.3f}"),
-        51: (f" Atom {atom_id}: Current proportion of valence electrons", "{:.4f}")
+        51: (f" Atom {atom_id}: Current Pv", "{:.4f}")
             }
 
     if typ == 20:  # atomic coords
