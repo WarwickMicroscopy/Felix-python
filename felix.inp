@@ -66,8 +66,8 @@ byte_size                 = 2
 Debye_model               = 0     
 
 # Beam selection criteria
-min_reflection_pool       = 100
-min_strong_beams          = 20
+min_reflection_pool       = 400
+min_strong_beams          = 100
 min_weak_beams            = 0
 g_limit                   = 0.0
 

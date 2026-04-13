@@ -1848,8 +1848,8 @@ def f_kappa(xtal, basis, g_pool_mag, i):
     Calculates an array of electron scattering factors using
     the kappa formalism, over values in g_pool_mag.
     We first obtain the X-ray scattering factor by integrating
-    ∫ 4*pi*rho*r^2 * sinc(2*s*r) dr from 0 upwards, where rho is electron
-    density
+    ∫ 4*pi*rho*r^2 * sinc(2*s*r) dr, where rho is electron
+    density, from 0 to r_max (12 Angstroms)
 
     g_pool_mag : 1d float array of g magnitudes,
     i : index of atom in the basis
@@ -1905,8 +1905,8 @@ def f_kappa(xtal, basis, g_pool_mag, i):
     fig, ax = plt.subplots(1, 1)
     w_f = 10
     fig.set_size_inches(w_f, w_f)
-    smax = 1000
-    plt.plot(s[:smax], f_kappa[:smax], label='$f_e$')
+    smax = 600
+    plt.plot(s[1:smax], f_kappa[1:smax], label='$f_e$')
     # plt.plot(s[:smax], f_x[:smax], label='$f_X$')
     plt.plot(s[:smax], f_k[:smax], linestyle='-.', label='$f_e(0)$')
     # plt.plot(s[:smax], f_xx[:smax], linestyle='-.', label='$f_X(e)$')
