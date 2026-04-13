@@ -5,7 +5,8 @@ Scatter factor method:
     Lobato, 1
     Peng, 2
     Doyle-Turner, 3
-    Kappa, 4
+    Kappa (Coppens relativisitic RHF), 4   ***up to atomic number Z=54
+    Kappa (Bunge non-relativisitic RHF), 5
 
 Absorption:
     None, 0
@@ -65,8 +66,8 @@ byte_size                 = 2
 Debye_model               = 0     
 
 # Beam selection criteria
-min_reflection_pool       = 200
-min_strong_beams          = 80
+min_reflection_pool       = 100
+min_strong_beams          = 20
 min_weak_beams            = 0
 g_limit                   = 0.0
 

@@ -81,7 +81,7 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
                 mip += px.f_peng(cell.atomic_number[i], 0.0)
             elif rc.scatter_factor_method == 3:
                 mip += px.f_doyle_turner(cell.atomic_number[i], 0.0)
-            elif rc.scatter_factor_method == 4:
+            elif rc.scatter_factor_method > 3:
                 mip += px.f_kirkland(cell.atomic_number[i], 0.0)
             else:
                 raise ValueError("No scattering factors chosen in felix.inp")

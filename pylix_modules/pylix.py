@@ -1219,7 +1219,7 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
         elif rc.scatter_factor_method == 3:
             uniq_q = f_doyle_turner(basis.atomic_number[i],
                                     bloch.uniq_gmag).ravel()
-        elif rc.scatter_factor_method == 4:
+        elif rc.scatter_factor_method == 4 or 5:
             # print(f"Calculating kappa factor for atom {i+1}/{basis.n_atoms}")
             uniq_q = f_kappa(xtal, basis, bloch.uniq_gmag, i)
         else:
@@ -1713,10 +1713,49 @@ def bunge_R_nl(Z, orbital, r):
     return R_nl
 
 
-def electron_density(xtal, basis):
+def coppens_R_nl(Z, orbital, r):
+    """
+    radial orbitals using the parameterisation of Coppens & co
+    https://harker.chem.buffalo.edu/group/wavtable.html
+
+    Each slater-type orbitals sto is given by
+
+    S_jl = N_jl*r^(n_jl-1)*exp(-Z_jl*r)
+
+    where r is distance from nucleus and N_jl is the normalization constant
+
+    N_jl = (2Z_jl)^(n_jl+1/2)/[(2n_jl)!]^1/2
+
+    and
+
+    n_jl is the principal quantum number
+    Z_jl is the orbital exponent
+
+    Total radial function is a superposition of these primitive radial
+    functions multiplied by the expansion coefficent C_jln, i.e.
+    sum over j [C_jln * Sjl]
+    
+    Returns R_nl, float array same shape as r
+    """
+
+    C_jln = np.asarray(fu.coppens_coefficients[Z][orbital]['C_jln'])
+    Z_jl = np.asarray(fu.coppens_coefficients[Z][orbital]['Z_jl'])
+    n = np.asarray(fu.coppens_coefficients[Z][orbital]['n'])
+
+    # radial orbital
+    R_nl = np.zeros_like(r, dtype=float)
+    for j in range(len(n)):
+        N_jl = ((2*Z_jl[j])**(n[j]+0.5))/np.sqrt([math.factorial(2*n[j])])
+        R_nl += C_jln[j]*N_jl * r**(n[j]-1) * np.exp(-Z_jl[j]*r)
+        # print(f"{n[j]}, {N_jl}")
+
+    return R_nl
+
+
+def electron_density(xtal, basis, rc):
     """
     Calculates radial electron densities in core and valence shells
-    Uses Bunge parameterisation of Slater-type orbitals (3 < Z < 53)
+    Uses Coppens/Bunge parameterisation of Slater-type orbitals (3 < Z < 53)
     Result is normalized and scaled by pv & pc in kappa refinement
 
     """
@@ -1736,7 +1775,10 @@ def electron_density(xtal, basis):
         for j in orbi['core_orbitals']:
             n_c_j = orbi['occupation'][j]
             n_e_core += n_c_j
-            R = bunge_R_nl(Z, j, r)
+            if rc.scatter_factor_method == 4:
+                R = coppens_R_nl(Z, j, r)
+            else:
+                R = bunge_R_nl(Z, j, r)
             rho_core += (R**2) * n_c_j
 
         rho_valence = 0.0
@@ -1744,7 +1786,10 @@ def electron_density(xtal, basis):
         for j in orbi['valence_orbitals']:
             n_v_j = orbi['occupation'][j]
             n_e_valence += n_v_j
-            R = bunge_R_nl(Z, j, r)
+            if rc.scatter_factor_method == 4:
+                R = coppens_R_nl(Z, j, r)
+            else:
+                R = bunge_R_nl(Z, j, r)
             rho_valence += (R**2) * n_v_j
 
         # normalize and scale by pv & pc
@@ -1767,6 +1812,7 @@ def electron_density(xtal, basis):
         # mean square radius of electron density for Ibers formula
         basis.mean_sq_r2[i] = (np.trapz(rho_total * r**3, r) / n_electrons)**2
 
+        # plot
         fig, ax = plt.subplots(1, 1)
         w_f = 10
         fig.set_size_inches(w_f, w_f)
@@ -1788,7 +1834,10 @@ def electron_density(xtal, basis):
         plt.xscale('log')
         plt.xticks(fontsize=22)
         plt.yticks(fontsize=22)
-        tit = f"Radial charge density for atom {basis.atom_label[i]}"
+        if rc.scatter_factor_method == 4:
+            tit = f"Radial charge density for {basis.atom_label[i]} (Coppens)"
+        else:
+            tit = f"Radial charge density for {basis.atom_label[i]} (Bunge)"
         plt.title(tit, fontsize=24)
         plt.show()
 
@@ -1876,7 +1925,7 @@ def f_kappa(xtal, basis, g_pool_mag, i):
     return f_kappa
 
 
-def f0_test(xtal):
+def f0_test(xtal, rc):
     # utility subroutine to check the bunge tables
     bohr_radius = 0.529177210544
     f0 = []
@@ -1895,7 +1944,10 @@ def f0_test(xtal):
             n_c_j = orbi['occupation'][j]
             n_e_core += n_c_j
             # print(f"{j}, {n_c_j}, {n_e_core}")
-            R = bunge_R_nl(Z, j, r)
+            if rc.scatter_factor_method == 4:
+                R = coppens_R_nl(Z, j, r)
+            else:
+                R = bunge_R_nl(Z, j, r)
             rho_core += (R**2) * n_c_j
             # print(np.trapz(rho_core * r**2, r))
 
@@ -1905,7 +1957,10 @@ def f0_test(xtal):
             n_v_j = orbi['occupation'][j]
             n_e_valence += n_v_j
             # print(f"{j}, {n_v_j}, {n_e_valence}")
-            R = bunge_R_nl(Z, j, r)
+            if rc.scatter_factor_method == 4:
+                R = coppens_R_nl(Z, j, r)
+            else:
+                R = bunge_R_nl(Z, j, r)
             rho_valence += (R**2) * n_v_j
             # print(np.trapz(rho_valence * r**2, r))
 

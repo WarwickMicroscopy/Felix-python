@@ -268,18 +268,18 @@ elif rc.scatter_factor_method == 2:
     print("  Using Peng scattering factors")
 elif rc.scatter_factor_method == 3:
     print("  Using Doyle & Turner scattering factors")
-elif rc.scatter_factor_method == 4:
-    print("  Using orbital Hartree-Fock scattering factors with Kappa")
-    # print("    Precomputing atom core and valence densities")
-    # initialise pv, pc, kappa and mean_sq_radius of electron density
+elif rc.scatter_factor_method > 3:
+    if rc.scatter_factor_method == 4:
+        print("  Using Coppens RHF scattering factors with Kappa")
+    else:
+        print("  Using Bunge RHF scattering factors with Kappa")
+    # initialise pv, pc, kappa and electron density
     basis.pv = np.zeros(basis.n_atoms, dtype=float)
     basis.pc = np.zeros(basis.n_atoms, dtype=float)
     # initial kappa is 1.0 for a neutral atom
     basis.kappa = np.ones(basis.n_atoms, dtype=float)
-    # number of points in the core/valence calculation
-    px.electron_density(xtal, basis)
-    # print(f"    kappa = {basis.kappa}")
-    # print(f"    pv = {basis.pv}")
+    # initial calculation of orbitals
+    px.electron_density(xtal, basis, rc)
 else:
     raise ValueError("No scattering factors chosen in felix.inp")
 
