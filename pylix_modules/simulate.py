@@ -598,7 +598,7 @@ def plot_f_e(basis, rc, s, f_kappa, f_k, i):
         plt.xscale('log')
         plt.xticks(fontsize=22)
         plt.yticks(fontsize=22)
-        plt.grid(True)
+        plt.grid(True, which='both')
         tit = f"Scattering factor for atom {basis.atom_label[i]}"
         plt.title(tit, fontsize=24)
         plt.show()
