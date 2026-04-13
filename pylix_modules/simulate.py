@@ -566,15 +566,12 @@ def plot_progress(rc):
     w_f = 10
     fig.set_size_inches(1.5*w_f, w_f)
     plt.plot(rc.fit_log)
-    # plt.scatter(var_pl, fit_pl)
     plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1.0))
     plt.xticks(fontsize=22)
     plt.yticks(fontsize=22)
     ax.set_xlabel('Iteration', size=24)
     ax.set_ylabel('Figure of merit', size=24)
     plt.show()
-
-    return
 
 
 def plot_f_e(basis, rc, s, f_kappa, f_k, i):
@@ -601,6 +598,12 @@ def plot_f_e(basis, rc, s, f_kappa, f_k, i):
         plt.grid(True, which='both')
         tit = f"Scattering factor for atom {basis.atom_label[i]}"
         plt.title(tit, fontsize=24)
+        annotation = f"Kappa = {basis.kappa[i]:.2f}"
+        plt.annotate(annotation, xy=(0.15, 0.2), xycoords='figure fraction',
+                     size=22)
+        annotation = f"Pv = {basis.pv[i]:.2f}"
+        plt.annotate(annotation, xy=(0.15, 0.15), xycoords='figure fraction',
+                     size=22)
         plt.show()
 
 
@@ -633,6 +636,12 @@ def plot_charge_density(xtal, basis, rc, i):
         else:
             tit = f"Radial charge density for {basis.atom_label[i]} (Bunge)"
         plt.title(tit, fontsize=24)
+        annotation = f"Kappa = {basis.kappa[i]:.2f}"
+        plt.annotate(annotation, xy=(0.17, 0.5), xycoords='figure fraction',
+                     size=22)
+        annotation = f"Pv = {basis.pv[i]:.2f}"
+        plt.annotate(annotation, xy=(0.17, 0.45), xycoords='figure fraction',
+                     size=22)
         plt.show()
 
 
