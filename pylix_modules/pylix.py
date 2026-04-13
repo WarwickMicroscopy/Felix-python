@@ -1806,9 +1806,9 @@ def electron_density(xtal, basis, rc):
         rho_total = (basis.core[i, :] + basis.valence[i, :])
 
         # atomic charge
-        n_electrons = -np.trapz(rho_total * r**2, r)
+        n_electrons = np.trapz(rho_total * r**2, r)
         if rc.iter_count != 0:
-            print(f"    Net charge on atom {basis.atom_label[i]} = {(Z-n_electrons):.2f} electrons")
+            print(f"    Net charge on atom {basis.atom_label[i]} = {(n_electrons-Z):.2f} electrons")
 
         # mean square radius of electron density for Ibers formula
         basis.mean_sq_r2[i] = (np.trapz(rho_total * r**3, r) / n_electrons)**2
