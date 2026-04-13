@@ -1225,6 +1225,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     '''
     # starting point is the current best set of variables
     rc.last_fit = 1.0*rc.best_fit
+    print(rc.refined_variable)
 
     n_var = np.count_nonzero(dydx)
     if n_var > 1:
@@ -1249,6 +1250,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         print(f"    Extrapolation, should be better than {100*rc.best_fit:.2f}%")
         # initial trial uses the predicted best set of variables
         rc.refined_variable = 1.0*rc.next_var
+        print(rc.refined_variable)
         # simulate and get figure of merit
         fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
         if rc.plot > 1:
@@ -1257,10 +1259,12 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         if fom < rc.last_fit:
             rc.best_fit = fom*1.0
             rc.best_var = np.copy(rc.refined_variable)
+            print(rc.refined_variable)
             print("Point 1 of 3: extrapolated")  # yes, use it
         else:
             print("Point 1 of 3: previous best")  # no, use the best
         rc.refined_variable = np.copy(rc.best_var)
+        print(rc.refined_variable)
         print_LACBED(bloch, cbed, rc, 0)
         if rc.plot == 3:  # also do difference image
             print_LACBED(bloch, cbed, rc, 2)
@@ -1284,6 +1288,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     rc.refined_variable += delta  # point 2
     # check for validity: ADPs must be >=0
     rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
+    print(rc.refined_variable)
     # simulate and get figure of merit
     fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
     if rc.plot > 1:
@@ -1309,6 +1314,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     else:  # keep going
         rc.refined_variable += np.exp(0.4)*delta
     rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
+    print(rc.refined_variable)
     fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
     if rc.plot > 1:
         print_LACBED(bloch, cbed, rc, 0)
@@ -1331,6 +1337,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         rc.refined_variable *= next_x/last_x
         # print(f"**..** next x = {rc.refined_variable[j]}")
         rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
+        print(rc.refined_variable)
         fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
         if rc.plot > 1:
             print_LACBED(bloch, cbed, rc, 0)
