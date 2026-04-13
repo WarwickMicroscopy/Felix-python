@@ -321,7 +321,10 @@ else:  # atom-specific refinements can be done simultaneously
         print("Refining Kappa, J")
     if 'K' in rc.refine_mode:
         atm = 1
-        print("Refining valence electrons, K")
+        print("Refining valence electron population, K")
+    if 'J' or 'K' in rc.refine_mode:
+        px.electron_density(xtal, basis, rc)
+
     if atm == 1:
         # error check - do specified atom sites make sense
         for i in range(len(rc.atomic_sites)):
