@@ -7,8 +7,9 @@ from scipy.constants import c
 from scipy.linalg import eig, solve
 from CifFile import CifFile
 import struct
+from pylix_modules import simulate as sim  # simulation control and output
 from pylix_modules import pylix_dicts as fu
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import math
 
 
@@ -1222,7 +1223,7 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
         elif rc.scatter_factor_method > 3:
             # update orbitals
             electron_density(xtal, basis, rc)
-            uniq_q = f_kappa(xtal, basis, bloch.uniq_gmag, i)
+            uniq_q = f_kappa(xtal, basis, rc, bloch.uniq_gmag, i)
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
 
@@ -1813,37 +1814,38 @@ def electron_density(xtal, basis, rc):
         basis.mean_sq_r2[i] = (np.trapz(rho_total * r**3, r) / n_electrons)**2
 
         # plot
-        fig, ax = plt.subplots(1, 1)
-        w_f = 10
-        fig.set_size_inches(w_f, w_f)
-        # charge densities
-        cd_core = basis.core[i, :] * r**2
-        cd_valence = basis.valence[i, :] * r**2
-        cd_total = cd_core + cd_valence
-        plt.plot(r, cd_core, label='core')
-        plt.plot(r, cd_valence, label='valence')
-        plt.plot(r, cd_total, label='total')
-        ax.set_xlim(left=1e-02)
-        ax.set_ylim(bottom=1e-02)
-        ax.set_xlabel(r'$r$, Å', size=24)
-        ax.set_ylabel(r'Charge density, electrons/Å$^3$', size=24)
-        ax.legend(loc='best', fontsize=22)
-        plt.yscale('log')
-        plt.xscale('log')
-        plt.xticks(fontsize=22)
-        plt.yticks(fontsize=22)
-        if rc.scatter_factor_method == 4:
-            tit = f"Radial charge density for {basis.atom_label[i]} (Coppens)"
-        else:
-            tit = f"Radial charge density for {basis.atom_label[i]} (Bunge)"
-        plt.title(tit, fontsize=24)
-        plt.show()
+        # fig, ax = plt.subplots(1, 1)
+        # w_f = 10
+        # fig.set_size_inches(w_f, w_f)
+        # # charge densities
+        # cd_core = basis.core[i, :] * r**2
+        # cd_valence = basis.valence[i, :] * r**2
+        # cd_total = cd_core + cd_valence
+        # plt.plot(r, cd_core, label='core')
+        # plt.plot(r, cd_valence, label='valence')
+        # plt.plot(r, cd_total, label='total')
+        # ax.set_xlim(left=1e-02)
+        # ax.set_ylim(bottom=1e-02)
+        # ax.set_xlabel(r'$r$, Å', size=24)
+        # ax.set_ylabel(r'Charge density, electrons/Å$^3$', size=24)
+        # ax.legend(loc='best', fontsize=22)
+        # plt.yscale('log')
+        # plt.xscale('log')
+        # plt.xticks(fontsize=22)
+        # plt.yticks(fontsize=22)
+        # if rc.scatter_factor_method == 4:
+        #     tit = f"Radial charge density for {basis.atom_label[i]} (Coppens)"
+        # else:
+        #     tit = f"Radial charge density for {basis.atom_label[i]} (Bunge)"
+        # plt.title(tit, fontsize=24)
+        # plt.show()
 
-    # sim.plot_charge_density(xtal, basis)
+        sim.plot_charge_density(xtal, basis, rc, i)
+
     return
 
 
-def f_kappa(xtal, basis, g_pool_mag, i):
+def f_kappa(xtal, basis, rc, g_pool_mag, i):
     """
     Calculates an array of electron scattering factors using
     the kappa formalism, over values in g_pool_mag.
@@ -1902,26 +1904,27 @@ def f_kappa(xtal, basis, g_pool_mag, i):
     f_k = f_kirkland(basis.atomic_number[i], g_pool_mag).ravel()
 
     # plot the scattering factor
-    fig, ax = plt.subplots(1, 1)
-    w_f = 10
-    fig.set_size_inches(w_f, w_f)
-    smax = 600
-    plt.plot(s[1:smax], f_kappa[1:smax], label='$f_e$')
-    # plt.plot(s[:smax], f_x[:smax], label='$f_X$')
-    plt.plot(s[:smax], f_k[:smax], linestyle='-.', label='$f_e(0)$')
-    # plt.plot(s[:smax], f_xx[:smax], linestyle='-.', label='$f_X(e)$')
-    # plt.yscale('log')
-    ax.set_ylim(bottom=0)
-    ax.set_xlim(left=0)
-    # ax.set_ylim(top=10)
-    ax.set_xlabel(r'$s$ (Å$^{-1}$)', size=24)
-    ax.set_ylabel(r'$f$', size=24)
-    ax.legend(loc='best', fontsize=22)
-    plt.xticks(fontsize=22)
-    plt.yticks(fontsize=22)
-    tit = f"Scattering factor for atom {basis.atom_label[i]}"
-    plt.title(tit, fontsize=24)
-    plt.show()
+    sim.plot_f_e(basis, rc, s, f_kappa, f_k, i)
+    # fig, ax = plt.subplots(1, 1)
+    # w_f = 10
+    # fig.set_size_inches(w_f, w_f)
+    # smax = 600
+    # plt.plot(s[1:smax], f_kappa[1:smax], label='$f_e$')
+    # # plt.plot(s[:smax], f_x[:smax], label='$f_X$')
+    # plt.plot(s[:smax], f_k[:smax], linestyle='-.', label='$f_e(0)$')
+    # # plt.plot(s[:smax], f_xx[:smax], linestyle='-.', label='$f_X(e)$')
+    # # plt.yscale('log')
+    # ax.set_ylim(bottom=0)
+    # ax.set_xlim(left=0)
+    # # ax.set_ylim(top=10)
+    # ax.set_xlabel(r'$s$ (Å$^{-1}$)', size=24)
+    # ax.set_ylabel(r'$f$', size=24)
+    # ax.legend(loc='best', fontsize=22)
+    # plt.xticks(fontsize=22)
+    # plt.yticks(fontsize=22)
+    # tit = f"Scattering factor for atom {basis.atom_label[i]}"
+    # plt.title(tit, fontsize=24)
+    # plt.show()
 
     return f_kappa
 

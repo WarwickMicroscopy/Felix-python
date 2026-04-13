@@ -740,6 +740,7 @@ if 'S' not in rc.refine_mode:
 
 # %% final print
 sim.print_LACBED(bloch, cbed, rc, 0)
+sim.print_LACBED(bloch, cbed, rc, 2)
 sim.save_LACBED(xtal, bloch, cbed, rc)
 total_time = time.time() - start
 print("-----------------------------------------------------------------")

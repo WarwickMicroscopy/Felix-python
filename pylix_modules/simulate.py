@@ -577,21 +577,49 @@ def plot_progress(rc):
     return
 
 
-def plot_charge_density(xtal, basis):
-    # plots radial charge density of atom i in the basis
-    r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
-    for i in range(basis.n_atoms):
+def plot_f_e(basis, rc, s, f_kappa, f_k, i):
+    # plot the scattering factor
+    if rc.plot > 2:
         fig, ax = plt.subplots(1, 1)
         w_f = 10
         fig.set_size_inches(w_f, w_f)
-        cd_core = basis.core[i, :]*r*r
-        cd_valence = basis.valence[i, :]*r*r
+        smax = 300
+        plt.plot(s[1:smax], f_kappa[1:smax], label='$f_e$')
+        # plt.plot(s[:smax], f_x[:smax], label='$f_X$')
+        plt.plot(s[:smax], f_k[:smax], linestyle='-.', label='$f_e(0)$')
+        # plt.plot(s[:smax], f_xx[:smax], linestyle='-.', label='$f_X(e)$')
+        # plt.yscale('log')
+        ax.set_ylim(bottom=0)
+        ax.set_xlim(left=0)
+        # ax.set_ylim(top=10)
+        ax.set_xlabel(r'$s$ (Å$^{-1}$)', size=24)
+        ax.set_ylabel(r'$f$', size=24)
+        ax.legend(loc='best', fontsize=22)
+        plt.xticks(fontsize=22)
+        plt.yticks(fontsize=22)
+        tit = f"Scattering factor for atom {basis.atom_label[i]}"
+        plt.title(tit, fontsize=24)
+        plt.show()
+
+
+
+def plot_charge_density(xtal, basis, rc, i):
+    # plots radial charge density of atom i in the basis
+    r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
+    # plot
+    if rc.plot > 1:
+        fig, ax = plt.subplots(1, 1)
+        w_f = 10
+        fig.set_size_inches(w_f, w_f)
+        # charge densities
+        cd_core = basis.core[i, :] * r**2
+        cd_valence = basis.valence[i, :] * r**2
+        cd_total = cd_core + cd_valence
         plt.plot(r, cd_core, label='core')
         plt.plot(r, cd_valence, label='valence')
-        # plt.yscale('log')
-        # ax.set_ylim(bottom=1e-06)
+        plt.plot(r, cd_total, label='total')
         ax.set_xlim(left=1e-02)
-        ax.set_ylim(bottom=1e-04)
+        ax.set_ylim(bottom=1e-02)
         ax.set_xlabel(r'$r$, Å', size=24)
         ax.set_ylabel(r'Charge density, electrons/Å$^3$', size=24)
         ax.legend(loc='best', fontsize=22)
@@ -599,7 +627,10 @@ def plot_charge_density(xtal, basis):
         plt.xscale('log')
         plt.xticks(fontsize=22)
         plt.yticks(fontsize=22)
-        tit = f"Radial charge density for atom {basis.atom_label[i]}"
+        if rc.scatter_factor_method == 4:
+            tit = f"Radial charge density for {basis.atom_label[i]} (Coppens)"
+        else:
+            tit = f"Radial charge density for {basis.atom_label[i]} (Bunge)"
         plt.title(tit, fontsize=24)
         plt.show()
 
@@ -1210,6 +1241,8 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         rc.refined_variable = 1.0*rc.next_var
         # simulate and get figure of merit
         fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
+        if rc.plot > 1:
+            print_LACBED(bloch, cbed, rc, 0)
         # is it actually any better
         if fom < rc.last_fit:
             rc.best_fit = fom*1.0
@@ -1243,6 +1276,8 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
     # simulate and get figure of merit
     fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
+    if rc.plot > 1:
+        print_LACBED(bloch, cbed, rc, 0)
     # check for no effect
     if fom == rc.best_fit:
         raise ValueError(f"{variable_message(t)} has no effect!")
@@ -1265,6 +1300,8 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         rc.refined_variable += np.exp(0.4)*delta
     rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
     fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
+    if rc.plot > 1:
+        print_LACBED(bloch, cbed, rc, 0)
     r3_var[2] = 1.0*rc.refined_variable[j]
     r3_fom[2] = 1.0*fom
     print("-c-----------------------------")  # {r3_var},{r3_fom}")
@@ -1285,6 +1322,8 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         # print(f"**..** next x = {rc.refined_variable[j]}")
         rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
         fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
+        if rc.plot > 1:
+            print_LACBED(bloch, cbed, rc, 0)
         if (fom < rc.best_fit):  # it's better, keep going
             rc.best_fit = fom*1.0
             rc.best_var = np.copy(rc.refined_variable)
