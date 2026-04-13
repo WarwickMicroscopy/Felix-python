@@ -24,8 +24,8 @@ Refine modes:
     Lattice Angles, G  ***not yet implemented
     Convergence Angle, H
     Accelerating Voltage, I  ***not yet implemented
-    Kappa, J  ***partially implemented
-    Proportion of valence electrons, K  ***partially implemented
+    Kappa, J  ***partially implemented up to atomic number Z=54
+    Proportion of valence electrons, K  ***partially implemented up to atomic number Z=54
 	Optimisation of beam pool, O
 
 Refinements B, C, D, E, J, K are applied to the atom(s) in cif given by atomic_sites
@@ -95,7 +95,7 @@ print_flag                = 0
 debug                     = 0
 
 # Refinement specific flags
-refine_mode               = 'J'
+refine_mode               = 'J, K'
 refine_method             = 0
 refinement_scale          = 0.02
 correlation_type          = 1

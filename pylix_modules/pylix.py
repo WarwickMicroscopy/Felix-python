@@ -1219,8 +1219,9 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
         elif rc.scatter_factor_method == 3:
             uniq_q = f_doyle_turner(basis.atomic_number[i],
                                     bloch.uniq_gmag).ravel()
-        elif rc.scatter_factor_method == 4 or 5:
-            # print(f"Calculating kappa factor for atom {i+1}/{basis.n_atoms}")
+        elif rc.scatter_factor_method > 3:
+            # update orbitals
+            electron_density(xtal, basis, rc)
             uniq_q = f_kappa(xtal, basis, bloch.uniq_gmag, i)
         else:
             raise ValueError("No scattering factors chosen in felix.inp")
@@ -1638,19 +1639,17 @@ def electron_configuration(Z):
 def core_valence(occ, Z):
     # only include occupied orbitals
     orbitals = [o for o in occ if occ[o] > 0]
-
     max_n = max(int(o[0]) for o in orbitals)
 
     # Main group
-    if Z <= 20 or 31 <= Z <= 36 or 49 <= Z <= 54 or Z >= 81:
+    if Z <= 20 or 31 <= Z <= 36 or Z == 46 or 49 <= Z <= 54 or Z >= 81:
         valence = [o for o in orbitals if int(o[0]) == max_n]
     else:
         # Transition / f-block
         valence = [
             o for o in orbitals
             if int(o[0]) == max_n or
-               (int(o[0]) == max_n - 1 and o[1] in ['d', 'f'])
-        ]
+            (int(o[0]) == max_n - 1 and o[1] in ['d', 'f'])]
 
     core = [o for o in orbitals if o not in valence]
 
@@ -1799,11 +1798,11 @@ def electron_density(xtal, basis, rc):
         # basis.valence[i, :] = rho_valence
         basis.core[i, :] = basis.pc[i] * rho_core \
             / np.trapz(rho_core * r**2, r)
-        basis.valence[i, :] = basis.pv[i] * rho_valence \
+        basis.valence[i, :] = kappa**3 * basis.pv[i] * rho_valence \
             / np.trapz(rho_valence * r**2, r)
 
-        # p_atom(r) in kappa formalism
-        rho_total = (basis.core[i, :] + basis.valence[i, :] * kappa**3)
+        # p_atom(r)
+        rho_total = (basis.core[i, :] + basis.valence[i, :])
 
         # atomic charge
         n_electrons = np.trapz(rho_total * r**2, r)
@@ -1861,7 +1860,6 @@ def f_kappa(xtal, basis, g_pool_mag, i):
     size [n_hkl, n_hkl]
 
     """
-
     # physics to crystallographic convention
     # my g = 2*pi*g' where g' is the crystallographic convention
     # x-ray structure factors are given in s = sin(theta)/lambda = 1/2d =g'/2
@@ -1897,32 +1895,34 @@ def f_kappa(xtal, basis, g_pool_mag, i):
     # f_kappa[0] = f_kirkland(basis.atomic_number[i], 0)
     f_kappa[0] = f_kappa[1]
 
-    # # inverse Mott-Bethe to check (Kirkland Eq C.16)
-    # f_xx = basis.atomic_number[i] \
-    #     - 2*np.pi**2 * xtal.bohr_radius * f_kappa * (2*s)**2
+    # inverse Mott-Bethe to check (Kirkland Eq C.16)
+    f_xx = basis.atomic_number[i] \
+        - 2*np.pi**2 * xtal.bohr_radius * f_kappa * (2*s)**2
 
-    # # plot the scattering factor
-    # fig, ax = plt.subplots(1, 1)
-    # w_f = 10
-    # fig.set_size_inches(w_f, w_f)
-    # smax = 1000
-    # plt.plot(s[:smax], f_kappa[:smax], label='$f_e$')
-    # plt.plot(s[:smax], f_x[:smax], label='$f_X$')
-    # plt.plot(s[:smax], f_xx[:smax], linestyle='-.', label='$f_X(e)$')
-    # # plt.yscale('log')
-    # ax.set_ylim(bottom=0)
-    # ax.set_xlim(left=0)
-    # # ax.set_ylim(top=10)
-    # ax.set_xlabel(r'$s$ (Å$^{-1}$)', size=24)
-    # ax.set_ylabel(r'$f$', size=24)
-    # ax.legend(loc='best', fontsize=22)
-    # plt.xticks(fontsize=22)
-    # plt.yticks(fontsize=22)
-    # tit = f"Scattering factor for atom {basis.atom_label[i]}"
-    # plt.title(tit, fontsize=24)
-    # plt.show()
+    # plot the scattering factor
+    fig, ax = plt.subplots(1, 1)
+    w_f = 10
+    fig.set_size_inches(w_f, w_f)
+    smax = 1000
+    plt.plot(s[:smax], f_kappa[:smax], label='$f_e$')
+    plt.plot(s[:smax], f_x[:smax], label='$f_X$')
+    plt.plot(s[:smax], f_xx[:smax], linestyle='-.', label='$f_X(e)$')
+    # plt.yscale('log')
+    ax.set_ylim(bottom=0)
+    ax.set_xlim(left=0)
+    # ax.set_ylim(top=10)
+    ax.set_xlabel(r'$s$ (Å$^{-1}$)', size=24)
+    ax.set_ylabel(r'$f$', size=24)
+    ax.legend(loc='best', fontsize=22)
+    plt.xticks(fontsize=22)
+    plt.yticks(fontsize=22)
+    tit = f"Scattering factor for atom {basis.atom_label[i]}"
+    plt.title(tit, fontsize=24)
+    plt.show()
 
     return f_kappa
+
+
 
 
 def f0_test(xtal, rc):

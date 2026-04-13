@@ -109,7 +109,6 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
         for i in range(cell.n_atoms):
             print(f"{cell.atom_label[i]} {cell.atom_name[i]}: {cell.atom_position[i]}")
 
-
     # ===============================================
     # set up reference frames
     # only if necessary, i.e. for cell dimensions F, G
@@ -873,11 +872,12 @@ def update_variables(xtal, basis, rc):
                     basis.kappa[j] = var*1.0
                 else:
                     basis.kappa[j] = np.clip(var, 0.7, 1.3)
-            elif sub[i] == 1:  # valence electrons
-                if 0.5 < var < 1.5:  # must lie in a reasonable range
-                    basis.pv[j] = var*1.0
-                else:
-                    basis.pv[j] = 0.0
+            elif sub[i] == 1:  # valence electrons pv
+                basis.pv[j] = var*1.0
+                # if 0.5 < var < 1.5:  # must lie in a reasonable range
+                #     basis.pv[j] = var*1.0
+                # else:
+                #     basis.pv[j] = 0.0
                     # basis.pv[j] = np.clip(var, ,1.5 )
     return
 

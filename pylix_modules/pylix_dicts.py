@@ -93,7 +93,7 @@ orbital_order = [
 orbital_capacity = {
     's': 2,
     'p': 6,
-    'd': 1,
+    'd': 10,
     'f': 14}
 
 neutral_valence_states = {

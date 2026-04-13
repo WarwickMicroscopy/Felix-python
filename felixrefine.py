@@ -279,7 +279,7 @@ elif rc.scatter_factor_method > 3:
     # initial kappa is 1.0 for a neutral atom
     basis.kappa = np.ones(basis.n_atoms, dtype=float)
     # initial calculation of orbitals
-    px.electron_density(xtal, basis, rc)
+    # px.electron_density(xtal, basis, rc)
 else:
     raise ValueError("No scattering factors chosen in felix.inp")
 
@@ -321,21 +321,6 @@ else:  # atom-specific refinements can be done simultaneously
         print("Refining Kappa, J")
     if 'K' in rc.refine_mode:
         atm = 1
-        # rc.pv[0]= 0.9994
-        # rc.pv[1] = 4.997
-        # rc.pv[2]= 5.985
-        # rc.kappa[0]= 1.3
-        # rc.kappa[1]= 1.01
-        # rc.kappa[2]= 1.01
-        # kappas (default 1.0)
-        # refined kappa : [1.21517673 1.12267508 0.93547286]
-        # expand per atom in full unit cell
-        # print(unique_aniso_matrixes)
-        # print(unique_aniso_matrixes.shape)
-        # print(rc.kappa)
-        # Step 1: define a dictionary of initial P_v guesses per element
-        # For LiNbO3 using formal charges as we discussed
-        # we just need a dictionary of the valence states of the atoms
         print("Refining valence electrons, K")
     if atm == 1:
         # error check - do specified atom sites make sense
@@ -515,7 +500,7 @@ if 'S' not in rc.refine_mode:
 
     if 'K' in rc.refine_mode:
         for i in range(n_sites):
-            rc.refined_variable.append(rc.pv[rc.atomic_sites[i]])
+            rc.refined_variable.append(basis.pv[rc.atomic_sites[i]])
             rc.refined_variable_type.append(51)
             rc.atom_refine_flag.append(rc.atomic_sites[i])
             rc.atom_refine_vec.append(nullvec)  # no atom movement
