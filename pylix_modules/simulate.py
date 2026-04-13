@@ -586,21 +586,22 @@ def plot_f_e(basis, rc, s, f_kappa, f_k, i):
         smax = 300
         plt.plot(s[1:smax], f_kappa[1:smax], label='$f_e$')
         # plt.plot(s[:smax], f_x[:smax], label='$f_X$')
-        plt.plot(s[:smax], f_k[:smax], linestyle='-.', label='$f_e(0)$')
+        plt.plot(s[1:smax], f_k[1:smax], linestyle='-.', label='$f_e(0)$')
         # plt.plot(s[:smax], f_xx[:smax], linestyle='-.', label='$f_X(e)$')
         # plt.yscale('log')
         ax.set_ylim(bottom=0)
-        ax.set_xlim(left=0)
+        # ax.set_xlim(left=0)
         # ax.set_ylim(top=10)
         ax.set_xlabel(r'$s$ (Å$^{-1}$)', size=24)
         ax.set_ylabel(r'$f$', size=24)
         ax.legend(loc='best', fontsize=22)
+        plt.xscale('log')
         plt.xticks(fontsize=22)
         plt.yticks(fontsize=22)
+        plt.grid(True)
         tit = f"Scattering factor for atom {basis.atom_label[i]}"
         plt.title(tit, fontsize=24)
         plt.show()
-
 
 
 def plot_charge_density(xtal, basis, rc, i):
