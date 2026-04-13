@@ -168,7 +168,7 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
         #     print(f"{i},  {bloch.hkl_indices[i]}")
 
     # plot beam pool
-    if rc.iter_count == 0 and rc.plot >= 1:
+    if rc.iter_count == 0 and rc.plot > 0:
         xm = np.ceil(np.max(bloch.g_pool_mag/(2*np.pi)))
         fig, ax = plt.subplots(1, 1)
         w_f = 10
@@ -575,74 +575,72 @@ def plot_progress(rc):
 
 
 def plot_f_e(basis, rc, s, f_kappa, f_k, i):
-    # plot the scattering factor
-    if rc.plot > 2:
-        fig, ax = plt.subplots(1, 1)
-        w_f = 10
-        fig.set_size_inches(w_f, w_f)
-        smax = 300
-        plt.plot(s[1:smax], f_kappa[1:smax], label='$f_e$')
-        # plt.plot(s[:smax], f_x[:smax], label='$f_X$')
-        plt.plot(s[1:smax], f_k[1:smax], linestyle='-.', label='$f_e(0)$')
-        # plt.plot(s[:smax], f_xx[:smax], linestyle='-.', label='$f_X(e)$')
-        # plt.yscale('log')
-        ax.set_ylim(bottom=0)
-        # ax.set_xlim(left=0)
-        # ax.set_ylim(top=10)
-        ax.set_xlabel(r'$s$ (Å$^{-1}$)', size=24)
-        ax.set_ylabel(r'$f$', size=24)
-        ax.legend(loc='best', fontsize=22)
-        plt.xscale('log')
-        plt.xticks(fontsize=22)
-        plt.yticks(fontsize=22)
-        plt.grid(True, which='both')
-        tit = f"Scattering factor for atom {basis.atom_label[i]}"
-        plt.title(tit, fontsize=24)
-        annotation = f"Kappa = {basis.kappa[i]:.2f}"
-        plt.annotate(annotation, xy=(0.15, 0.2), xycoords='figure fraction',
-                     size=22)
-        annotation = f"Pv = {basis.pv[i]:.2f}"
-        plt.annotate(annotation, xy=(0.15, 0.15), xycoords='figure fraction',
-                     size=22)
-        plt.show()
+    # plot the scattering factor only when it's being refined
+    fig, ax = plt.subplots(1, 1)
+    w_f = 10
+    fig.set_size_inches(w_f, w_f)
+    smax = 300
+    plt.plot(s[1:smax], f_kappa[1:smax], label='$f_e$')
+    # plt.plot(s[:smax], f_x[:smax], label='$f_X$')
+    plt.plot(s[1:smax], f_k[1:smax], linestyle='-.', label='$f_e(0)$')
+    # plt.plot(s[:smax], f_xx[:smax], linestyle='-.', label='$f_X(e)$')
+    # plt.yscale('log')
+    ax.set_ylim(bottom=0)
+    # ax.set_xlim(left=0)
+    # ax.set_ylim(top=10)
+    ax.set_xlabel(r'$s$ (Å$^{-1}$)', size=24)
+    ax.set_ylabel(r'$f$', size=24)
+    ax.legend(loc='best', fontsize=22)
+    plt.xscale('log')
+    plt.xticks(fontsize=22)
+    plt.yticks(fontsize=22)
+    plt.grid(True, which='both')
+    tit = f"Scattering factor for atom {basis.atom_label[i]}"
+    plt.title(tit, fontsize=24)
+    annotation = f"Kappa = {basis.kappa[i]:.2f}"
+    plt.annotate(annotation, xy=(0.15, 0.2), xycoords='figure fraction',
+                 size=22)
+    annotation = f"Pv = {basis.pv[i]:.2f}"
+    plt.annotate(annotation, xy=(0.15, 0.15), xycoords='figure fraction',
+                 size=22)
+    plt.show()
+    return
 
 
 def plot_charge_density(xtal, basis, rc, i):
     # plots radial charge density of atom i in the basis
     r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
-    # plot
-    if rc.plot > 1:
-        fig, ax = plt.subplots(1, 1)
-        w_f = 10
-        fig.set_size_inches(w_f, w_f)
-        # charge densities
-        cd_core = basis.core[i, :] * r**2
-        cd_valence = basis.valence[i, :] * r**2
-        cd_total = cd_core + cd_valence
-        plt.plot(r, cd_core, label='core')
-        plt.plot(r, cd_valence, label='valence')
-        plt.plot(r, cd_total, label='total')
-        ax.set_xlim(left=1e-02)
-        ax.set_ylim(bottom=1e-02)
-        ax.set_xlabel(r'$r$, Å', size=24)
-        ax.set_ylabel(r'Charge density, electrons/Å$^3$', size=24)
-        ax.legend(loc='best', fontsize=22)
-        plt.yscale('log')
-        plt.xscale('log')
-        plt.xticks(fontsize=22)
-        plt.yticks(fontsize=22)
-        if rc.scatter_factor_method == 4:
-            tit = f"Radial charge density for {basis.atom_label[i]} (Coppens)"
-        else:
-            tit = f"Radial charge density for {basis.atom_label[i]} (Bunge)"
-        plt.title(tit, fontsize=24)
-        annotation = f"Kappa = {basis.kappa[i]:.2f}"
-        plt.annotate(annotation, xy=(0.17, 0.5), xycoords='figure fraction',
-                     size=22)
-        annotation = f"Pv = {basis.pv[i]:.2f}"
-        plt.annotate(annotation, xy=(0.17, 0.45), xycoords='figure fraction',
-                     size=22)
-        plt.show()
+    fig, ax = plt.subplots(1, 1)
+    w_f = 10
+    fig.set_size_inches(w_f, w_f)
+    # charge densities
+    cd_core = basis.core[i, :] * r**2
+    cd_valence = basis.valence[i, :] * r**2
+    cd_total = cd_core + cd_valence
+    plt.plot(r, cd_core, label='core')
+    plt.plot(r, cd_valence, label='valence')
+    plt.plot(r, cd_total, label='total')
+    ax.set_xlim(left=1e-02)
+    ax.set_ylim(bottom=1e-02)
+    ax.set_xlabel(r'$r$, Å', size=24)
+    ax.set_ylabel(r'Charge density, electrons/Å$^3$', size=24)
+    ax.legend(loc='best', fontsize=22)
+    plt.yscale('log')
+    plt.xscale('log')
+    plt.xticks(fontsize=22)
+    plt.yticks(fontsize=22)
+    if rc.scatter_factor_method == 4:
+        tit = f"Radial charge density for {basis.atom_label[i]} (Coppens)"
+    else:
+        tit = f"Radial charge density for {basis.atom_label[i]} (Bunge)"
+    plt.title(tit, fontsize=24)
+    annotation = f"Kappa = {basis.kappa[i]:.2f}"
+    plt.annotate(annotation, xy=(0.17, 0.5), xycoords='figure fraction',
+                 size=22)
+    annotation = f"Pv = {basis.pv[i]:.2f}"
+    plt.annotate(annotation, xy=(0.17, 0.45), xycoords='figure fraction',
+                 size=22)
+    plt.show()
 
 
 def figure_of_merit(bloch, cbed, rc):
@@ -915,12 +913,6 @@ def update_variables(xtal, basis, rc):
                     basis.kappa[j] = np.clip(var, 0.7, 1.3)
             elif sub[i] == 1:  # valence electrons pv
                 basis.pv[j] = var*1.0
-                # if 0.5 < var < 1.5:  # must lie in a reasonable range
-                #     basis.pv[j] = var*1.0
-                # else:
-                #     basis.pv[j] = 0.0
-                    # basis.pv[j] = np.clip(var, ,1.5 )
-    return
 
 
 def print_montage(bloch, cbed, rc, images, image_type, j):
@@ -1025,22 +1017,25 @@ def save_LACBED(xtal, bloch, cbed, rc):
 
 def print_current_var(xtal, basis, rc, i):
     # prints the variable being refined
+    # ***does this need to come after beam pool construction get the right 
+    # atomic charge???
     typ = rc.refined_variable_type[i]  # variable type & subtype
     atom_id = rc.atom_refine_flag[i]
     label = basis.atom_label[atom_id]
+    Z = basis.atomic_number[atom_id]
 
     # dictionary of format strings
     formats = {
-        10: ("Current Ug", "{:.3f}"),
-        11: ("Current Ug", "{:.3f}"),
-        21: (f" Atom {atom_id}: {label} Current occupancy", "{:.3f}"),
-        22: (f" Atom {atom_id}: {label} Current B_iso", "{:.3f}"),
-        23: (f" Atom {atom_id}: {label} Current U[1,1]", "{:.5f}"),
-        24: (f" Atom {atom_id}: {label} Current U[2,2]", "{:.5f}"),
-        25: (f" Atom {atom_id}: {label} Current U[3,3]", "{:.5f}"),
-        26: (f" Atom {atom_id}: {label} Current U[1,2]", "{:.5f}"),
-        27: (f" Atom {atom_id}: {label} Current U[1,3]", "{:.5f}"),
-        28: (f" Atom {atom_id}: {label} Current U[2,3]", "{:.5f}"),
+        10: ("Current Ug amplitude", "{:.3f}"),
+        11: ("Current Ug phase", "{:.3f}"),
+        21: (f" Atom {label}: Current occupancy", "{:.3f}"),
+        22: (f" Atom {label}: Current B_iso", "{:.3f}"),
+        23: (f" Atom {label}: Current U[1,1]", "{:.5f}"),
+        24: (f" Atom {label}: Current U[2,2]", "{:.5f}"),
+        25: (f" Atom {label}: Current U[3,3]", "{:.5f}"),
+        26: (f" Atom {label}: Current U[1,2]", "{:.5f}"),
+        27: (f" Atom {label}: Current U[1,3]", "{:.5f}"),
+        28: (f" Atom {label}: Current U[2,3]", "{:.5f}"),
         30: ("Current lattice parameter a", "{:.4f}"),
         31: ("Current lattice parameter b", "{:.4f}"),
         32: ("Current lattice parameter c", "{:.4f}"),
@@ -1049,8 +1044,8 @@ def print_current_var(xtal, basis, rc, i):
         35: ("Current lattice gamma", "{:.4f}"),
         40: ("Current convergence angle", "{:.3f} Å^-1"),
         41: ("Current accelerating voltage", "{:.1f} kV"),
-        50: (f" Atom {atom_id}: Current Kappa", "{:.3f}"),
-        51: (f" Atom {atom_id}: Current Pv", "{:.4f}")
+        50: (f" Atom {label}: Current charge {(basis.n_electrons[atom_id]-Z):.2f} e,  Kappa", "{:.3f}"),
+        51: (f" Atom {label}: Current charge {(basis.n_electrons[atom_id]-Z):.2f} e, Pv", "{:.4f}")
             }
 
     if typ == 20:  # atomic coords
@@ -1075,12 +1070,12 @@ def variable_message(vtype):
         26: "Changing U[1,2]",
         27: "Changing U[1,3]",
         28: "Changing U[2,3]",
-        30: "Changing lattice parameter a", 
-        31: "Changing lattice parameter b", 
-        32: "Changing lattice parameter c", 
-        33: "Changing lattice alpha", 
-        34: "Changing lattice beta", 
-        35: "Changing lattice gamma", 
+        30: "Changing lattice parameter a",
+        31: "Changing lattice parameter b",
+        32: "Changing lattice parameter c",
+        33: "Changing lattice alpha",
+        34: "Changing lattice beta",
+        35: "Changing lattice gamma",
         40: "Changing convergence angle",
         41: "Changing accelerating voltage",
         50: "Changing Kappa",
@@ -1225,7 +1220,6 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     '''
     # starting point is the current best set of variables
     rc.last_fit = 1.0*rc.best_fit
-    print(rc.refined_variable)
 
     n_var = np.count_nonzero(dydx)
     if n_var > 1:
@@ -1250,7 +1244,6 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         print(f"    Extrapolation, should be better than {100*rc.best_fit:.2f}%")
         # initial trial uses the predicted best set of variables
         rc.refined_variable = 1.0*rc.next_var
-        print(rc.refined_variable)
         # simulate and get figure of merit
         fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
         if rc.plot > 1:
@@ -1259,12 +1252,10 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         if fom < rc.last_fit:
             rc.best_fit = fom*1.0
             rc.best_var = np.copy(rc.refined_variable)
-            print(rc.refined_variable)
             print("Point 1 of 3: extrapolated")  # yes, use it
         else:
             print("Point 1 of 3: previous best")  # no, use the best
         rc.refined_variable = np.copy(rc.best_var)
-        print(rc.refined_variable)
         print_LACBED(bloch, cbed, rc, 0)
         if rc.plot == 3:  # also do difference image
             print_LACBED(bloch, cbed, rc, 2)
@@ -1288,7 +1279,6 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     rc.refined_variable += delta  # point 2
     # check for validity: ADPs must be >=0
     rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
-    print(rc.refined_variable)
     # simulate and get figure of merit
     fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
     if rc.plot > 1:
@@ -1314,7 +1304,6 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     else:  # keep going
         rc.refined_variable += np.exp(0.4)*delta
     rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
-    print(rc.refined_variable)
     fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
     if rc.plot > 1:
         print_LACBED(bloch, cbed, rc, 0)
@@ -1334,10 +1323,9 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         last_x = 1.0*rc.refined_variable[j]
         # predict the next point as a minimum or a step on
         next_x, minny = px.convex(r3_var, r3_fom)
-        rc.refined_variable *= next_x/last_x
+        rc.refined_variable[j] *= next_x/last_x
         # print(f"**..** next x = {rc.refined_variable[j]}")
         rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
-        print(rc.refined_variable)
         fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
         if rc.plot > 1:
             print_LACBED(bloch, cbed, rc, 0)

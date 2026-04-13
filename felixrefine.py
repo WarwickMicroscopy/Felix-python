@@ -276,6 +276,7 @@ elif rc.scatter_factor_method > 3:
     # initialise pv, pc, kappa and electron density
     basis.pv = np.zeros(basis.n_atoms, dtype=float)
     basis.pc = np.zeros(basis.n_atoms, dtype=float)
+    basis.n_electrons = np.zeros(basis.n_atoms, dtype=float)
     # initial kappa is 1.0 for a neutral atom
     basis.kappa = np.ones(basis.n_atoms, dtype=float)
     # initial calculation of orbitals
@@ -301,9 +302,6 @@ elif 'A' in rc.refine_mode:
     # incompatible with anything else")
 else:  # atom-specific refinements can be done simultaneously
     atm = 0  # flag for atom-specific refinements
-    if len(rc.atomic_sites) > basis.n_atoms:
-        raise ValueError("Number of atomic sites to refine is larger than the \
-                         number of atoms")
     if 'B' in rc.refine_mode:
         atm = 1
         print("Refining Atomic Coordinates, B")
@@ -327,6 +325,9 @@ else:  # atom-specific refinements can be done simultaneously
 
     if atm == 1:
         # error check - do specified atom sites make sense
+        if len(rc.atomic_sites) > basis.n_atoms:
+            raise ValueError("Number of atomic sites to refine is larger \
+                             than the number of atoms")
         for i in range(len(rc.atomic_sites)):
             if rc.atomic_sites[i] >= basis.n_atoms:
                 raise ValueError(f"atomic_site {rc.atomic_sites[i]} selected for refinement but does not exist")

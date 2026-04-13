@@ -1274,8 +1274,6 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
 
 
 def deviation_parameter(bloch, rc):
-# def deviation_parameter(convergence_angle, image_radius, big_k_mag, g_pool,
-#                         g_pool_mag):
     # for LACBED pattern of size [m, m] and a set of g-vectors [n, 3]
     # this returns a 3D array of deviation parameters [m, m, n]
 
@@ -1312,8 +1310,7 @@ def deviation_parameter(bloch, rc):
     s_0 = np.expand_dims(np.zeros_like(k_x), axis=-1)
     bloch.s_g = np.concatenate([s_0, s_g], axis=-1)  # add 000
 
-    # return s_g, tilted_k
-    return
+
 
 
 def strong_beams(bloch, rc):
@@ -1351,14 +1348,9 @@ def strong_beams(bloch, rc):
 
 
 def blochwave(bloch, rc):
-# def blochwave(g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl,
-#           big_k_mag, g_dot_norm, k_dot_n_pix, debug):
-
     # strong_beam_indices gives the index of a strong beam in the beam pool
     # Use Sg and perturbation strength to define strong beams
-    # strong_beam = strong_beams(s_g_pix, ug_matrix, min_strong_beams)
     strong_beams(bloch, rc)
-    # print(f"spoink {bloch.strong_beam}")
     # which ones are new (i.e. not already in the output list)
     strong_new = np.setdiff1d(bloch.strong_beam, bloch.hkl_output)
     # make the structure matrix for this pixel, outputs top of the list
@@ -1395,30 +1387,18 @@ def blochwave(bloch, rc):
 
     # get eigenvalues (gamma), eigenvecs
     bloch.gamma, bloch.eigenvecs = eig(structure_matrix)
-    # Invert using LU decomposition (similar to ZGETRI in Fortran)
-    # bloch.inv_eigenvecs = inv(eigenvecs)
-    # inv_eigenvecs = eigenvecs  # *** placeholder while testing
 
-    # if debug:
-    #     np.set_printoptions(precision=3, suppress=True)
-    #     print("eigenvectors")
-    #     print(eigenvecs[:5, :5])
-
-    # return n_beams, strong_beam_indices, gamma, eigenvecs, inv_eigenvecs
-    return
+    if rc.debug:
+        np.set_printoptions(precision=3, suppress=True)
+        print("eigenvectors")
+        print(bloch.eigenvecs[:5, :5])
 
 
 def wave_functions(bloch, rc):
-    # def wave_functions(g_output, s_g_pix, ug_matrix, min_strong_beams,
-    #                    n_hkl, big_k_mag, g_dot_norm,
-    #                    k_dot_n_pix, thickness, debug):
     # calculates wave functions for a given thickness by calling the bloch
     # subroutine to get the eigenvector matrices
     # and evaluating for a range of thicknesses
 
-    # n_beams,strong_beam_indices, gamma, eigenvecs, inv_eigenvecs = blochwave(
-    #     g_output, s_g_pix, ug_matrix, min_strong_beams, n_hkl, big_k_mag,
-    #     g_dot_norm, k_dot_n_pix, debug)
     blochwave(bloch, rc)
     # calculate intensities
 
@@ -1446,10 +1426,8 @@ def wave_functions(bloch, rc):
     y_t = y[:, None] * phase
     z = bloch.eigenvecs @ y_t
     wave_funct = m_ii[:, None] * z
-    bloch.wave_function = np.array(wave_funct.T)
     # we expect an output shape [n_thickness, n_beams] so need to transpose
-    # return np.array(wave_function.T)
-    return
+    bloch.wave_function = np.array(wave_funct.T)
 
 
 def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list,
@@ -1804,18 +1782,17 @@ def electron_density(xtal, basis, rc):
 
         # p_atom(r)
         rho_total = (basis.core[i, :] + basis.valence[i, :])
-
         # atomic charge
-        n_electrons = np.trapz(rho_total * r**2, r)
-        if rc.iter_count != 0:
-            print(f"    Net charge on atom {basis.atom_label[i]} = {(n_electrons-Z):.2f} electrons")
-
-        # mean square radius of electron density for Ibers formula
-        basis.mean_sq_r2[i] = (np.trapz(rho_total * r**3, r) / n_electrons)**2
-
-        sim.plot_charge_density(xtal, basis, rc, i)
-
-    return
+        basis.n_electrons[i] = np.trapz(rho_total * r**2, r)
+        # plot
+        if rc.plot > 1:
+            sim.plot_charge_density(xtal, basis, rc, i)
+            # if rc.iter_count == 0:
+            #     sim.plot_charge_density(xtal, basis, rc, i)
+            # else:
+            #     # plot the radial charge density only when it's being refined
+            #     if rc.refined_variable_type[i] // 10 == 5:
+            #         sim.plot_charge_density(xtal, basis, rc, i)
 
 
 def f_kappa(xtal, basis, rc, g_pool_mag, i):
@@ -1877,11 +1854,16 @@ def f_kappa(xtal, basis, rc, g_pool_mag, i):
     f_k = f_kirkland(basis.atomic_number[i], g_pool_mag).ravel()
 
     # plot the scattering factor
-    sim.plot_f_e(basis, rc, s, f_kappa, f_k, i)
+    if rc.plot > 2:
+        sim.plot_f_e(basis, rc, s, f_kappa, f_k, i)
+        # if rc.iter_count == 0:
+        #     sim.plot_f_e(basis, rc, s, f_kappa, f_k, i)
+        # else:
+        #     # plot the radial charge density only when it's being refined
+        #     if rc.refined_variable_type[i] // 10 == 5:
+        #         sim.plot_f_e(basis, rc, s, f_kappa, f_k, i)
 
     return f_kappa
-
-
 
 
 def f0_test(xtal, rc):
@@ -1949,15 +1931,15 @@ def f0_test(xtal, rc):
 
     f0_ibers = np.array(f0_ibers)
     f0 = np.array(f0)
-    fig, ax = plt.subplots(1, 1)
-    w_f = 10
-    fig.set_size_inches(w_f, w_f)
-    plt.plot(z, f0, label='f(0) Kirkland')
-    plt.plot(z, f0_ibers, label='f(0) Ibers')
-    ax.legend(loc='best', fontsize=22)
-    plt.xticks(fontsize=22)
-    plt.yticks(fontsize=22)
-    plt.show()
+    # fig, ax = plt.subplots(1, 1)
+    # w_f = 10
+    # fig.set_size_inches(w_f, w_f)
+    # plt.plot(z, f0, label='f(0) Kirkland')
+    # plt.plot(z, f0_ibers, label='f(0) Ibers')
+    # ax.legend(loc='best', fontsize=22)
+    # plt.xticks(fontsize=22)
+    # plt.yticks(fontsize=22)
+    # plt.show()
     print(f"{f0_ibers/f0}")
 
 

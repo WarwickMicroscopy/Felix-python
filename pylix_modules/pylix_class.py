@@ -255,7 +255,7 @@ class Basis:
     valence: NDArray[np.floating] | None = None
     pc: NDArray[np.floating] | None = None
     pv: NDArray[np.floating] | None = None
-    mean_sq_r2: NDArray[np.floating] | None = None
+    n_electrons: NDArray[np.floating] | None = None
 
 
 @dataclass
