@@ -326,6 +326,9 @@ else:  # atom-specific refinements can be done simultaneously
             raise ValueError("scatter_factor_method must be 4 or 5 for kappa/Pv refinement")
         else:
             px.electron_density(xtal, basis, rc)
+    else:
+        # define n_electrons to avoid NoneType error
+        basis.n_electrons = np.zeros(2)
 
     if atm == 1:
         # error check - do specified atom sites make sense

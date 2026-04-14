@@ -327,7 +327,7 @@ def unique_atom_positions(xtal, basis, cell, rc):
     if rc.scatter_factor_method == 4:
         all_kappa = np.tile(basis.kappa, n_symops)
         all_pv = np.tile(basis.pv, n_symops)
-        all_mean_sq_r2 = np.tile(basis.mean_sq_r2, n_symops)
+        # all_mean_sq_r2 = np.tile(basis.mean_sq_r2, n_symops)
 
     # Generate all equivalent positions by applying symmetry
     symmetry_applied = \
@@ -375,7 +375,7 @@ def unique_atom_positions(xtal, basis, cell, rc):
     if rc.scatter_factor_method == 4:
         cell.kappa = all_kappa[i]
         cell.pv = all_pv[i]
-        cell.mean_sq_r2 = all_mean_sq_r2[i]
+        # cell.mean_sq_r2 = all_mean_sq_r2[i]
     cell.n_atoms = len(cell.atom_name)
     if rc.debug:
         np.set_printoptions(precision=5, suppress=True)
@@ -1739,7 +1739,7 @@ def electron_density(xtal, basis, rc):
     """
     basis.core = np.zeros([basis.n_atoms, xtal.n_points], dtype=float)
     basis.valence = np.zeros([basis.n_atoms, xtal.n_points], dtype=float)
-    basis.mean_sq_r2 = np.zeros(basis.n_atoms, dtype=float)
+    # basis.mean_sq_r2 = np.zeros(basis.n_atoms, dtype=float)
     r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
 
     for i in range(basis.n_atoms):
