@@ -429,23 +429,41 @@ def cc_s_xy(img1, img2):
     Pearson correlation.
 
     Returns dy, dx : float
-        Shift to apply to img2 so it aligns with img1
+        Stretch to apply to img2 so it aligns with img1
     """
     e0 = sobel(img2)  # experimental
     s0 = sobel(img1)  # simulation
     w = e0.shape[0]
-    xy_range = np.arange(-0.1, 0.1, 0.001)  # -10% to 10% steps of 1%
+    xy_range = np.arange(-0.06, 0.06, 0.001)  # -10% to 10% steps of 1%
 
-    # best y-shift
+    # best y-stretch
     best_fit = -np.inf
+    fit_p = []
     for dy in xy_range:
-        for dx in xy_range:
-            e1 = warp(e0, inverse_map=stretch(([dx, dy]), w).inverse)
-            fit = np.corrcoef(s0.ravel(), e1.ravel())[0, 1]
-            if fit > best_fit:
-                best_fit = fit
-                s_ii = (dx, dy)
-    return s_ii
+        e1 = warp(e0, inverse_map=stretch(([0, dy]), w).inverse)
+        fit = pcc(s0, e1)
+        # fit = np.corrcoef(s0.ravel(), e1.ravel())[0, 1]
+        fit_p.append(fit)
+        if fit > best_fit:
+            best_fit = fit
+            s_y = dy
+    plt.plot(fit_p)
+    plt.show()
+
+    best_fit = -np.inf
+    fit_p = []
+    for dx in xy_range:
+        e1 = warp(e0, inverse_map=stretch(([dx, 0]), w).inverse)
+        fit = pcc(s0, e1)
+        # fit = np.corrcoef(s0.ravel(), e1.ravel())[0, 1]
+        fit_p.append(fit)
+        if fit > best_fit:
+            best_fit = fit
+            s_x = dx
+    plt.plot(fit_p)
+    plt.show()
+
+    return s_x, s_y
 
 
 def affine(cbed, rc):
@@ -458,19 +476,25 @@ def affine(cbed, rc):
     sim000 = cbed.lacbed_sim[rc.best_t, :, :, 0]
     w = expt000.shape[0]
     # xy_range = np.arange(-0.1, 0.1, 0.001)  # -10% to 10% steps of 1%
+    plt.imshow(expt000)
+    plt.show()
+
+    # best y-stretch
+    s_ii = cc_s_xy(sim000, expt000)
+    expt000 = warp(expt000, inverse_map=stretch(s_ii, w).inverse)
+    plt.imshow(expt000)
+    plt.show()
 
     # translation
     t_ii = cc_d_xy(sim000, expt000)
     # expt000 = warp(expt000, inverse_map=shif(t_ii, w).inverse)
     expt000 = shift(expt000, shift=t_ii, order=3,
                     mode="constant", cval=0)
-
-    # best y-stretch
-    s_ii = cc_s_xy(sim000, expt000)
-    expt000 = warp(expt000, inverse_map=stretch(s_ii, w).inverse)
+    plt.imshow(expt000)
+    plt.show()
 
     # outputs
-    if rc.iter_count != 0 and rc.plot > 2:
+    if rc.iter_count != 0 and rc.plot > 1:
         print(f"    Image stretch x={100*s_ii[0]:.1f}%,  y={100*s_ii[1]:.1f}%")
 
         text_effect = withStroke(linewidth=3, foreground='black')
