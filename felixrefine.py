@@ -320,8 +320,12 @@ else:  # atom-specific refinements can be done simultaneously
     if 'K' in rc.refine_mode:
         atm = 1
         print("Refining valence electron population, K")
-    if 'J' or 'K' in rc.refine_mode:
-        px.electron_density(xtal, basis, rc)
+    if 'J' in rc.refine_mode or 'K' in rc.refine_mode:
+        # check we're using RHF scattering factors
+        if rc.scatter_factor_method < 4:
+            raise ValueError("scatter_factor_method must be 4 or 5 for kappa/Pv refinement")
+        else:
+            px.electron_density(xtal, basis, rc)
 
     if atm == 1:
         # error check - do specified atom sites make sense
