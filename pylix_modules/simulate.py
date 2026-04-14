@@ -27,8 +27,6 @@ from matplotlib.ticker import PercentFormatter
 import time
 import os
 from pylix_modules import pylix as px
-# from pylix_modules import pylix_dicts as fu
-# from pylix_modules import pylix_class as pc
 
 
 def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
@@ -384,20 +382,44 @@ def cc_d_xy(img1, img2):
     Returns dy, dx : float
         Shift to apply to img2 so it aligns with img1
     """
-    e0 = sobel(img2)  # experimental
     s0 = sobel(img1)  # simulation
-    w = e0.shape[0]
-    xy_range = np.arange(-0.1, 0.1, 0.001)  # -10% to 10% steps of 1%
+    e0 = sobel(img2)  # experimental
 
-    # best y-shift
-    best_fit = -np.inf
-    for dy in xy_range:
-        for dx in xy_range:
-            e1 = warp(e0, inverse_map=shif(([dx, dy]), w).inverse)
-            fit = np.corrcoef(s0.ravel(), e1.ravel())[0, 1]
-            if fit > best_fit:
-                best_fit = fit
-                t_ii = (dx, dy)
+    d_max = 5
+    s1 = s0[d_max:-d_max, d_max:-d_max]
+    moves = [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1),
+             (1, 1), (1, -1), (-1, 1), (-1, -1)]
+
+    x, y = (0, 0)
+    coord = np.array([-1, 0, 1])
+    max_iter = 121
+    # fit_p = []
+    for _ in range(max_iter):
+        shifts = moves + np.array([x, y])
+        e_stack = np.stack([e0[d_max+dx:-d_max+dx, d_max+dy:-d_max+dy]
+                            for dx, dy in shifts])  # shape (N, nx, ny)
+        # Flatten
+        e_flat = e_stack.reshape(e_stack.shape[0], -1)
+        s_flat = s1.ravel()
+        s_mean = s_flat.mean()
+        s_std = s_flat.std()
+
+        # zncc
+        e_mean = e_flat.mean(axis=1)
+        e_std = e_flat.std(axis=1)
+        cov = ((e_flat - e_mean[:, None]) * (s_flat - s_mean)).mean(axis=1)
+        corr = cov / (e_std * s_std)
+        # Find best one
+        if np.argmax(corr) == 0:  # best position is at (0, 0) + (x, y)
+            # sub-pixel
+            sx, fx = px.parabo3(coord+x, np.array([corr[2], corr[0], corr[1]]))
+            sy, fy = px.parabo3(coord+y, np.array([corr[4], corr[0], corr[3]]))
+            break
+        x, y = shifts[np.argmax(corr)]
+
+    # plt.plot(fit_p)
+    # plt.show()
+    t_ii = np.array([sx, sy])
     return t_ii
 
 
@@ -439,7 +461,9 @@ def affine(cbed, rc):
 
     # translation
     t_ii = cc_d_xy(sim000, expt000)
-    expt000 = warp(expt000, inverse_map=shif(t_ii, w).inverse)
+    # expt000 = warp(expt000, inverse_map=shif(t_ii, w).inverse)
+    expt000 = shift(expt000, shift=t_ii, order=3,
+                    mode="constant", cval=0)
 
     # best y-stretch
     s_ii = cc_s_xy(sim000, expt000)
@@ -706,8 +730,6 @@ def figure_of_merit(bloch, cbed, rc):
                     # the shift
                     # shift_ = phase_d_xy(a, b)
                     shift_ = cc_d_xy(a, b)
-                    # only accept shifts smaller than 5 pixels
-                    # if np.linalg.norm(shift_) < 5.0:
                     c = shift(b, shift=shift_, order=3,
                               mode="constant", cval=0)
                     # replace empty experimental pixels with simulation

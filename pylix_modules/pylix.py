@@ -1311,8 +1311,6 @@ def deviation_parameter(bloch, rc):
     bloch.s_g = np.concatenate([s_0, s_g], axis=-1)  # add 000
 
 
-
-
 def strong_beams(bloch, rc):
     # def strong_beams(s_g_pix, ug_matrix, min_strong_beams):
     """
