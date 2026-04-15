@@ -53,10 +53,18 @@ Plot:
     Unit Cell, beam pool, montages, figure of merit, 1
     As (1) + thickness plot, blur fit 2
     As (2) + difference plots, 3
+
+Write flag:
+    Basic print output, 0
+    More detailed output, 1
+
+Debug_ flag:
+    No output, 0
+    Lots of output, 1  *** could be merged with write flag and could add more levels
 # ------------------------------------
 
 # Control flags
-write_flag                = 1
+write_flag                = 0
 scatter_factor_method     = 0
 holz_flag                 = 0
 absorption_method         = 2

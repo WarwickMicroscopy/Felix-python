@@ -755,6 +755,10 @@ def figure_of_merit(bloch, cbed, rc):
                     # the shift
                     # shift_ = phase_d_xy(a, b)
                     shift_ = cc_d_xy(a, b)
+                    if rc.write_flag > 0:
+                        np.set_printoptions(precision=1, suppress=True)
+                        g_string = px.hkl_string(bloch.hkl_indices[bloch.hkl_output[j]])
+                        print(f"Pattern {g_string} translated by {shift_} pixels")
                     c = shift(b, shift=shift_, order=3,
                               mode="constant", cval=0)
                     # replace empty experimental pixels with simulation

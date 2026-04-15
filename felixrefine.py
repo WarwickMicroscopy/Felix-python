@@ -634,9 +634,9 @@ if 'S' not in rc.refine_mode:
                                                              rc.debug)
                     found = True
             if not found:
-                n_expt -= 1  # *_* we don't actually do anything with this!
+                n_expt -= 1
                 print(f"{g_string} not found")
-
+        print(f"  {n_expt} experimental patterns loaded")
         # print experimental LACBED patterns
         cbed.lacbed_expt = np.copy(cbed.lacbed_expt_raw)
         # print_LACBED has options 0=sim, 1=expt, 2=difference
