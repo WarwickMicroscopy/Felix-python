@@ -39,8 +39,8 @@ Refine method:
 Correlation type:
     Phase (Fourier), 0
     Pearson (zncc), 1
-    Pearson (zncc) with affine transform, 2
-    Pearson (zncc) with sub-pixel alignment, 3
+    Pearson (zncc) with sub-pixel alignment, 2
+    Pearson (zncc) with affine transform, 3
     Pearson (zncc) with Sobel filter, 4
 
 Image processing:
@@ -57,7 +57,7 @@ Plot:
 
 # Control flags
 write_flag                = 1
-scatter_factor_method     = 4
+scatter_factor_method     = 0
 holz_flag                 = 0
 absorption_method         = 2
 byte_size                 = 2
@@ -66,8 +66,8 @@ byte_size                 = 2
 Debye_model               = 0     
 
 # Beam selection criteria
-min_reflection_pool       = 400
-min_strong_beams          = 100
+min_reflection_pool       = 100
+min_strong_beams          = 20
 min_weak_beams            = 0
 g_limit                   = 0.0
 
@@ -88,17 +88,17 @@ acceptance_angle          = 0.0
 
 # Output options
 image_radius              = 76
-plot                      = 3
+plot                      = 2
 image_processing          = 1
 blur_radius               = 1.0
 print_flag                = 0
 debug                     = 0
 
 # Refinement specific flags
-refine_mode               = 'J,K'
+refine_mode               = 'D'
 refine_method             = 0
-refinement_scale          = 0.04
-correlation_type          = 1
+refinement_scale          = 0.2
+correlation_type          = 2
 atomic_sites              = [0]
 exit_criteria             = 0.00005
 precision                 = 0.00002

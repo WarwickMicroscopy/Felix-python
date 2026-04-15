@@ -447,8 +447,8 @@ def cc_s_xy(img1, img2):
         if fit > best_fit:
             best_fit = fit
             s_y = dy
-    plt.plot(fit_p)
-    plt.show()
+    # plt.plot(fit_p)
+    # plt.show()
 
     best_fit = -np.inf
     fit_p = []
@@ -460,8 +460,8 @@ def cc_s_xy(img1, img2):
         if fit > best_fit:
             best_fit = fit
             s_x = dx
-    plt.plot(fit_p)
-    plt.show()
+    # plt.plot(fit_p)
+    # plt.show()
 
     return s_x, s_y
 
@@ -476,22 +476,22 @@ def affine(cbed, rc):
     sim000 = cbed.lacbed_sim[rc.best_t, :, :, 0]
     w = expt000.shape[0]
     # xy_range = np.arange(-0.1, 0.1, 0.001)  # -10% to 10% steps of 1%
-    plt.imshow(expt000)
-    plt.show()
+    # plt.imshow(expt000)
+    # plt.show()
 
     # best y-stretch
     s_ii = cc_s_xy(sim000, expt000)
     expt000 = warp(expt000, inverse_map=stretch(s_ii, w).inverse)
-    plt.imshow(expt000)
-    plt.show()
+    # plt.imshow(expt000)
+    # plt.show()
 
     # translation
     t_ii = cc_d_xy(sim000, expt000)
     # expt000 = warp(expt000, inverse_map=shif(t_ii, w).inverse)
     expt000 = shift(expt000, shift=t_ii, order=3,
                     mode="constant", cval=0)
-    plt.imshow(expt000)
-    plt.show()
+    # plt.imshow(expt000)
+    # plt.show()
 
     # outputs
     if rc.iter_count != 0 and rc.plot > 1:
@@ -717,7 +717,7 @@ def figure_of_merit(bloch, cbed, rc):
         plt.xticks(fontsize=22)
         plt.yticks(fontsize=22)
     # affine transformation option, once we have a best thickness
-    if rc.correlation_type > 1 and rc.iter_count > 1:
+    if rc.correlation_type > 2 and rc.iter_count > 1:
         affine(cbed, rc)
     # loop over thicknesses
     lacbed_sobel = np.empty_like(cbed.lacbed_sim)
@@ -736,13 +736,14 @@ def figure_of_merit(bloch, cbed, rc):
             if rc.plot > 1:
                 plt.plot(radii, b_fom)
             rc.blur_radius = radii[np.argmin(b_fom)]
+        # apply the blur
         if rc.image_processing != 0:
             for j in range(rc.n_out):
                 cbed.lacbed_sim[i, :, :, j] = gaussian_filter(cbed.lacbed_sim[i, :, :, j],
                                                            sigma=rc.blur_radius)
         rc.lacbed_expt = np.copy(cbed.lacbed_expt_raw)
         # sub-pixel shift for correlation if required
-        if rc.correlation_type == 3:
+        if rc.correlation_type> 1:
             for j in range(rc.n_out):
                 # we only do this for zncc images that exist
                 if np.sum(cbed.lacbed_expt_raw[j]) != 0:
@@ -762,7 +763,7 @@ def figure_of_merit(bloch, cbed, rc):
                     cbed.lacbed_expt[:, :, j] = c
 
         # affine transformation option without a best thickness
-        if rc.correlation_type == 2 and rc.iter_count == 0:
+        if rc.correlation_type == 3 and rc.iter_count == 0:
             affine(cbed, rc)
 
         # figure of merit
@@ -773,7 +774,6 @@ def figure_of_merit(bloch, cbed, rc):
             fom_array[i, :] = 1.0 - zncc(cbed.lacbed_expt,
                                          cbed.lacbed_sim[i, :, :, :])
         else:  # correlation_type = 4
-            lacbed_sobel = np.empty_like(cbed.lacbed_sim)
             for j in range(rc.n_out):
                 lacbed_sobel[i, :, :, j] = sobel(cbed.lacbed_sim[i, :, :, j])
             fom_array[i, :] = 1.0 - zncc(sobel(cbed.lacbed_expt),
