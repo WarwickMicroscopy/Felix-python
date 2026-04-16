@@ -1782,7 +1782,7 @@ def electron_density(xtal, basis, rc):
         rho_total = (basis.core[i, :] + basis.valence[i, :])
         # atomic charge
         basis.n_electrons[i] = np.trapz(rho_total * r**2, r)
-        label = basis.atom_label[rc.atom_refine_flag[i]]
+        label = basis.atom_label[i]
         print(f" Atom {label}: Current charge {(basis.n_electrons[i]-Z):.2f} e")
         # plot
         if rc.plot > 1:
