@@ -226,12 +226,13 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     cbed.lacbed_sim = np.zeros([rc.n_thickness, 2*rc.image_radius,
                                2*rc.image_radius, len(bloch.hkl_output)],
                                dtype=float)
-
     print("Bloch wave calculation...", end=' ')
     if rc.debug:
         print("")
         print("output indices")
         print(bloch.hkl_output[:15])
+
+    # = = = = = = = = = = = = = = = = = = = = = = = =
     # pixel by pixel calculations from here
     for pix_x in range(2*rc.image_radius):
         # progess
@@ -243,9 +244,6 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
             bloch.k_dot_n_pix = bloch.k_dot_n[pix_x, pix_y]
 
             # works for multiple thicknesses
-            # wave_functions = px.wave_functions(
-            #     bloch.hkl_output, s_g_pix, ug_matrix, v.min_strong_beams, n_hkl,
-            #     big_k_mag, g_dot_norm, k_dot_n_pix, v.thickness, v.debug)
             px.wave_functions(bloch, rc)
 
             intensity = np.abs(bloch.wave_function)**2
@@ -253,6 +251,7 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
             # Map diffracted intensity to required output g vectors
             # note x and y swapped!
             cbed.lacbed_sim[:, -pix_y, pix_x, :] = intensity[:, :len(bloch.hkl_output)]
+    # = = = = = = = = = = = = = = = = = = = = = = = =
 
     # timings
     setup = mid-strt
@@ -1094,8 +1093,8 @@ def print_current_var(xtal, basis, rc, i):
         35: ("Current lattice gamma", "{:.4f}"),
         40: ("Current convergence angle", "{:.3f} Å^-1"),
         41: ("Current accelerating voltage", "{:.1f} kV"),
-        50: (f" Atom {label}: Current charge {(basis.n_electrons[atom_id]-Z):.2f} e,  Kappa", "{:.3f}"),
-        51: (f" Atom {label}: Current charge {(basis.n_electrons[atom_id]-Z):.2f} e, Pv", "{:.4f}")
+        50: (f" Atom {label}: Kappa", "{:.3f}"),
+        51: (f" Atom {label}: Pv", "{:.4f}")
             }
 
     if typ == 20:  # atomic coords

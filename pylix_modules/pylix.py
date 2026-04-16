@@ -1782,6 +1782,8 @@ def electron_density(xtal, basis, rc):
         rho_total = (basis.core[i, :] + basis.valence[i, :])
         # atomic charge
         basis.n_electrons[i] = np.trapz(rho_total * r**2, r)
+        label = basis.atom_label[rc.atom_refine_flag[i]]
+        print(f" Atom {label}: Current charge {(basis.n_electrons[i]-Z):.2f} e")
         # plot
         if rc.plot > 1:
             sim.plot_charge_density(xtal, basis, rc, i)
@@ -1791,6 +1793,7 @@ def electron_density(xtal, basis, rc):
             #     # plot the radial charge density only when it's being refined
             #     if rc.refined_variable_type[i] // 10 == 5:
             #         sim.plot_charge_density(xtal, basis, rc, i)
+    return
 
 
 def f_kappa(xtal, basis, rc, g_pool_mag, i):

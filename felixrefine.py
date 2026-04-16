@@ -357,7 +357,7 @@ else:  # atom-specific refinements can be done simultaneously
     elif rc.correlation_type == 1:
         print("  Using Pearson correlation")
     elif rc.correlation_type == 2:
-        print("  Using Pearson correlation with affine transform")
+        print("  Using Pearson correlation with sub-pixel alignment")
     elif rc.correlation_type == 3:
         print("  Using Pearson correlation with affine transform and sub-pixel alignment")
     elif rc.correlation_type == 4:
