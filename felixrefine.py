@@ -683,7 +683,10 @@ if 'S' not in rc.refine_mode:
             print("Gradient descent, one parameter at a time")
             # dydx is a vector along the gradient in n-dimensional space
             dydx = np.zeros(rc.n_variables)
-            for i in range(rc.n_variables):
+            # random order
+            indices = np.arange(rc.n_variables)
+            np.random.shuffle(indices)
+            for i in indices:
                 dydx[i] = 1.0
                 print(f"Refinement vector {dydx}")
                 # single is just multiparameter with one non-zero value
