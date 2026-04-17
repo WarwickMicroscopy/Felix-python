@@ -1206,6 +1206,9 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
                         dtype=np.complex128)
     cell.f_g_prime = np.zeros([cell.n_atoms, bloch.n_hkl, bloch.n_hkl],
                               dtype=np.complex128)
+    # update Coppens orbitals (whole basis)
+    if rc.scatter_factor_method > 3:
+        electron_density(xtal, basis, rc)
     for i in range(basis.n_atoms):
         # get the scattering factor for the basis basis.f_g
         if rc.scatter_factor_method == 0:
@@ -1221,8 +1224,6 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
             uniq_q = f_doyle_turner(basis.atomic_number[i],
                                     bloch.uniq_gmag).ravel()
         elif rc.scatter_factor_method > 3:
-            # update orbitals
-            electron_density(xtal, basis, rc)
             uniq_q = f_kappa(xtal, basis, rc, bloch.uniq_gmag, i)
         else:
             raise ValueError("No scattering factors chosen in felix.inp")

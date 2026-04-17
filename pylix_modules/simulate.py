@@ -753,6 +753,10 @@ def figure_of_merit(bloch, cbed, rc):
                     b = (b0 - np.mean(b0))/np.std(b0)
                     # the shift
                     # shift_ = phase_d_xy(a, b)
+                    plt.imshow(a)
+                    plt.show()
+                    plt.imshow(b)
+                    plt.show()
                     shift_ = cc_d_xy(a, b)
                     if rc.write_flag > 0:
                         np.set_printoptions(precision=1, suppress=True)

@@ -220,7 +220,7 @@ if "atom_type_symbol" in cif_dict:
     # of atom_type_symbol?  If so, it should go here
 
 basis.atom_delta = np.zeros([basis.n_atoms, 3])  # direction of movement
-
+basis.n_electrons = np.zeros(basis.n_atoms, dtype=float)  # for kappa refinement
 
 # %% read felix.inp
 inp_dict = px.read_inp_file('felix.inp')
@@ -276,7 +276,6 @@ elif rc.scatter_factor_method > 3:
     # initialise pv, pc, kappa and electron density
     basis.pv = np.zeros(basis.n_atoms, dtype=float)
     basis.pc = np.zeros(basis.n_atoms, dtype=float)
-    basis.n_electrons = np.zeros(basis.n_atoms, dtype=float)
     # initial kappa is 1.0 for a neutral atom
     basis.kappa = np.ones(basis.n_atoms, dtype=float)
     # initial calculation of orbitals
@@ -326,9 +325,6 @@ else:  # atom-specific refinements can be done simultaneously
             raise ValueError("scatter_factor_method must be 4 or 5 for kappa/Pv refinement")
         else:
             px.electron_density(xtal, basis, rc)
-    else:
-        # define n_electrons to avoid NoneType error
-        basis.n_electrons = np.zeros(2)
 
     if atm == 1:
         # error check - do specified atom sites make sense
