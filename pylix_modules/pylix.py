@@ -312,7 +312,7 @@ def unique_atom_positions(xtal, basis, cell, rc):
     # Determine the size of the all_atom_position array
     n_symops = xtal.symmetry_vector.shape[0]
     total_atoms = n_symops * basis.n_atoms
-    if rc.debug:
+    if rc.debug > 2:
         np.set_printoptions(precision=5, suppress=True)
         for i in range(basis.n_atoms):
             print(f"Basis anisotropic u_aniso [{i}]")
@@ -371,13 +371,12 @@ def unique_atom_positions(xtal, basis, cell, rc):
     # Generate atomic numbers based on the elemental symbols
     cell.atomic_number = np.array([fu.atomic_number_map[na]
                                    for na in cell.atom_name])
-
     if rc.scatter_factor_method == 4:
         cell.kappa = all_kappa[i]
         cell.pv = all_pv[i]
         # cell.mean_sq_r2 = all_mean_sq_r2[i]
     cell.n_atoms = len(cell.atom_name)
-    if rc.debug:
+    if rc.debug > 2:
         np.set_printoptions(precision=5, suppress=True)
         for i in range(3):
             print(f"Anisotropic u_aniso [{i}]")
@@ -387,8 +386,6 @@ def unique_atom_positions(xtal, basis, cell, rc):
 
 
 def reference_frames(xtal, cell, rc):
-# def reference_frames(cell_a, xtal.cell_b, xtal.cell_c, xtal.cell_alpha, xtal.cell_beta, xtal.cell_gamma,
-#                      space_group, rc.x_direction, rc.z_direction, norm_dir_c, debug):
     """
     Produces reciprocal lattice vectors and related parameters
 
@@ -488,14 +485,8 @@ def reference_frames(xtal, cell, rc):
     xtal.cr_vec_m = (2.0*np.pi * np.cross(xtal.a_vec_m, xtal.b_vec_m) /
                 np.dot(xtal.c_vec_m, np.cross(xtal.a_vec_m, xtal.b_vec_m)))
 
-    # put the crystal in the micrcoscope reference frame, in Å
-    cell.atom_coordinate = (cell.atom_position[:, 0, np.newaxis]*xtal.a_vec_m +
-                            cell.atom_position[:, 1, np.newaxis]*xtal.b_vec_m +
-                            cell.atom_position[:, 2, np.newaxis]*xtal.c_vec_m)
-
-
     # Output to check
-    if rc.debug:
+    if rc.debug > 1:
         print(" ")
         np.set_printoptions(precision=5, suppress=True)
         print(f"a = {xtal.cell_a}, b = {xtal.cell_b}, c = {xtal.cell_c}")
@@ -531,6 +522,13 @@ def reference_frames(xtal, cell, rc):
 
     # return a_vec_m, b_vec_m, c_vec_m, ar_vec_m, br_vec_m, cr_vec_m, norm_dir_m, t_mat_o2m, t_mat_c2o
     return
+
+
+def update_coordinates(xtal, cell):
+    # put the crystal in the micrcoscope reference frame, in Å
+    cell.atom_coordinate = (cell.atom_position[:, 0, np.newaxis]*xtal.a_vec_m +
+                            cell.atom_position[:, 1, np.newaxis]*xtal.b_vec_m +
+                            cell.atom_position[:, 2, np.newaxis]*xtal.c_vec_m)
 
 
 def change_origin(basis, space_group):
@@ -1119,7 +1117,12 @@ def hkl_make(xtal, hkl, bloch, rc):
     bloch.hkl_output = np.array(hkl_output)
     bloch.n_hkl = len(bloch.g_pool)
 
-    # return hkl, g_pool, g_mag, np.array(hkl_output)
+    # initialise g-vector matrix, array [n_hkl, n_hkl, 3]
+    bloch.g_matrix = np.zeros((bloch.n_hkl, bloch.n_hkl, 3))
+    # fill it with g-vectors
+    bloch.g_matrix = bloch.g_pool[:, np.newaxis, :] \
+        - bloch.g_pool[np.newaxis, :, :]
+
     return
 
 
@@ -1152,11 +1155,6 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
     bloch.g_matrix : size [n_hkl,n_hkl]
     bloch.g_dot_norm : size [n_hkl,n_hkl]
     """
-    # initialise g-vector matrix, array [n_hkl, n_hkl, 3]
-    bloch.g_matrix = np.zeros((bloch.n_hkl, bloch.n_hkl, 3))
-    # fill it with g-vectors
-    bloch.g_matrix = bloch.g_pool[:, np.newaxis, :] \
-        - bloch.g_pool[np.newaxis, :, :]
     # calculate g.r for all g-vectors and atoms [n_hkl, n_hkl, cell.n_atoms]
     g_dot_r = np.einsum('ijk,lk->ijl', bloch.g_matrix, cell.atom_coordinate)
     # exp(i g.r) [n_hkl, n_hkl, cell.n_atoms]
@@ -1183,7 +1181,7 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
     B_aniso = np.divide(Ugg, np.square(g_magnitude),
                         out=np.zeros_like(Ugg),
                         where=(g_magnitude != 0)) * 8 * np.pi**2
-    if rc.debug:
+    if rc.debug > 2:
         np.set_printoptions(precision=3, suppress=True)
         print("g_magnitudes")
         print(g_magnitude[:5, :5])
@@ -1241,7 +1239,7 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
                                                      B_aniso[i, :, :],
                                                      basis.atomic_number[i],
                                                      bloch.electron_velocity)
-        if rc.debug:
+        if rc.debug > 0:
             print(f"basis.f_g [{i}]")
             print(f"{basis.f_g[i, :5, :5]}")
             print("  ")
@@ -1387,7 +1385,7 @@ def blochwave(bloch, rc):
     # get eigenvalues (gamma), eigenvecs
     bloch.gamma, bloch.eigenvecs = eig(structure_matrix)
 
-    if rc.debug:
+    if rc.debug > 3:
         np.set_printoptions(precision=3, suppress=True)
         print("eigenvectors")
         print(bloch.eigenvecs[:5, :5])
@@ -2031,7 +2029,7 @@ def read_dm3(file_path, x, debug):
 
     We look for delimiters %%%% that lies between tag labels and data
     """
-    if debug:
+    if debug > 3:
         print(f"Reading image {file_path}")
     y = x
     try:
@@ -2115,7 +2113,7 @@ def read_dm3(file_path, x, debug):
                         data_form = "bool"
                     elif tag_form == 20:
                         data_form = "2D array"
-                    if debug:
+                    if debug > 3:
                         print(f"{tag_label}: {data_type}, {data_form}")
 
                     # Check if it's the second 'Data' tag

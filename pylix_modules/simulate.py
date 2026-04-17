@@ -98,10 +98,11 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
         print(f"  Mean inner potential = {mip:.1f} Volts")
 
     # output for debugging
-    if rc.debug:
+    if rc.debug > 1:
         print("Symmetry operations:")
         for i in range(len(xtal.symmetry_matrix)):
             print(f"{i+1}: {xtal.symmetry_matrix[i]}, {xtal.symmetry_vector[i]}")
+    if rc.debug > 0:
         np.set_printoptions(precision=5, suppress=True)
         print("atomic coordinates")
         for i in range(cell.n_atoms):
@@ -112,7 +113,9 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     # only if necessary, i.e. for cell dimensions F, G
     if np.any(typ == 3) or rc.iter_count == 0:
         px.reference_frames(xtal, cell, rc)
-
+    # apply the reference frame to the unit cell
+    if np.any(typ == 2) or rc.iter_count == 0:
+        px.update_coordinates(xtal, cell)
     # plot unit cell and save .xyz file
     if rc.iter_count == 0 and rc.plot >= 1:
         atom_cvals = mcolors.Normalize(vmin=1, vmax=103)
@@ -208,7 +211,7 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
 
     if rc.iter_count == 0:
         print("    Ug matrix constructed")
-    if rc.debug:
+    if rc.debug > 0:
         np.set_printoptions(precision=3, suppress=True)
         print(100*bloch.ug_matrix[:5, :5])
 
@@ -227,7 +230,7 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
                                2*rc.image_radius, len(bloch.hkl_output)],
                                dtype=float)
     print("Bloch wave calculation...", end=' ')
-    if rc.debug:
+    if rc.debug > 0:
         print("")
         print("output indices")
         print(bloch.hkl_output[:15])
