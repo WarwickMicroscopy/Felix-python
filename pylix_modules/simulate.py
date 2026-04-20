@@ -836,7 +836,7 @@ def figure_of_merit(bloch, cbed, rc):
         # mean figure of merit
         # error in thickness, from 5 best values
         i_start, i_end = take_5(fom_array[rc.best_t, :])
-        t_sigma = variable_sigma(fom_array[rc.i_start:i_end, :])
+        t_sigma = variable_sigma(fom_array[i_start:i_end, :])
 
         print(f"  Best thickness {t_nm:.1f}+/-{0.1*t_sigma:.1f} nm")
         # mean figure of merit
@@ -1378,6 +1378,9 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     r3_fom = np.zeros(3)
     r3_var[0] = 1.0*rc.best_var[j]  # using principal variable
     r3_fom[0] = 1.0*rc.best_fit
+    # variable and fit arrays for error estimate
+    V = np.zeros(3)
+    F = np.zeros(3)
 
     # set the refinement scale
     # if rc.refined_variable_type[j] == 20:  # atom coordinates, absolute value
