@@ -716,6 +716,19 @@ def take_5(F):
     return i_start, i_end
 
 
+def variable_sigma(V, F):
+    # the square root of (parabola uncertainty / curvature of fit)
+    p = np.polyfit(V, F, 2)  # quadratic fit to the 3 points
+    a, b, c = p
+    Ffit = np.polyval(p, V)  # fitted curve
+    sigma_F = np.std(F - Ffit)  # estimate noise in merit function
+    if abs(sigma_F) > 1e-6:
+        sigma = np.sqrt(sigma_F / a)
+    else:
+        sigma = 0.0
+    return sigma
+
+
 def figure_of_merit(bloch, cbed, rc):
     """
     takes as an input cbed.lacbed_sim, shape [n_thickness, pix_x, pix_y, n_out]
@@ -835,8 +848,9 @@ def figure_of_merit(bloch, cbed, rc):
         t_nm = 0.1*rc.thickness[rc.best_t]
         # mean figure of merit
         # error in thickness, from 5 best values
-        i_start, i_end = take_5(fom_array[rc.best_t, :])
-        t_sigma = variable_sigma(fom_array[i_start:i_end, :])
+        # i0, i1 = take_5(fom_array[rc.best_t, :])
+        # t_sigma = variable_sigma(rc.thickness[i0:i1], fom_array[:, i0:i1])
+        t_sigma = 0
 
         print(f"  Best thickness {t_nm:.1f}+/-{0.1*t_sigma:.1f} nm")
         # mean figure of merit
@@ -1122,36 +1136,65 @@ def print_current_var(xtal, basis, rc, i):
     label = basis.atom_label[atom_id]
     Z = basis.atomic_number[atom_id]
 
-    # dictionary of format strings
-    formats = {
-        10: ("Current Ug amplitude", "{:.3f}"),
-        11: ("Current Ug phase", "{:.3f}"),
-        21: (f" Atom {label}: Current occupancy", "{:.3f}+/-", "{:.3f}"),
-        22: (f" Atom {label}: Current B_iso", "{:.3f}+/-", "{:.3f}"),
-        23: (f" Atom {label}: Current U[1,1]", "{:.5f}+/-", "{:.5f}"),
-        24: (f" Atom {label}: Current U[2,2]", "{:.5f}+/-", "{:.5f}"),
-        25: (f" Atom {label}: Current U[3,3]", "{:.5f}+/-", "{:.5f}"),
-        26: (f" Atom {label}: Current U[1,2]", "{:.5f}+/-", "{:.5f}"),
-        27: (f" Atom {label}: Current U[1,3]", "{:.5f}+/-", "{:.5f}"),
-        28: (f" Atom {label}: Current U[2,3]", "{:.5f}+/-", "{:.5f}"),
-        30: ("Current lattice parameter a", "{:.4f}+/-", "{:.4f}"),
-        31: ("Current lattice parameter b", "{:.4f}+/-", "{:.4f}"),
-        32: ("Current lattice parameter c", "{:.4f}+/-", "{:.4f}"),
-        33: ("Current lattice alpha", "{:.4f}+/-", "{:.4f}"),
-        34: ("Current lattice beta", "{:.4f}+/-", "{:.4f}"),
-        35: ("Current lattice gamma", "{:.4f}+/-", "{:.4f}"),
-        40: ("Current convergence angle", "{:.3f}+/-", "{:.3f} Å^-1"),
-        41: ("Current accelerating voltage", "{:.1f}+/-", "{:.1f} kV"),
-        50: (f" Atom {label}: Kappa", "{:.3f}+/-", "{:.3f}"),
-        51: (f" Atom {label}: Pv", "{:.4f}+/-", "{:.4f}")
-            }
-
-    if typ == 20:  # atomic coords
-        with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
-            print(f"  Atom {atom_id}: {label}  {basis.atom_position[atom_id, :]}")
-    elif typ in formats:
-        label, fmt, fmt_s = formats[typ]
-        print(f"  {label} {fmt.format(var)}{fmt.format(sigma)}")
+    if sigma > 1e-06:
+        # dictionary of format strings
+        formats = {
+            10: ("Current Ug amplitude", "{:.3f}"),
+            11: ("Current Ug phase", "{:.3f}"),
+            21: (f" Atom {label}: Current occupancy", "{:.3f}+/-", "{:.3f}"),
+            22: (f" Atom {label}: Current B_iso", "{:.3f}+/-", "{:.3f}"),
+            23: (f" Atom {label}: Current U[1,1]", "{:.5f}+/-", "{:.5f}"),
+            24: (f" Atom {label}: Current U[2,2]", "{:.5f}+/-", "{:.5f}"),
+            25: (f" Atom {label}: Current U[3,3]", "{:.5f}+/-", "{:.5f}"),
+            26: (f" Atom {label}: Current U[1,2]", "{:.5f}+/-", "{:.5f}"),
+            27: (f" Atom {label}: Current U[1,3]", "{:.5f}+/-", "{:.5f}"),
+            28: (f" Atom {label}: Current U[2,3]", "{:.5f}+/-", "{:.5f}"),
+            30: ("Current lattice parameter a", "{:.4f}+/-", "{:.4f}"),
+            31: ("Current lattice parameter b", "{:.4f}+/-", "{:.4f}"),
+            32: ("Current lattice parameter c", "{:.4f}+/-", "{:.4f}"),
+            33: ("Current lattice alpha", "{:.4f}+/-", "{:.4f}"),
+            34: ("Current lattice beta", "{:.4f}+/-", "{:.4f}"),
+            35: ("Current lattice gamma", "{:.4f}+/-", "{:.4f}"),
+            40: ("Current convergence angle", "{:.3f}+/-", "{:.3f} Å^-1"),
+            41: ("Current accelerating voltage", "{:.1f}+/-", "{:.1f} kV"),
+            50: (f" Atom {label}: Kappa", "{:.3f}+/-", "{:.3f}"),
+            51: (f" Atom {label}: Pv", "{:.4f}+/-", "{:.4f}")
+                }
+        if typ == 20:  # atomic coords
+            with np.printoptions(formatter={'float': lambda x: f"{x:.5f}"}):
+                print(f"  Atom {atom_id}: {label}  {basis.atom_position[atom_id, :]}")
+        elif typ in formats:
+            label, fmt, fmt_s = formats[typ]
+            print(f"  {label} {fmt.format(var)}{fmt.format(sigma)}")
+    else:
+        formats = {
+            10: ("Current Ug amplitude", "{:.3f}"),
+            11: ("Current Ug phase", "{:.3f}"),
+            21: (f" Atom {label}: Current occupancy", "{:.3f}"),
+            22: (f" Atom {label}: Current B_iso", "{:.3f}"),
+            23: (f" Atom {label}: Current U[1,1]", "{:.5f}"),
+            24: (f" Atom {label}: Current U[2,2]", "{:.5f}"),
+            25: (f" Atom {label}: Current U[3,3]", "{:.5f}"),
+            26: (f" Atom {label}: Current U[1,2]", "{:.5f}"),
+            27: (f" Atom {label}: Current U[1,3]", "{:.5f}"),
+            28: (f" Atom {label}: Current U[2,3]", "{:.5f}"),
+            30: ("Current lattice parameter a", "{:.4f}"),
+            31: ("Current lattice parameter b", "{:.4f}+"),
+            32: ("Current lattice parameter c", "{:.4f}"),
+            33: ("Current lattice alpha", "{:.4f}"),
+            34: ("Current lattice beta", "{:.4f}"),
+            35: ("Current lattice gamma", "{:.4f}"),
+            40: ("Current convergence angle", "{:.3f} Å^-1"),
+            41: ("Current accelerating voltage", "{:.1f} kV"),
+            50: (f" Atom {label}: Kappa", "{:.3f}"),
+            51: (f" Atom {label}: Pv", "{:.4f}")
+                }
+        if typ == 20:  # atomic coords
+            with np.printoptions(formatter={'float': lambda x: f"{x:.5f}"}):
+                print(f"  Atom {atom_id}: {label}  {basis.atom_position[atom_id, :]}")
+        elif typ in formats:
+            label, fmt = formats[typ]
+            print(f"  {label} {fmt.format(var)}")
 
 
 def variable_message(vtype):
@@ -1300,19 +1343,6 @@ def variable_check(x, t):
             continue_ = False
             print("  ADP set to zero")
     return x, continue_
-
-
-def variable_sigma(V, F):
-    # the square root of (parabola uncertainty / curvature of fit)
-    p = np.polyfit(V, F, 2)  # quadratic fit to the 3 points
-    a, b, c = p
-    Ffit = np.polyval(p, V)  # fitted curve
-    sigma_F = np.std(F - Ffit)  # estimate noise in merit function
-    if abs(sigma_F) > 1e-6:
-        sigma = np.sqrt(sigma_F / a)
-    else:
-        sigma = 0.0
-    return sigma
 
 
 def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
