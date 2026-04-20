@@ -756,11 +756,11 @@ def figure_of_merit(bloch, cbed, rc):
                     b = (b0 - np.mean(b0))/np.std(b0)
                     # the shift
                     # shift_ = phase_d_xy(a, b)
-                    plt.imshow(a)
-                    plt.show()
-                    plt.imshow(b)
-                    plt.show()
-                    shift_ = cc_d_xy(a, b)
+                    # plt.imshow(a)
+                    # plt.show()
+                    # plt.imshow(b)
+                    # plt.show()
+                    shift_ = cc_d_xy(b, a)
                     if rc.write_flag > 0:
                         np.set_printoptions(precision=1, suppress=True)
                         g_string = px.hkl_string(bloch.hkl_indices[bloch.hkl_output[j]])
@@ -770,6 +770,8 @@ def figure_of_merit(bloch, cbed, rc):
                     # replace empty experimental pixels with simulation
                     # (which )prevents them from contribution to the zncc)
                     c[c == 0] = a[c == 0]
+                    # plt.imshow(c)
+                    # plt.show()
                     cbed.lacbed_expt[:, :, j] = c
 
         # affine transformation option without a best thickness
@@ -1062,12 +1064,17 @@ def save_LACBED(xtal, bloch, cbed, rc):
     # j = v.best_t
     for j in range(rc.n_thickness):
         t = int(rc.thickness[j]/10)
+        t_ = f"{t}nm"
+        if not os.path.isdir(t_):
+            os.mkdir(t_)
+        os.chdir(t_)
         for i in range(cbed.lacbed_sim.shape[3]):
             signed_str = "".join(f"{x:+d}" for x in bloch.hkl_indices[bloch.hkl_output[i], :])
             fname = f"{xtal.chemical_formula}_{signed_str}_{t}nm.bin"
             cbed.lacbed_sim[j, :, :, i].tofile(fname)
             fname = f"{xtal.chemical_formula}_{signed_str}_{t}nm.png"
             plt.imsave(fname, cbed.lacbed_sim[j, :, :, i], cmap='gray')
+        os.chdir("..")
     os.chdir("..")
 
 
