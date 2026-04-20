@@ -524,7 +524,7 @@ if 'S' not in rc.refine_mode:
         print(f"Number of independent variables = {rc.n_variables}")
 
     rc.refined_variable = np.array(rc.refined_variable)
-    independent_delta = np.zeros(rc.n_variables)
+    rc.refined_variable_sigma = np.zeros(rc.n_variables)
     rc.refined_variable_type = np.array(rc.refined_variable_type)
     rc.refined_variable_atom = np.array(rc.atom_refine_flag[:rc.n_variables])
 else:
@@ -660,8 +660,6 @@ if 'S' not in rc.refine_mode:
     rc.last_fit = fom*1.0
     r3_var = np.zeros(3)  # for parabolic minimum
     r3_fom = np.zeros(3)
-    # *_*dunno what this is
-    independent_delta = 0.0
 
     # for a plot
     rc.fit_log = ([rc.last_fit])

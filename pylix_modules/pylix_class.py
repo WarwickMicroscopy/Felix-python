@@ -80,6 +80,8 @@ class RunControl:
     n_out: int = 0  # number of output reflections
     refined_variable: NDArray[np.floating] | None = None
     refined_variable_type: NDArray[np.integer] | None = None
+    refined_variable_sigma: NDArray[np.integer] | None = None
+    lacbed_fit_sigma: NDArray[np.integer] | None = None
     atom_refine_flag: NDArray[np.integer] | None = None
     atom_refine_vec: NDArray[np.floating] | None = None
     atom_coord_vec: NDArray[np.floating] | None = None

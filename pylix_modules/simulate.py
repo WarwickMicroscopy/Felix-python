@@ -693,6 +693,29 @@ def plot_charge_density(xtal, basis, rc, i):
     plt.show()
 
 
+def take_5(F):
+    # takes the 5 points closest to a minimum, accounting for boundaries
+    npts = 5
+    i0 = np.argmin(F)   # index of minimum
+    n = len(F)
+    half = npts // 2
+    # initial bounds
+    i_start = i0 - half
+    i_end = i0 + half + 1
+    # shift window if it goes out of bounds
+    if i_start < 0:
+        i_end += -i_start
+        i_start = 0
+    if i_end > n:
+        i_start -= (i_end - n)
+        i_end = n
+    # final safety (in case n < npts)
+    i_start = max(i_start, 0)
+    i_end = min(i_end, n)
+
+    return i_start, i_end
+
+
 def figure_of_merit(bloch, cbed, rc):
     """
     takes as an input cbed.lacbed_sim, shape [n_thickness, pix_x, pix_y, n_out]
@@ -706,6 +729,7 @@ def figure_of_merit(bloch, cbed, rc):
     """
     # figure of merit - might need a NaN check? size [n_thick, n_out]
     fom_array = np.ones([rc.n_thickness, rc.n_out])
+    rc.lacbed_fit_sigma = np.zeros(rc.n_thickness)
     # difference images
     cbed.diff_image = np.copy(cbed.lacbed_expt)
     # set up plot for blur optimisation
@@ -790,6 +814,8 @@ def figure_of_merit(bloch, cbed, rc):
                 lacbed_sobel[i, :, :, j] = sobel(cbed.lacbed_sim[i, :, :, j])
             fom_array[i, :] = 1.0 - zncc(sobel(cbed.lacbed_expt),
                                          lacbed_sobel[i, :, :, :])
+        # standard deviation of fits for this thickness
+        rc.lacbed_fit_sigma[i] = np.std(fom_array[i,:])
 
         # difference images
         if rc.plot == 3:
@@ -801,20 +827,27 @@ def figure_of_merit(bloch, cbed, rc):
                 b = (b0 - np.mean(b0))/np.std(b0)
                 cbed.diff_image[:, :, j] = a-b
 
-    # plot of blur fit when rc.image_processing == 2
-    if rc.plot >= 2 and rc.image_processing == 2:
-        plt.show()
     # print best values
     if rc.image_processing == 2:
         print(f"  Best blur={rc.blur_radius:.1f}")
     if rc.n_thickness > 1:
         rc.best_t = np.argmin(np.mean(fom_array, axis=1))
-        print(f"  Best thickness {0.1*rc.thickness[rc.best_t]:.1f} nm")
+        t_nm = 0.1*rc.thickness[rc.best_t]
+        # mean figure of merit
+        # error in thickness, from 5 best values
+        i_start, i_end = take_5(fom_array[rc.best_t, :])
+        t_sigma = variable_sigma(fom_array[rc.i_start:i_end, :])
+
+        print(f"  Best thickness {t_nm:.1f}+/-{0.1*t_sigma:.1f} nm")
         # mean figure of merit
         fom = np.mean(fom_array[rc.best_t])
     else:
         rc.best_t = 0
         fom = np.mean(fom_array[0])
+
+    # plot of blur fit when rc.image_processing == 2
+    if rc.plot >= 2 and rc.image_processing == 2:
+        plt.show()
 
     # plot FoM vs thickness for all LACBED patterns
     if rc.plot >= 2 and rc.n_thickness > 1:
@@ -1081,8 +1114,10 @@ def save_LACBED(xtal, bloch, cbed, rc):
 def print_current_var(xtal, basis, rc, i):
     # prints the variable being refined
     # ***does this need to come after beam pool construction get the right 
-    # atomic charge???
+    # atomic charge???  YES
     typ = rc.refined_variable_type[i]  # variable type & subtype
+    var = rc.refined_variable[i]  # variable 
+    sigma = rc.refined_variable_sigma[i]  # error estimate
     atom_id = rc.atom_refine_flag[i]
     label = basis.atom_label[atom_id]
     Z = basis.atomic_number[atom_id]
@@ -1091,32 +1126,32 @@ def print_current_var(xtal, basis, rc, i):
     formats = {
         10: ("Current Ug amplitude", "{:.3f}"),
         11: ("Current Ug phase", "{:.3f}"),
-        21: (f" Atom {label}: Current occupancy", "{:.3f}"),
-        22: (f" Atom {label}: Current B_iso", "{:.3f}"),
-        23: (f" Atom {label}: Current U[1,1]", "{:.5f}"),
-        24: (f" Atom {label}: Current U[2,2]", "{:.5f}"),
-        25: (f" Atom {label}: Current U[3,3]", "{:.5f}"),
-        26: (f" Atom {label}: Current U[1,2]", "{:.5f}"),
-        27: (f" Atom {label}: Current U[1,3]", "{:.5f}"),
-        28: (f" Atom {label}: Current U[2,3]", "{:.5f}"),
-        30: ("Current lattice parameter a", "{:.4f}"),
-        31: ("Current lattice parameter b", "{:.4f}"),
-        32: ("Current lattice parameter c", "{:.4f}"),
-        33: ("Current lattice alpha", "{:.4f}"),
-        34: ("Current lattice beta", "{:.4f}"),
-        35: ("Current lattice gamma", "{:.4f}"),
-        40: ("Current convergence angle", "{:.3f} Å^-1"),
-        41: ("Current accelerating voltage", "{:.1f} kV"),
-        50: (f" Atom {label}: Kappa", "{:.3f}"),
-        51: (f" Atom {label}: Pv", "{:.4f}")
+        21: (f" Atom {label}: Current occupancy", "{:.3f}+/-", "{:.3f}"),
+        22: (f" Atom {label}: Current B_iso", "{:.3f}+/-", "{:.3f}"),
+        23: (f" Atom {label}: Current U[1,1]", "{:.5f}+/-", "{:.5f}"),
+        24: (f" Atom {label}: Current U[2,2]", "{:.5f}+/-", "{:.5f}"),
+        25: (f" Atom {label}: Current U[3,3]", "{:.5f}+/-", "{:.5f}"),
+        26: (f" Atom {label}: Current U[1,2]", "{:.5f}+/-", "{:.5f}"),
+        27: (f" Atom {label}: Current U[1,3]", "{:.5f}+/-", "{:.5f}"),
+        28: (f" Atom {label}: Current U[2,3]", "{:.5f}+/-", "{:.5f}"),
+        30: ("Current lattice parameter a", "{:.4f}+/-", "{:.4f}"),
+        31: ("Current lattice parameter b", "{:.4f}+/-", "{:.4f}"),
+        32: ("Current lattice parameter c", "{:.4f}+/-", "{:.4f}"),
+        33: ("Current lattice alpha", "{:.4f}+/-", "{:.4f}"),
+        34: ("Current lattice beta", "{:.4f}+/-", "{:.4f}"),
+        35: ("Current lattice gamma", "{:.4f}+/-", "{:.4f}"),
+        40: ("Current convergence angle", "{:.3f}+/-", "{:.3f} Å^-1"),
+        41: ("Current accelerating voltage", "{:.1f}+/-", "{:.1f} kV"),
+        50: (f" Atom {label}: Kappa", "{:.3f}+/-", "{:.3f}"),
+        51: (f" Atom {label}: Pv", "{:.4f}+/-", "{:.4f}")
             }
 
     if typ == 20:  # atomic coords
         with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
             print(f"  Atom {atom_id}: {label}  {basis.atom_position[atom_id, :]}")
     elif typ in formats:
-        label, fmt = formats[typ]
-        print(f"  {label} {fmt.format(rc.refined_variable[i])}")
+        label, fmt, fmt_s = formats[typ]
+        print(f"  {label} {fmt.format(var)}{fmt.format(sigma)}")
 
 
 def variable_message(vtype):
@@ -1267,6 +1302,19 @@ def variable_check(x, t):
     return x, continue_
 
 
+def variable_sigma(V, F):
+    # the square root of (parabola uncertainty / curvature of fit)
+    p = np.polyfit(V, F, 2)  # quadratic fit to the 3 points
+    a, b, c = p
+    Ffit = np.polyval(p, V)  # fitted curve
+    sigma_F = np.std(F - Ffit)  # estimate noise in merit function
+    if abs(sigma_F) > 1e-6:
+        sigma = np.sqrt(sigma_F / a)
+    else:
+        sigma = 0.0
+    return sigma
+
+
 def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
                           rc, dydx, single=True):
     '''
@@ -1380,6 +1428,9 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         dydx[j] = 0.0
         return dydx
 
+    # Error estimate
+    rc.refined_variable_sigma[j] = variable_sigma(r3_var, r3_fom)
+
     # We continue downhill until we get a predicted minnymum
     minny = False
     while minny is False:
@@ -1402,8 +1453,10 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         i = np.argmax(r3_fom)
         r3_var[i] = 1.0*rc.refined_variable[j]
         r3_fom[i] = 1.0*fom
-        with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
-            print("-.-----------------------------")  # {r3_var}: {r3_fom}")
+        # Error estimate
+        rc.refined_variable_sigma[j] = variable_sigma(r3_var, r3_fom)
+        # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
+        print("-.-----------------------------")  # {r3_var}: {r3_fom}")
     # we have taken the principal variable to a minimum
     dydx[j] = 0.0
     print(f"    ====Refined variable {j}====")
