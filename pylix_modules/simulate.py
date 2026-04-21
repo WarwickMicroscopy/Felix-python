@@ -418,7 +418,7 @@ def cc_d_xy(img1, img2):
             sy, fy = px.parabo3(coord+y, np.array([corr[4], corr[0], corr[3]]))
             break
         x, y = shifts[np.argmax(corr)]
-        if x > d_max or  y > d_max:
+        if x >= d_max or y >= d_max:
             sx, sy = (0, 0)
             break
 
