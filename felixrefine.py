@@ -167,7 +167,7 @@ for i in range(basis.n_atoms):
         group_id += 1
         basis.mult_occ[cluster] = group_id
 
-# Thermal displacement parameters, we work with u_ij
+# Thermal displacement parameters, we work with u_aniso
 # ADP tensor Uij with isotropic components on the diagonal
 basis.u_aniso = np.zeros((basis.n_atoms, 3, 3))
 idx = np.arange(3)
@@ -442,7 +442,7 @@ if 'S' not in rc.refine_mode:
 
     if 'E' in rc.refine_mode:  # Anisotropic ADPs, only refine non-zero
         for i in range(n_sites):
-            U = basis.u_ij[rc.atomic_sites[i]]
+            U = basis.u_aniso[rc.atomic_sites[i]]
             # Extract symmetric independent components
             aniso_params = np.array([U[0, 0], U[1, 1], U[2, 2],
                                      U[0, 1], U[0, 2], U[1, 2]])
