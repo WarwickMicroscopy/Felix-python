@@ -679,7 +679,7 @@ if 'S' not in rc.refine_mode:
             dydx = np.zeros(rc.n_variables)
             # random order for 3 or more variables
             indices = np.arange(rc.n_variables)
-            if rc.n_variables > 2:
+            if rc.n_variables > 2 or rc.iter_count == 0:
                 np.random.shuffle(indices)
             for i in indices:
                 dydx[i] = 1.0
