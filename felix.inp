@@ -61,11 +61,19 @@ Write flag:
 Debug_ flag:
     No output, 0
     Lots of output, 1  *** could be merged with write flag and could add more levels
+
+precision_ value:
+    Improvement in figure of merit must be better than this to continue refinement of the current variable,
+    typical value 0.05% = 0.0005
+    
+exit_ criteria:
+    Improvement in figure of merit must be better than this over a whole cycle to continue refinement,
+    typical value 0.05% = 0.0005
 # ------------------------------------
 
 # Control flags
 write_flag                = 0
-scatter_factor_method     = 4
+scatter_factor_method     = 0
 holz_flag                 = 0
 absorption_method         = 2
 byte_size                 = 2
@@ -74,8 +82,8 @@ byte_size                 = 2
 Debye_model               = 0     
 
 # Beam selection criteria
-min_reflection_pool       = 100
-min_strong_beams          = 20
+min_reflection_pool       = 400
+min_strong_beams          = 80
 min_weak_beams            = 0
 g_limit                   = 0.0
 
@@ -83,19 +91,19 @@ g_limit                   = 0.0
 incident_beam_direction   = [1, -1, 0]
 x_direction               = [0, 0, -1]
 normal                    = [1, -1, 0]
-initial_thickness         = 1480.0
-final_thickness           = 1481.0
+initial_thickness         = 1140.0
+final_thickness           = 1221.0
 delta_thickness           = 20.0
 debye_waller_constant     = 0.0
 absorption_per            = 10.0
 
 # Microscope settings
-convergence_angle         = 0.661
+convergence_angle         = 0.725
 accelerating_voltage_kv   = 200.0
 acceptance_angle          = 0.0
 
 # Output options
-image_radius              = 76
+image_radius              = 84
 plot                      = 2
 image_processing          = 1
 blur_radius               = 1.0
@@ -103,12 +111,12 @@ print_flag                = 0
 debug                     = 0
 
 # Refinement specific flags
-refine_mode               = 'J'
+refine_mode               = 'E'
 refine_method             = 0
-refinement_scale          = 0.2
+refinement_scale          = 0.0005
 correlation_type          = 2
-atomic_sites              = [0]
-exit_criteria             = 0.00005
-precision                 = 0.00002
+atomic_sites              = [2]
+precision                 = 0.0005
+exit_criteria             = 0.0005
 weighting_flag            = 0
 no_of_ugs                 = 40

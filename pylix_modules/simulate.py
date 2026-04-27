@@ -980,7 +980,9 @@ def update_variables(xtal, basis, rc):
                 basis.u_aniso[j, 0, 0] = var
             elif sub[i] == 4:  # u[1,1]
                 basis.u_aniso[j, 1, 1] = var
+                # basis.u_aniso[j, 2, 2] = var
             elif sub[i] == 5:  # u[2,2]
+                # basis.u_aniso[j, 1, 1] = var
                 basis.u_aniso[j, 2, 2] = var
             elif sub[i] == 6:  # u[1,2]
                 basis.u_aniso[j, 0, 1] = var
@@ -1339,8 +1341,8 @@ def variable_check(x, t):
     t: integer, type of variable being refined
     '''
     continue_ = True
-    #Atomic displacement parameters
-    if int(t/10) == 2 and np.mod(t, 10) > 0:
+    # Atomic displacement parameters
+    if int(t/10) == 2 and 0 < np.mod(t, 10) < 6:
         if x < 0:
             x = 0.0
             continue_ = False
@@ -1479,7 +1481,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
         if rc.plot > 1:
             print_LACBED(bloch, cbed, rc, 0)
-        if (fom < rc.best_fit):  # it's better, keep going
+        if (rc.best_fit - fom < rc.precision):  # it's better, keep going
             rc.best_fit = fom*1.0
             rc.best_var = np.copy(rc.refined_variable)
         if not cont:  # variable has gone out of the valid range
