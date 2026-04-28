@@ -239,8 +239,7 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     # pixel by pixel calculations from here
     for pix_x in range(2*rc.image_radius):
         # progess
-        print(f"\rBloch wave calculation... {50*pix_x/rc.image_radius:.0f}%",
-              end="")
+        print(f"\rBloch wave calculation... {50*pix_x/rc.image_radius:.0f}%", end="")
 
         for pix_y in range(2*rc.image_radius):
             bloch.s_g_pix = np.squeeze(bloch.s_g[pix_x, pix_y, :])
@@ -1434,7 +1433,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         print_LACBED(bloch, cbed, rc, 0)
     # check for no effect
     improvement = rc.best_fit - fom
-    if improvement < rc.precision:
+    if abs(improvement) < rc.precision:
         cont = False
         print(f"{variable_message(t)} has no effect!")
     r3_var[1] = 1.0*rc.refined_variable[j]
