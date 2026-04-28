@@ -1433,8 +1433,10 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     if rc.plot > 1:
         print_LACBED(bloch, cbed, rc, 0)
     # check for no effect
-    if fom == rc.best_fit:
-        raise ValueError(f"{variable_message(t)} has no effect!")
+    improvement = rc.best_fit - fom
+    if improvement < rc.precision:
+        cont = False
+        print(f"{variable_message(t)} has no effect!")
     r3_var[1] = 1.0*rc.refined_variable[j]
     r3_fom[1] = 1.0*fom
     print("-b-----------------------------")  # {r3_var},{r3_fom}")
@@ -1481,7 +1483,9 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
         if rc.plot > 1:
             print_LACBED(bloch, cbed, rc, 0)
-        if (rc.best_fit - fom < rc.precision):  # it's better, keep going
+        improvement = rc.best_fit - fom
+        print(f"    Improvement in figure of merit is {improvement}")
+        if (improvement > rc.precision):  # it's better, keep going
             rc.best_fit = fom*1.0
             rc.best_var = np.copy(rc.refined_variable)
         if not cont:  # variable has gone out of the valid range

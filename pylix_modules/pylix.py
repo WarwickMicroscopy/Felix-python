@@ -312,11 +312,11 @@ def unique_atom_positions(xtal, basis, cell, rc):
     # Determine the size of the all_atom_position array
     n_symops = xtal.symmetry_vector.shape[0]
     total_atoms = n_symops * basis.n_atoms
-    if rc.debug > 2:
-        np.set_printoptions(precision=5, suppress=True)
-        for i in range(basis.n_atoms):
-            print(f"Basis anisotropic u_aniso [{i}]")
-            print(f"{basis.u_aniso[i, :5, :5]}")
+    # if rc.debug > 2:
+    np.set_printoptions(precision=5, suppress=True)
+    for i in range(basis.n_atoms):
+        print(f"Basis anisotropic u_aniso [{i}]")
+        print(f"{basis.u_aniso[i, :5, :5]}")
 
 
     # Initialize arrays to store all atom positions, including duplicates
@@ -371,11 +371,12 @@ def unique_atom_positions(xtal, basis, cell, rc):
     # Generate atomic numbers based on the elemental symbols
     cell.atomic_number = np.array([fu.atomic_number_map[na]
                                    for na in cell.atom_name])
+
+    cell.n_atoms = len(cell.atom_name)
+
     if rc.scatter_factor_method == 4:
         cell.kappa = all_kappa[i]
         cell.pv = all_pv[i]
-        # cell.mean_sq_r2 = all_mean_sq_r2[i]
-    cell.n_atoms = len(cell.atom_name)
     if rc.debug > 2:
         np.set_printoptions(precision=5, suppress=True)
         for i in range(3):
