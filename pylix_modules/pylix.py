@@ -312,12 +312,14 @@ def unique_atom_positions(xtal, basis, cell, rc):
     # Determine the size of the all_atom_position array
     n_symops = xtal.symmetry_vector.shape[0]
     total_atoms = n_symops * basis.n_atoms
-    # if rc.debug > 2:
-    np.set_printoptions(precision=5, suppress=True)
-    for i in range(basis.n_atoms):
-        print(f"Basis anisotropic u_aniso [{i}]")
-        print(f"{basis.u_aniso[i, :5, :5]}")
-
+    if rc.debug > 2:
+        np.set_printoptions(precision=5, suppress=True)
+        for i in range(basis.n_atoms):
+            print(f"Basis anisotropic u_aniso [{i}]")
+            print(f"{basis.u_aniso[i, :5, :5]}")
+            # hack for LiNbO3 with Mg doping
+    # print(f"Li occupancy = {basis.occupancy[0]}")
+    # print(f"Mg occupancy = {basis.occupancy[1]}")
 
     # Initialize arrays to store all atom positions, including duplicates
     all_atom_label = np.tile(basis.atom_label, n_symops)
@@ -2204,6 +2206,13 @@ def convex(x, y):
     # parabolic fit to a minimum is possible.  If so, returns the predicted
     # minimum. If not, returns the next x to check (both cases, minny=False).
     # Looks to see if we have captured a minimum (minny=True).
+
+    # error check - NaN, inf
+    if not np.all(np.isfinite(x)) or not np.all(np.isfinite(y)):
+        raise ValueError("x or y contains NaN or inf")
+    # error check - same x points
+    if np.min(np.diff(np.sort(x))) < 1e-6:
+        return x[np.argmin(y)], True
 
     tol = 1e-10
     hi = np.argmax(x)  # index of lowest x

@@ -73,7 +73,7 @@ exit_ criteria:
 
 # Control flags
 write_flag                = 0
-scatter_factor_method     = 0
+scatter_factor_method     = 4
 holz_flag                 = 0
 absorption_method         = 2
 byte_size                 = 2
@@ -91,8 +91,8 @@ g_limit                   = 0.0
 incident_beam_direction   = [1, -1, 0]
 x_direction               = [0, 0, -1]
 normal                    = [1, -1, 0]
-initial_thickness         = 1140.0
-final_thickness           = 1221.0
+initial_thickness         = 1100.0
+final_thickness           = 1301.0
 delta_thickness           = 20.0
 debye_waller_constant     = 0.0
 absorption_per            = 10.0
@@ -111,12 +111,12 @@ print_flag                = 0
 debug                     = 0
 
 # Refinement specific flags
-refine_mode               = 'E'
+refine_mode               = 'K'
 refine_method             = 0
-refinement_scale          = 0.0005
+refinement_scale          = 0.05
 correlation_type          = 2
-atomic_sites              = [2]
-precision                 = 0.0005
+atomic_sites              = [0]
+precision                 = 0.00005
 exit_criteria             = 0.0005
 weighting_flag            = 0
 no_of_ugs                 = 40

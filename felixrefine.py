@@ -683,7 +683,7 @@ if 'S' not in rc.refine_mode:
                 np.random.shuffle(indices)
             for i in indices:
                 dydx[i] = 1.0
-                print(f"Refinement vector {dydx}")
+                # print(f"Refinement vector {dydx}")
                 # single is just multiparameter with one non-zero value
                 # rc.next_var = rc.best_var - dydx*rc.refinement_scale
                 dydx = sim.refine_multi_variable(xtal, basis, cell, hkl,

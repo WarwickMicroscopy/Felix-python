@@ -1340,12 +1340,19 @@ def variable_check(x, t):
     t: integer, type of variable being refined
     '''
     continue_ = True
-    # Atomic displacement parameters
+
+    # error check - NaN, inf
+    if not np.all(np.isfinite(x)):
+        continue_ = False
+        x = 0.0
+        print("  ***NaN or inf: refined variable set to zero***")
+        
+    # Occupancy and Atomic displacement parameters
     if int(t/10) == 2 and 0 < np.mod(t, 10) < 6:
         if x < 0:
             x = 0.0
             continue_ = False
-            print("  ADP set to zero")
+            print("  ***Refined variable set to zero***")
     return x, continue_
 
 
@@ -1390,6 +1397,9 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         # initial trial uses the predicted best set of variables
         rc.refined_variable = 1.0*rc.next_var
         # simulate and get figure of merit
+        # check for validity: Occupancy and ADPs must be >=0
+        rc.refined_variable[j], cont = variable_check(rc.refined_variable[j],
+                                                      t)
         fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
         if rc.plot > 1:
             print_LACBED(bloch, cbed, rc, 0)
@@ -1413,8 +1423,8 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     r3_var[0] = 1.0*rc.best_var[j]  # using principal variable
     r3_fom[0] = 1.0*rc.best_fit
     # variable and fit arrays for error estimate
-    V = np.zeros(3)
-    F = np.zeros(3)
+    # V = np.zeros(3)
+    # F = np.zeros(3)
 
     # set the refinement scale
     # if rc.refined_variable_type[j] == 20:  # atom coordinates, absolute value
@@ -1425,7 +1435,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     print("Refining, point 2 of 3")
     # Change the array of variables by a small amount
     rc.refined_variable += delta  # point 2
-    # check for validity: ADPs must be >=0
+    # check for validity: Occupancy and ADPs must be >=0
     rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
     # simulate and get figure of merit
     fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
@@ -1436,13 +1446,16 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     # print(f"*dbg*   imp={improvement}")
     if abs(improvement) < rc.precision:
         cont = False
-        print(f"{variable_message(t)} has no effect!")
-    r3_var[1] = 1.0*rc.refined_variable[j]
-    r3_fom[1] = 1.0*fom
-    print("-b-----------------------------")  # {r3_var},{r3_fom}")
-    if fom < rc.best_fit:
-        rc.best_fit = fom*1.0
-        rc.best_var = np.copy(rc.refined_variable)
+        print(f"{variable_message(t)} has no significant effect")
+        print("-next--------------------------")  # {r3_var},{r3_fom}")
+    else:
+        r3_var[1] = 1.0*rc.refined_variable[j]
+        r3_fom[1] = 1.0*fom
+        # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
+        print("-b-----------------------------")  # {r3_var},{r3_fom}")
+        if fom < rc.best_fit:
+            rc.best_fit = fom*1.0
+            rc.best_var = np.copy(rc.refined_variable)
     if not cont:
         dydx[j] = 0.0
         return dydx
@@ -1460,6 +1473,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         print_LACBED(bloch, cbed, rc, 0)
     r3_var[2] = 1.0*rc.refined_variable[j]
     r3_fom[2] = 1.0*fom
+    # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
     print("-c-----------------------------")  # {r3_var},{r3_fom}")
     if fom < rc.best_fit:
         rc.best_fit = fom*1.0
@@ -1469,7 +1483,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         return dydx
 
     # Error estimate
-    rc.refined_variable_sigma[j] = variable_sigma(r3_var, r3_fom)
+    # rc.refined_variable_sigma[j] = variable_sigma(r3_var, r3_fom)
 
     # We continue downhill until we get a predicted minnymum
     minny = False
@@ -1479,16 +1493,21 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         next_x, minny = px.convex(r3_var, r3_fom)
         rc.refined_variable[j] *= next_x/last_x
         # print(f"**..** next x = {rc.refined_variable[j]}")
-        rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
+        rc.refined_variable[j], cont = variable_check(rc.refined_variable[j],
+                                                      t)
+        if not cont:
+            dydx[j] = 0.0
+            return dydx
         fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
         if rc.plot > 1:
             print_LACBED(bloch, cbed, rc, 0)
+        # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
+        print("-.-----------------------------")  # {r3_var}: {r3_fom}")
         improvement = rc.best_fit - fom
-        # print(f"    Improvement in figure of merit is {improvement}")
         if (improvement > rc.precision):  # it's better, keep going
             rc.best_fit = fom*1.0
             rc.best_var = np.copy(rc.refined_variable)
-        if not cont:  # variable has gone out of the valid range
+        else:  # we're done
             dydx[j] = 0.0
             return dydx
         # replace worst point with this one
@@ -1497,8 +1516,6 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         r3_fom[i] = 1.0*fom
         # Error estimate
         rc.refined_variable_sigma[j] = variable_sigma(r3_var, r3_fom)
-        # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
-        print("-.-----------------------------")  # {r3_var}: {r3_fom}")
     # we have taken the principal variable to a minimum
     dydx[j] = 0.0
     print(f"    ====Refined variable {j}====")
