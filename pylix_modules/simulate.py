@@ -1496,8 +1496,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         rc.refined_variable[j], cont = variable_check(rc.refined_variable[j],
                                                       t)
         if not cont:
-            dydx[j] = 0.0
-            return dydx
+            minny = True
         fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
         if rc.plot > 1:
             print_LACBED(bloch, cbed, rc, 0)
@@ -1507,13 +1506,12 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         if (improvement > rc.precision):  # it's better, keep going
             rc.best_fit = fom*1.0
             rc.best_var = np.copy(rc.refined_variable)
-        else:  # we're done
-            dydx[j] = 0.0
-            return dydx
-        # replace worst point with this one
-        i = np.argmax(r3_fom)
-        r3_var[i] = 1.0*rc.refined_variable[j]
-        r3_fom[i] = 1.0*fom
+            # replace worst point with this one
+            i = np.argmax(r3_fom)
+            r3_var[i] = 1.0*rc.refined_variable[j]
+            r3_fom[i] = 1.0*fom
+        # else:  # we're done
+        #     minny = True
         # Error estimate
         rc.refined_variable_sigma[j] = variable_sigma(r3_var, r3_fom)
     # we have taken the principal variable to a minimum
