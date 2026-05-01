@@ -61,14 +61,17 @@ Write flag:
 Debug_ flag:
     No output, 0
     Lots of output, 1  *** could be merged with write flag and could add more levels
-
-precision_ value:
-    Improvement in figure of merit must be better than this to continue refinement of the current variable,
-    typical value 0.05% = 0.0005
     
-exit_ criteria:
-    Improvement in figure of merit must be better than this over a whole cycle to continue refinement,
-    typical value 0.05% = 0.0005
+exit_ criteria, refinement_ scale & precision_:
+    Each refined variable is changed by refinement scale, and a figure of merit is determined.
+    Cycles of refinement are performed, with refinement scale halving each cycle.
+    Refinement cycles continue until an exit criteria is reached as follows.
+    When positive:
+        Stop when improvement in figure of merit drops below exit criteria over a whole cycle.
+        Typical exit criteria 0.05% = 0.0005
+        Individual variable refinement exits when improvement in FoM falls below exit criteria/10
+    When negative:
+        Stop when refinement scale becomes smaller than precision
 # ------------------------------------
 
 # Control flags
@@ -111,12 +114,12 @@ print_flag                = 0
 debug                     = 0
 
 # Refinement specific flags
-refine_mode               = 'K'
+refine_mode               = 'J'
 refine_method             = 0
 refinement_scale          = 0.05
 correlation_type          = 2
-atomic_sites              = [0]
-precision                 = 0.00005
-exit_criteria             = 0.0005
+atomic_sites              = [2]
+precision                 = 0.025
+exit_criteria             = -1
 weighting_flag            = 0
 no_of_ugs                 = 40

@@ -1443,10 +1443,9 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         print_LACBED(bloch, cbed, rc, 0)
     # check for no effect
     improvement = rc.best_fit - fom
-    # print(f"*dbg*   imp={improvement}")
-    if abs(improvement) < rc.precision:
+    if abs(improvement) < 0.1*rc.exit_criteria:
         cont = False
-        print(f"{variable_message(t)} has no significant effect")
+        # print(f"{variable_message(t)} has no significant effect")
         print("-next--------------------------")  # {r3_var},{r3_fom}")
     else:
         r3_var[1] = 1.0*rc.refined_variable[j]
@@ -1503,15 +1502,15 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
         print("-.-----------------------------")  # {r3_var}: {r3_fom}")
         improvement = rc.best_fit - fom
-        if (improvement > rc.precision):  # it's better, keep going
+        if (improvement > 0.1*rc.exit_criteria):  # it's better, keep going
             rc.best_fit = fom*1.0
             rc.best_var = np.copy(rc.refined_variable)
             # replace worst point with this one
             i = np.argmax(r3_fom)
             r3_var[i] = 1.0*rc.refined_variable[j]
             r3_fom[i] = 1.0*fom
-        # else:  # we're done
-        #     minny = True
+        else:  # we're done
+            minny = True
         # Error estimate
         rc.refined_variable_sigma[j] = variable_sigma(r3_var, r3_fom)
     # we have taken the principal variable to a minimum
