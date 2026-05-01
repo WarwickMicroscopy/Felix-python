@@ -1501,10 +1501,11 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
             print_LACBED(bloch, cbed, rc, 0)
         # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
         print("-.-----------------------------")  # {r3_var}: {r3_fom}")
-        improvement = rc.best_fit - fom
-        if (improvement > 0.1*rc.exit_criteria):  # it's better, keep going
+        if fom < rc.best_fit:
             rc.best_fit = fom*1.0
             rc.best_var = np.copy(rc.refined_variable)
+        improvement = rc.best_fit - fom
+        if (improvement > 0.1*rc.exit_criteria):  # it's better, keep going
             # replace worst point with this one
             i = np.argmax(r3_fom)
             r3_var[i] = 1.0*rc.refined_variable[j]
