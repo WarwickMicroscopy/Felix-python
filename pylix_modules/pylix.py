@@ -1785,7 +1785,7 @@ def electron_density(xtal, basis, rc):
         # atomic charge
         basis.n_electrons[i] = np.trapz(rho_total * r**2, r)
         label = basis.atom_label[i]
-        print(f"  Atom {label}: Current charge {(basis.n_electrons[i]-Z):.2f} e")
+        print(f"  Atom {label}: Oxidation number {(Z-basis.n_electrons[i]):.2f}")
         # plot
         if rc.plot > 1:
             sim.plot_charge_density(xtal, basis, rc, i)
