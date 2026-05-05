@@ -278,8 +278,6 @@ elif rc.scatter_factor_method > 3:
     basis.pc = np.zeros(basis.n_atoms, dtype=float)
     # initial kappa is 1.0 for a neutral atom
     basis.kappa = np.ones(basis.n_atoms, dtype=float)
-    # initial calculation of orbitals
-    # px.electron_density(xtal, basis, rc)
 else:
     raise ValueError("No scattering factors chosen in felix.inp")
 
@@ -313,16 +311,12 @@ else:  # atom-specific refinements can be done simultaneously
     if 'E' in rc.refine_mode:
         atm = 1
         print("Refining Anisotropic atomic displacement parameters, E")
-    if 'J' in rc.refine_mode:
-        atm = 1
-        print("Refining Kappa, J")
     if 'K' in rc.refine_mode:
         atm = 1
-        print("Refining valence electron population, K")
-    if 'J' in rc.refine_mode or 'K' in rc.refine_mode:
+        print("Refining Kappa, K")
         # check we're using RHF scattering factors
         if rc.scatter_factor_method < 4:
-            raise ValueError("scatter_factor_method must be 4 or 5 for kappa/Pv refinement")
+            raise ValueError("scatter_factor_method must be 4 or 5 for kappa refinement")
         else:
             px.electron_density(xtal, basis, rc)
 
@@ -498,19 +492,19 @@ if 'S' not in rc.refine_mode:
         rc.atom_refine_flag.append(-1)
         rc.atom_refine_vec.append(nullvec)  # no atom movement
 
-    if 'J' in rc.refine_mode:
+    if 'K' in rc.refine_mode:
         for i in range(n_sites):
             rc.refined_variable.append(basis.kappa[rc.atomic_sites[i]])
             rc.refined_variable_type.append(50)
             rc.atom_refine_flag.append(rc.atomic_sites[i])
             rc.atom_refine_vec.append(nullvec)  # no atom movement
 
-    if 'K' in rc.refine_mode:
-        for i in range(n_sites):
-            rc.refined_variable.append(basis.pv[rc.atomic_sites[i]])
-            rc.refined_variable_type.append(51)
-            rc.atom_refine_flag.append(rc.atomic_sites[i])
-            rc.atom_refine_vec.append(nullvec)  # no atom movement
+    # if 'K' in rc.refine_mode:
+    #     for i in range(n_sites):
+    #         rc.refined_variable.append(basis.pv[rc.atomic_sites[i]])
+    #         rc.refined_variable_type.append(51)
+    #         rc.atom_refine_flag.append(rc.atomic_sites[i])
+    #         rc.atom_refine_vec.append(nullvec)  # no atom movement
 
     # Total number of independent variables
     rc.n_variables = len(rc.refined_variable)
@@ -670,8 +664,9 @@ if 'S' not in rc.refine_mode:
     while df >= rc.exit_criteria and rc.refinement_scale >= rc.precision:
         if df >= rc.exit_criteria:
             # reduce refinement scale for next round
-            # rc.refinement_scale *= (1 - 1 / (1 + rc.n_variables))
-            rc.refinement_scale *= 0.5
+            rc.refinement_scale *= (1 - 1 / (1 + rc.n_variables))
+            # rc.refinement_scale *= 0.5
+            print(f"Step size {rc.refinement_scale:g}")
         # rc.refined_variable is the working array of variables
         # best_var is the best array of variables during this refinement cycle
         rc.best_var = np.copy(rc.refined_variable)
@@ -745,7 +740,6 @@ if 'S' not in rc.refine_mode:
             print(f"Improvement in fit {100*df:.2f}%, will stop at {100*rc.exit_criteria:.2f}%")
         else:
             print(f"Improvement in fit {100*df:.2f}%, will stop after step size < {rc.precision}")
-            print(f"Step size {rc.refinement_scale:g}")
         print("-------------------------------")
     print(f"Refinement complete after {rc.iter_count} simulations.  Refined values: {rc.best_var}")
 

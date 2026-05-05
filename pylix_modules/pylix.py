@@ -317,9 +317,6 @@ def unique_atom_positions(xtal, basis, cell, rc):
         for i in range(basis.n_atoms):
             print(f"Basis anisotropic u_aniso [{i}]")
             print(f"{basis.u_aniso[i, :5, :5]}")
-            # hack for LiNbO3 with Mg doping
-    # print(f"Li occupancy = {basis.occupancy[0]}")
-    # print(f"Mg occupancy = {basis.occupancy[1]}")
 
     # Initialize arrays to store all atom positions, including duplicates
     all_atom_label = np.tile(basis.atom_label, n_symops)
@@ -1758,21 +1755,22 @@ def electron_density(xtal, basis, rc):
             n_c_j = orbi['occupation'][j]
             n_e_core += n_c_j
             if rc.scatter_factor_method == 4:
-                R = coppens_R_nl(Z, j, r)
+                R_nl = coppens_R_nl(Z, j, r)
             else:
-                R = bunge_R_nl(Z, j, r)
-            rho_core += (R**2) * n_c_j
+                R_nl = bunge_R_nl(Z, j, r)
+            rho_core += (R_nl**2) * n_c_j
 
+        # NB for valence electrons we use kappa*r rather than r
         rho_valence = 0.0
         n_e_valence = 0.0
         for j in orbi['valence_orbitals']:
             n_v_j = orbi['occupation'][j]
             n_e_valence += n_v_j
             if rc.scatter_factor_method == 4:
-                R = coppens_R_nl(Z, j, r)
+                R_nl = coppens_R_nl(Z, j, basis.kappa[i]*r)
             else:
-                R = bunge_R_nl(Z, j, r)
-            rho_valence += (R**2) * n_v_j
+                R_nl = bunge_R_nl(Z, j, basis.kappa[i]*r)
+            rho_valence += (R_nl**2) * n_v_j
 
         # normalize and scale by pv & pc
         basis.core[i, :] = basis.pc[i] * rho_core \
@@ -1859,8 +1857,8 @@ def f_kappa(xtal, basis, rc, g_pool_mag, i):
     # plot the scattering factor
     if rc.plot > 2:
         sim.plot_f_e(basis, rc, s, f_kappa, f_k, i)
-        # if rc.iter_count == 0:
-        #     sim.plot_f_e(basis, rc, s, f_kappa, f_k, i)
+        if rc.iter_count == 0:
+            sim.plot_f_e(basis, rc, s, f_kappa, f_k, i)
         # else:
         #     # plot the radial charge density only when it's being refined
         #     if rc.refined_variable_type[i] // 10 == 5:
