@@ -689,9 +689,9 @@ def plot_charge_density(xtal, basis, rc, i):
     annotation = f"Kappa = {basis.kappa[i]:.2f}"
     plt.annotate(annotation, xy=(0.17, 0.5), xycoords='figure fraction',
                  size=22)
-    annotation = f"Pv = {basis.pv[i]:.2f}"
-    plt.annotate(annotation, xy=(0.17, 0.45), xycoords='figure fraction',
-                 size=22)
+    # annotation = f"Pv = {basis.pv[i]:.2f}"
+    # plt.annotate(annotation, xy=(0.17, 0.45), xycoords='figure fraction',
+    #              size=22)
     plt.show()
 
 
@@ -923,8 +923,7 @@ def update_variables(xtal, basis, rc):
     33,34,35 G = unit cell angles *** NOT YET IMPLEMENTED ***
     40 H = convergence angle
     41 I = accelerating_voltage_kv *** NOT YET IMPLEMENTED ***
-    50 J = Kappa
-    51 K = valence electrons
+    50 K = Kappa
     """
 
     # will tackle this when doing atomic position refinement
@@ -1020,8 +1019,6 @@ def update_variables(xtal, basis, rc):
                     basis.kappa[j] = var*1.0
                 else:
                     basis.kappa[j] = np.clip(var, 0.7, 1.3)
-            elif sub[i] == 1:  # valence electrons pv
-                basis.pv[j] = var*1.0
 
 
 def print_montage(bloch, cbed, rc, images, image_type, j):
@@ -1224,7 +1221,6 @@ def variable_message(vtype):
         40: "Changing convergence angle",
         41: "Changing accelerating voltage",
         50: "Changing Kappa",
-        51: "Changing proportion of valence electrons",
     }
     return msg[vtype]
 
