@@ -89,6 +89,7 @@ class RunControl:
     n_variables: int = 0
     best_fit: float = 0.0
     last_fit: float = 0.0
+    best_var: NDArray[np.floating] | None = None
     fit_log: NDArray[np.floating] | None = None
     df: float = 1.0
     fom: float = 1.0
