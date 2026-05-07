@@ -665,8 +665,8 @@ if 'S' not in rc.refine_mode:
     while df >= rc.exit_criteria and rc.refinement_scale >= rc.precision:
         if df >= rc.exit_criteria:
             # reduce refinement scale for next round
-            rc.refinement_scale *= (1 - 1 / (1 + rc.n_variables))
-            # rc.refinement_scale *= 0.5
+            # rc.refinement_scale *= (1 - 1 / (1 + rc.n_variables))
+            rc.refinement_scale *= 0.5
             print(f"Step size {rc.refinement_scale:g}")
         # rc.refined_variable is the working array of variables
         # best_var is the best array of variables during this refinement cycle
