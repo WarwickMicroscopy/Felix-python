@@ -423,6 +423,9 @@ def reference_frames(xtal, cell, rc):
                               np.cos(xtal.cell_gamma)) /
         np.sin(xtal.cell_gamma)])
 
+    # Transformation matrix from crystal to orthogonal reference frame
+    xtal.t_mat_c2o = np.column_stack((a_vec_o, b_vec_o, c_vec_o))
+
     # Some checks for rhombohedral cells
     # if diffraction_flag == 0:
     #     r_test = (
@@ -453,9 +456,7 @@ def reference_frames(xtal, cell, rc):
     br_vec_o[np.abs(br_vec_o) < tiny] = 0.0
     cr_vec_o[np.abs(cr_vec_o) < tiny] = 0.0
 
-    # Transformation matrix from crystal to orthogonal reference frame
-    xtal.t_mat_c2o = np.column_stack((a_vec_o, b_vec_o, c_vec_o))
-    # And the same for reciprocal frames
+    # From crystal to orthogonal for reciprocal vectors
     t_mat_cr2or = np.column_stack((ar_vec_o, br_vec_o, cr_vec_o))
 
     # Unit reciprocal lattice vectors in orthogonal frame
@@ -479,11 +480,19 @@ def reference_frames(xtal, cell, rc):
 
     # Reciprocal lattice vectors: microscope frame in 1/Angstrom units
     xtal.ar_vec_m = (2.0*np.pi * np.cross(xtal.b_vec_m, xtal.c_vec_m) /
-                np.dot(xtal.a_vec_m, np.cross(xtal.b_vec_m, xtal.c_vec_m)))
+                 np.dot(xtal.a_vec_m, np.cross(xtal.b_vec_m, xtal.c_vec_m)))
     xtal.br_vec_m = (2.0*np.pi * np.cross(xtal.c_vec_m, xtal.a_vec_m) /
-                np.dot(xtal.b_vec_m, np.cross(xtal.c_vec_m, xtal.a_vec_m)))
+                 np.dot(xtal.b_vec_m, np.cross(xtal.c_vec_m, xtal.a_vec_m)))
     xtal.cr_vec_m = (2.0*np.pi * np.cross(xtal.a_vec_m, xtal.b_vec_m) /
-                np.dot(xtal.c_vec_m, np.cross(xtal.a_vec_m, xtal.b_vec_m)))
+                 np.dot(xtal.c_vec_m, np.cross(xtal.a_vec_m, xtal.b_vec_m)))
+
+    # unit reciprocal lattice vectors
+    ar_m = xtal.ar_vec_m / np.linalg.norm(xtal.ar_vec_m)
+    br_m = xtal.br_vec_m / np.linalg.norm(xtal.br_vec_m)
+    cr_m = xtal.cr_vec_m / np.linalg.norm(xtal.cr_vec_m)
+    # Transformation matrix from reciprocal reference frame to microscope frame
+    # we use this to transform anisotropic ADPs
+    xtal.t_mat_cr2mr = np.column_stack((ar_m, br_m, cr_m))
 
     # Output to check
     if rc.debug > 1:
@@ -529,6 +538,7 @@ def update_coordinates(xtal, cell):
     cell.atom_coordinate = (cell.atom_position[:, 0, np.newaxis]*xtal.a_vec_m +
                             cell.atom_position[:, 1, np.newaxis]*xtal.b_vec_m +
                             cell.atom_position[:, 2, np.newaxis]*xtal.c_vec_m)
+    cell.u_aniso_m = xtal.t_mat_cr2mr @ cell.u_aniso @ xtal.t_mat_cr2mr.T
 
 
 def change_origin(basis, space_group):
@@ -1137,7 +1147,7 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
     atom_coordinate : float, fractional atom coordinates, size [n_cell, 3]
     atomic_number : int, size [n_cell], number of atoms in the cell
     occupancy : float, size [n_cell]
-    u_aniso : float array of ADPs, size [n_cell,3,3]
+    u_aniso_m : float array of ADPs, size [n_cell,3,3] (in microscope frame)
     g_matrix : array of g-vectors in the microscope frame, size [n_hkl,n_hkl]
     absorption_method : int, flag for absorption calculation
     absorption_per : float, % absorption, if that method is used
@@ -1176,13 +1186,13 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
 
     # anisotropic ADP U*g[i]*g[j], size [cell.n_atoms, n_hkl, n_hkl]
     Ugg = np.einsum('ijm, a mn, ij n -> aij', bloch.g_matrix,
-                    cell.u_aniso, bloch.g_matrix)
+                    cell.u_aniso_m, bloch.g_matrix)
     # equivalent anisotropic B, size [cell.n_atoms, n_hkl, n_hkl]
     B_aniso = np.divide(Ugg, np.square(g_magnitude),
                         out=np.zeros_like(Ugg),
                         where=(g_magnitude != 0)) * 8 * np.pi**2
-    if rc.debug > 2:
-        np.set_printoptions(precision=3, suppress=True)
+    if rc.debug > 0:
+        np.set_printoptions(precision=5, suppress=True)
         print("g_magnitudes")
         print(g_magnitude[:5, :5])
         print("  ")
@@ -1190,6 +1200,7 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
             print(f"Anisotropic u_aniso*g[i]*g[j] [{i}]")
             print(f"{Ugg[i, :5, :5]}")
         print("  ")
+        np.set_printoptions(precision=3, suppress=True)
         for i in range(basis.n_atoms):
             print(f"Anisotropic B[{i}]")
             print(f"{B_aniso[i, :5, :5]}")
@@ -1760,16 +1771,17 @@ def electron_density(xtal, basis, rc):
                 R_nl = bunge_R_nl(Z, j, r)
             rho_core += (R_nl**2) * n_c_j
 
-        # NB for valence electrons we use kappa*r rather than r
+        # NB for valence electrons we use r/kappa rather than r
+        kr = r/basis.kappa[i]
         rho_valence = 0.0
         n_e_valence = 0.0
         for j in orbi['valence_orbitals']:
             n_v_j = orbi['occupation'][j]
             n_e_valence += n_v_j
             if rc.scatter_factor_method == 4:
-                R_nl = coppens_R_nl(Z, j, basis.kappa[i]*r)
+                R_nl = coppens_R_nl(Z, j, kr)
             else:
-                R_nl = bunge_R_nl(Z, j, basis.kappa[i]*r)
+                R_nl = bunge_R_nl(Z, j, kr)
             rho_valence += (R_nl**2) * n_v_j
 
         # normalize and scale by pv & pc
@@ -1829,7 +1841,9 @@ def f_kappa(xtal, basis, rc, g_pool_mag, i):
     base_val = basis.valence[i] * np.sinc(qr) * r**2
     f_x_core = np.trapz(base_core, r, axis=1)
     f_x_valence = np.trapz(base_val, r, axis=1)
-    f_x = f_x_core + f_x_valence
+    f_x = f_x_core + f_x_valence  # is this wrong
+    # base_total = (basis.core[i] + basis.valence[i]) * np.sinc(qr) * r**2
+    # f_x = np.trapz(base_total, r, axis=1)
 
     f_kappa = np.zeros_like(g_pool_mag, dtype=float)
 

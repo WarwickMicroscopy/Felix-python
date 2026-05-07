@@ -278,6 +278,7 @@ elif rc.scatter_factor_method > 3:
     basis.pc = np.zeros(basis.n_atoms, dtype=float)
     # initial kappa is 1.0 for a neutral atom
     basis.kappa = np.ones(basis.n_atoms, dtype=float)
+    # basis.kappa[1] = 1.05  # *** hack for LiNbO3 ***
 else:
     raise ValueError("No scattering factors chosen in felix.inp")
 

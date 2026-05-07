@@ -116,6 +116,11 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     # apply the reference frame to the unit cell
     if np.any(typ == 2) or rc.iter_count == 0:
         px.update_coordinates(xtal, cell)
+        if rc.debug > 0:
+            np.set_printoptions(precision=5, suppress=True)
+            print("u_aniso in microscope frame")
+            for i in range(cell.n_atoms):
+                print(f"{cell.atom_label[i]}: {cell.u_aniso_m[i]}")
     # plot unit cell and save .xyz file
     if rc.iter_count == 0 and rc.plot >= 1:
         atom_cvals = mcolors.Normalize(vmin=1, vmax=103)
@@ -212,7 +217,7 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     if rc.iter_count == 0:
         print("    Ug matrix constructed")
     if rc.debug > 0:
-        np.set_printoptions(precision=3, suppress=True)
+        np.set_printoptions(precision=5, suppress=True)
         print(100*bloch.ug_matrix[:5, :5])
 
     # ===============================================
@@ -643,7 +648,7 @@ def plot_f_e(basis, rc, s, f_kappa, f_k, i):
     ax.set_xlabel(r'$s$ (Å$^{-1}$)', size=24)
     ax.set_ylabel(r'$f$', size=24)
     ax.legend(loc='best', fontsize=22)
-    plt.xscale('log')
+    # plt.xscale('log')
     plt.xticks(fontsize=22)
     plt.yticks(fontsize=22)
     plt.grid(True, which='both')
@@ -1520,15 +1525,15 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     return dydx
 
 
-def plot_f_g(xtal, basis, bloch, j=0):
+def plot_f_g(xtal, basis, rc, bloch, j=0):
     """
     Utility subroutine to plot scattering factors
     """
     Z = basis.atomic_number[j]
 
-    g = np.linspace(0, 10, 200)
+    g = np.linspace(1, 10, 200)
     # g = bloch.uniq_gmag
-    f_g = px.f_kappa(xtal, basis, g, j).ravel()
+    f_g = px.f_kappa(xtal, basis, rc, g, j).ravel()
     f_g_k = px.f_kirkland(Z, g).ravel()
     f0_k = f_g_k[0]
     f0 = f_g[0]

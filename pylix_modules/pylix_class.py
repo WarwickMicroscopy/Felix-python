@@ -228,6 +228,7 @@ class Crystal:
     norm_dir_m: NDArray[np.floating] | None = None
     t_mat_o2m: NDArray[np.floating] | None = None
     t_mat_c2o: NDArray[np.floating] | None = None
+    t_mat_cr2mr: NDArray[np.floating] | None = None
     # kappa model
     n_points: int = 12000
     r_max: float = 12.0  # max radius to calculate electron density, Angstroms
@@ -273,7 +274,8 @@ class Cell:
     atom_coordinate: NDArray[np.floating] | None = None  # in microscope frame
     occupancy: NDArray[np.floating] | None = None
     mult_occ: NDArray[np.integer] | None = None
-    u_aniso: NDArray[np.floating] | None = None
+    u_aniso: NDArray[np.floating] | None = None  # in cell
+    u_aniso_m: NDArray[np.floating] | None = None  # in microscope frame
     u_iso: NDArray[np.floating] | None = None
     B_iso: NDArray[np.floating] | None = None
     atom_delta: NDArray[np.floating] | None = None
