@@ -1743,6 +1743,9 @@ def electron_density(xtal, basis, rc):
     Calculates radial electron densities in core and valence shells
     Uses Coppens/Bunge parameterisation of Slater-type orbitals (3 < Z < 53)
     Result is normalized and scaled by pv & pc in kappa refinement
+    
+    *** to be run as an initial set up routine and for subsequent graphical
+    purposes, now replaced by analytical form of f_kappa  ***
 
     """
     basis.core = np.zeros([basis.n_atoms, xtal.n_points], dtype=float)
@@ -1760,7 +1763,7 @@ def electron_density(xtal, basis, rc):
             basis.pc[i] = orbi["pc"]
 
         # electron density rho, R_nl^2
-        n_e_core = 0.0
+        n_e_core = 0.0  # *** change to basis.n_e_core[i] ***
         rho_core = 0.0
         for j in orbi['core_orbitals']:
             n_c_j = orbi['occupation'][j]
@@ -1774,7 +1777,7 @@ def electron_density(xtal, basis, rc):
         # NB for valence electrons we use r/kappa rather than r
         kr = r/basis.kappa[i]
         rho_valence = 0.0
-        n_e_valence = 0.0
+        n_e_valence = 0.0  # *** change to basis.n_e_valence[i] ***
         for j in orbi['valence_orbitals']:
             n_v_j = orbi['occupation'][j]
             n_e_valence += n_v_j
@@ -1823,6 +1826,14 @@ def f_kappa2(xtal, basis, rc, g_pool_mag, i):
 
     """
     Z = basis.atomic_number[i]
+    kappa = basis.kappa[i]
+    orbi = orb(basis.atomic_number[i])
+
+    for j in orbi['core_orbitals']:
+        C_jln = np.asarray(fu.coppens_coefficients[Z][j]['C_jln'])
+        Z_jl = np.asarray(fu.coppens_coefficients[Z][j]['Z_jl'])
+        n = np.asarray(fu.coppens_coefficients[Z][j]['n'])
+
 
     return
 
