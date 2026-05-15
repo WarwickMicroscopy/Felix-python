@@ -5,11 +5,12 @@ import subprocess
 import numpy as np
 from scipy.constants import c
 from scipy.linalg import eig, solve
+from scipy.special import gammaln
 from CifFile import CifFile
 import struct
 from pylix_modules import simulate as sim  # simulation control and output
 from pylix_modules import pylix_dicts as fu
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import math
 
 
@@ -1763,7 +1764,7 @@ def electron_density(xtal, basis, rc):
             basis.pc[i] = orbi["pc"]
 
         # electron density rho, R_nl^2
-        n_e_core = 0.0  # *** change to basis.n_e_core[i] ***
+        n_e_core = 0.0  # *** change to basis.n_e_core[i]? ***
         rho_core = 0.0
         for j in orbi['core_orbitals']:
             n_c_j = orbi['occupation'][j]
@@ -1777,7 +1778,7 @@ def electron_density(xtal, basis, rc):
         # NB for valence electrons we use r/kappa rather than r
         kr = r/basis.kappa[i]
         rho_valence = 0.0
-        n_e_valence = 0.0  # *** change to basis.n_e_valence[i] ***
+        n_e_valence = 0.0  # *** change to basis.n_e_valence[i]? ***
         for j in orbi['valence_orbitals']:
             n_v_j = orbi['occupation'][j]
             n_e_valence += n_v_j
@@ -1825,16 +1826,35 @@ def f_kappa2(xtal, basis, rc, g_pool_mag, i):
     size [n_hkl, n_hkl]
 
     """
+    # physics to crystallographic convention
+    # my g = 2*pi*g' where g' is the crystallographic convention
+    # x-ray structure factors are given in s = sin(theta)/lambda = 1/2d =g'/2
+    # so s = g/(4*pi)
+    s = g_pool_mag / (4*np.pi)
+    
     Z = basis.atomic_number[i]
     kappa = basis.kappa[i]
     orbi = orb(basis.atomic_number[i])
 
+    # core X-ray scattering factor
     for j in orbi['core_orbitals']:
+        n_c_j = orbi['occupation'][j]
         C_jln = np.asarray(fu.coppens_coefficients[Z][j]['C_jln'])
         Z_jl = np.asarray(fu.coppens_coefficients[Z][j]['Z_jl'])
         n = np.asarray(fu.coppens_coefficients[Z][j]['n'])
-
-
+        fact = np.exp(gammaln(n + 1))
+        theta = np.arctan2(s[:, None], Z_jl[None, :])
+        f_x_core = np.sum(n[None, :]
+                          * C_jln[None, :]
+                          * fact[None, :]
+                          * n_c_j
+                          * np.sin((n[None, :]+1) * theta)
+                          / s[:, None] * (Z_jl[None, :]**2 + s[:, None]**2)
+                          ** ((n[None, :]+1)/2), axis=1)
+        thet = np.arctan2(s, Z_jl[0])
+        f_x_coro = (n[0] * C_jln[0] * fact * n_c_j * np.sin((n[0]+1) * thet)
+                    / (Z_jl[0]**2 + s**2)**((n[0]+1)/2))
+        plt.plot(s, f_x_core)
     return
 
 
@@ -1871,9 +1891,39 @@ def f_kappa(xtal, basis, rc, g_pool_mag, i):
     base_val = basis.valence[i] * np.sinc(qr) * r**2
     f_x_core = np.trapz(base_core, r, axis=1)
     f_x_valence = np.trapz(base_val, r, axis=1)
-    f_x = f_x_core + f_x_valence  # is this wrong
-    # base_total = (basis.core[i] + basis.valence[i]) * np.sinc(qr) * r**2
-    # f_x = np.trapz(base_total, r, axis=1)
+    f_x = f_x_core + f_x_valence
+
+    # new way
+    Z = basis.atomic_number[i]
+    kappa = basis.kappa[i]
+    orbi = orb(basis.atomic_number[i])
+
+    # core X-ray scattering factor
+    s[0] = 1e-12  # to avoid divide by zero error
+    f_x_j = np.zeros_like(s)
+    s3 = s[:, None, None]
+    for orbit in orbi['core_orbitals']:
+        n_c_j = orbi['occupation'][orbit]
+        C_jln = np.asarray(fu.coppens_coefficients[Z][orbit]['C_jln'])
+        Z_jl = np.asarray(fu.coppens_coefficients[Z][orbit]['Z_jl'])
+        n_j = np.asarray(fu.coppens_coefficients[Z][orbit]['n'])
+        # pair combinations
+        CC = C_jln[:, None] * C_jln[None, :]
+        ZZ = Z_jl[:, None] * Z_jl[None, :]
+        nn = n_j[:, None] * n_j[None, :]
+        # factorial term
+        fact = np.exp(gammaln(nn))
+        # angle
+        theta = np.arctan2(s3, ZZ[None, :, :])
+        f = (CC[None, :, :]
+             * fact[None, :, :]
+             * np.sin(nn[None, :, :] * theta)
+             / (s3 * (ZZ[None, :, :]**2 + s3**2)**(nn[None, :, :] / 2)))
+        f_x_j += np.sum(f, axis=(1, 2))
+    plt.plot(s, f_x_j)
+    plt.plot(s, f_x_core)
+    plt.show()
+
 
     f_kappa = np.zeros_like(g_pool_mag, dtype=float)
 
