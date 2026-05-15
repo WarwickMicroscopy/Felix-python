@@ -1764,7 +1764,7 @@ def electron_density(xtal, basis, rc):
             basis.pc[i] = orbi["pc"]
 
         # electron density rho, R_nl^2
-        n_e_core = 0.0  # *** change to basis.n_e_core[i]? ***
+        n_e_core = 0.0
         rho_core = 0.0
         for j in orbi['core_orbitals']:
             n_c_j = orbi['occupation'][j]
@@ -1806,58 +1806,6 @@ def electron_density(xtal, basis, rc):
     return
 
 
-def f_kappa2(xtal, basis, rc, g_pool_mag, i):
-    """
-    Calculates an array of electron scattering factors using
-    the kappa formalism, over values in g_pool_mag.
-    We first obtain the X-ray scattering factor using the analytically exact
-    integral of charge density from 0 to inf
-
-    NB integral(r^n * exp(-Z_jl*r) * sin(q*r) dr), r=0->infinity
-    = n! * sin((n+1)*atan(q/Z_jl)) / (Z_jl**2 + q**2)**((n+1)/2)
-
-    and then convert to electron scattering factor using Mott-Bethe formula
-
-    g_pool_mag : 1d float array of g magnitudes,
-    i : index of atom in the basis
-
-    Returns
-    f_kappa : structure factors to match g,
-    size [n_hkl, n_hkl]
-
-    """
-    # physics to crystallographic convention
-    # my g = 2*pi*g' where g' is the crystallographic convention
-    # x-ray structure factors are given in s = sin(theta)/lambda = 1/2d =g'/2
-    # so s = g/(4*pi)
-    s = g_pool_mag / (4*np.pi)
-    
-    Z = basis.atomic_number[i]
-    kappa = basis.kappa[i]
-    orbi = orb(basis.atomic_number[i])
-
-    # core X-ray scattering factor
-    for j in orbi['core_orbitals']:
-        n_c_j = orbi['occupation'][j]
-        C_jln = np.asarray(fu.coppens_coefficients[Z][j]['C_jln'])
-        Z_jl = np.asarray(fu.coppens_coefficients[Z][j]['Z_jl'])
-        n = np.asarray(fu.coppens_coefficients[Z][j]['n'])
-        fact = np.exp(gammaln(n + 1))
-        theta = np.arctan2(s[:, None], Z_jl[None, :])
-        f_x_core = np.sum(n[None, :]
-                          * C_jln[None, :]
-                          * fact[None, :]
-                          * n_c_j
-                          * np.sin((n[None, :]+1) * theta)
-                          / s[:, None] * (Z_jl[None, :]**2 + s[:, None]**2)
-                          ** ((n[None, :]+1)/2), axis=1)
-        thet = np.arctan2(s, Z_jl[0])
-        f_x_coro = (n[0] * C_jln[0] * fact * n_c_j * np.sin((n[0]+1) * thet)
-                    / (Z_jl[0]**2 + s**2)**((n[0]+1)/2))
-        plt.plot(s, f_x_core)
-    return
-
-
 def f_kappa(xtal, basis, rc, g_pool_mag, i):
     """
     Calculates an array of electron scattering factors using
@@ -1894,23 +1842,29 @@ def f_kappa(xtal, basis, rc, g_pool_mag, i):
     f_x = f_x_core + f_x_valence
 
     # new way
+    s = g_pool_mag / 2
+    s[0] = 1.0  # to avoid divide by zero error, we replace f[0] later
+
     Z = basis.atomic_number[i]
-    kappa = basis.kappa[i]
     orbi = orb(basis.atomic_number[i])
 
     # core X-ray scattering factor
-    s[0] = 1e-12  # to avoid divide by zero error
-    f_x_j = np.zeros_like(s)
+    f_x_coro = np.zeros_like(s)
     s3 = s[:, None, None]
     for orbit in orbi['core_orbitals']:
         n_c_j = orbi['occupation'][orbit]
         C_jln = np.asarray(fu.coppens_coefficients[Z][orbit]['C_jln'])
         Z_jl = np.asarray(fu.coppens_coefficients[Z][orbit]['Z_jl'])
         n_j = np.asarray(fu.coppens_coefficients[Z][orbit]['n'])
+        # normalisation factor
+        fac = np.exp(gammaln(2*n_j + 1))  # same as (2*n_j)!, but an array
+        N_jl = ((2*Z_jl)**(n_j+0.5)) / np.sqrt(fac)
+        # combined coefficients
+        CN = C_jln * N_jl
         # pair combinations
-        CC = C_jln[:, None] * C_jln[None, :]
-        ZZ = Z_jl[:, None] * Z_jl[None, :]
-        nn = n_j[:, None] * n_j[None, :]
+        CC = CN[:, None] * CN[None, :]
+        ZZ = Z_jl[:, None] + Z_jl[None, :]
+        nn = n_j[:, None] + n_j[None, :]
         # factorial term
         fact = np.exp(gammaln(nn))
         # angle
@@ -1919,27 +1873,64 @@ def f_kappa(xtal, basis, rc, g_pool_mag, i):
              * fact[None, :, :]
              * np.sin(nn[None, :, :] * theta)
              / (s3 * (ZZ[None, :, :]**2 + s3**2)**(nn[None, :, :] / 2)))
-        f_x_j += np.sum(f, axis=(1, 2))
-    plt.plot(s, f_x_j)
-    plt.plot(s, f_x_core)
-    plt.show()
+        f_x_coro += n_c_j * np.sum(f, axis=(1, 2))
+    # set the zero point
+    f_x_coro[0] = basis.pc[i]
 
+    # valence X-ray scattering factor, with kappa
+    sk = s/basis.kappa[i]  # change the radial scale
+    f_x_valenco = np.zeros_like(s)
+    sk3 = sk[:, None, None]
+    for orbit in orbi['valence_orbitals']:
+        n_c_j = orbi['occupation'][orbit]
+        C_jln = np.asarray(fu.coppens_coefficients[Z][orbit]['C_jln'])
+        Z_jl = np.asarray(fu.coppens_coefficients[Z][orbit]['Z_jl'])
+        n_j = np.asarray(fu.coppens_coefficients[Z][orbit]['n'])
+        # normalisation factor
+        fac = np.exp(gammaln(2*n_j + 1))  # same as (2*n_j)!, but an array
+        N_jl = ((2*Z_jl)**(n_j+0.5)) / np.sqrt(fac)
+        # combined coefficients
+        CN = C_jln * N_jl
+        # pair combinations
+        CC = CN[:, None] * CN[None, :]
+        ZZ = Z_jl[:, None] + Z_jl[None, :]
+        nn = n_j[:, None] + n_j[None, :]
+        # factorial term
+        fact = np.exp(gammaln(nn))
+        # angle
+        theta = np.arctan2(sk3, ZZ[None, :, :])
+        f = (CC[None, :, :]
+             * fact[None, :, :]
+             * np.sin(nn[None, :, :] * theta)
+             / (sk3 * (ZZ[None, :, :]**2 + sk3**2)**(nn[None, :, :] / 2)))
+        f_x_valenco += n_c_j * np.sum(f, axis=(1, 2))
+    # set the zero point
+    f_x_valenco[0] = basis.pv[i]
+    f_x_valenco *= basis.kappa[i]  # change the fx scale
+    s[0] = 0.0
+
+    plt.plot(s, f_x_coro)
+    plt.plot(s, f_x_core)
+    plt.plot(s, f_x_valence)
+    plt.plot(s, f_x_valenco)
+    plt.show()
 
     f_kappa = np.zeros_like(g_pool_mag, dtype=float)
 
     # g ≠ 0, the Mott-Bethe conversion
     mask = (g_pool_mag != 0)
-    f_kappa[mask] = xtal.mott*(basis.atomic_number[i] -
-                               f_x[mask]) / (s[mask]**2)
+    # old
+    # s = g_pool_mag / (4*np.pi)
+    # f_kappa[mask] = xtal.mott*(basis.atomic_number[i] -
+    #                            f_x[mask]) / (s[mask]**2)
+    # new
+    f_x = f_x_coro + f_x_valenco
+    f_kappa[mask] = 4*np.pi**2*xtal.mott*(basis.atomic_number[i] -
+                                f_x[mask]) / (s[mask]**2)
 
-    # # g = 0 (Ibers formula, Kirkland Eq. C8-10)
-    # # added a factor of 0.5 here - still not great, why?
-    # f_kappa[0] = 0.5 * (basis.atomic_number[i] *
-    #                     basis.mean_sq_r2[i]) / (3 * xtal.bohr_radius)
 
     # alternative using  f[1]
     f_kappa[0] = f_kirkland(basis.atomic_number[i], 0)
-    # f_kappa[0] = f_kappa[1]
 
     # inverse Mott-Bethe to check (Kirkland Eq C.16)
     # f_xx = basis.atomic_number[i] \
