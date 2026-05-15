@@ -1799,12 +1799,31 @@ def electron_density(xtal, basis, rc):
         # plot
         if rc.plot > 1:
             sim.plot_charge_density(xtal, basis, rc, i)
-            # if rc.iter_count == 0:
-            #     sim.plot_charge_density(xtal, basis, rc, i)
-            # else:
-            #     # plot the radial charge density only when it's being refined
-            #     if rc.refined_variable_type[i] // 10 == 5:
-            #         sim.plot_charge_density(xtal, basis, rc, i)
+    return
+
+
+def f_kappa2(xtal, basis, rc, g_pool_mag, i):
+    """
+    Calculates an array of electron scattering factors using
+    the kappa formalism, over values in g_pool_mag.
+    We first obtain the X-ray scattering factor using the analytically exact
+    integral of charge density from 0 to inf
+
+    NB integral(r^n * exp(-Z_jl*r) * sin(q*r) dr), r=0->infinity
+    = n! * sin((n+1)*atan(q/Z_jl)) / (Z_jl**2 + q**2)**((n+1)/2)
+
+    and then convert to electron scattering factor using Mott-Bethe formula
+
+    g_pool_mag : 1d float array of g magnitudes,
+    i : index of atom in the basis
+
+    Returns
+    f_kappa : structure factors to match g,
+    size [n_hkl, n_hkl]
+
+    """
+    Z = basis.atomic_number[i]
+
     return
 
 
