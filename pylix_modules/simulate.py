@@ -1196,6 +1196,7 @@ def variable_message(vtype):
         40: "Changing convergence angle",
         41: "Changing accelerating voltage",
         50: "Changing Kappa",
+        51: "Changing Pv",
     }
     return msg[vtype]
 

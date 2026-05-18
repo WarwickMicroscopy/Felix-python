@@ -749,6 +749,8 @@ if 'S' not in rc.refine_mode:
     print(f"Refinement complete after {rc.iter_count} simulations.  Refined values: {rc.best_var}")
 
 # %% final print
+rc.plot = 2
+px.electron_density(xtal, basis, rc)
 sim.print_LACBED(bloch, cbed, rc, 0)
 sim.print_LACBED(bloch, cbed, rc, 2)
 sim.save_LACBED(xtal, bloch, cbed, rc)
