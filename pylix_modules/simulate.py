@@ -631,39 +631,6 @@ def plot_progress(rc):
     plt.show()
 
 
-def plot_f_e(basis, rc, s, f_kappa, f_k, i):
-    # plot the scattering factor only when it's being refined
-    fig, ax = plt.subplots(1, 1)
-    w_f = 10
-    fig.set_size_inches(w_f, w_f)
-    smax = 300
-    plt.plot(s[1:smax], f_kappa[1:smax], label='$f_e$')
-    # plt.plot(s[:smax], f_x[:smax], label='$f_X$')
-    plt.plot(s[1:smax], f_k[1:smax], linestyle='-.', label='$f_e(0)$')
-    # plt.plot(s[:smax], f_xx[:smax], linestyle='-.', label='$f_X(e)$')
-    # plt.yscale('log')
-    ax.set_ylim(bottom=0)
-    # ax.set_xlim(left=0)
-    # ax.set_ylim(top=10)
-    ax.set_xlabel(r'$s$ (Å$^{-1}$)', size=24)
-    ax.set_ylabel(r'$f$', size=24)
-    ax.legend(loc='best', fontsize=22)
-    # plt.xscale('log')
-    plt.xticks(fontsize=22)
-    plt.yticks(fontsize=22)
-    plt.grid(True, which='both')
-    tit = f"Scattering factor for atom {basis.atom_label[i]}"
-    plt.title(tit, fontsize=24)
-    annotation = f"Kappa = {basis.kappa[i]:.2f}"
-    plt.annotate(annotation, xy=(0.15, 0.2), xycoords='figure fraction',
-                 size=22)
-    annotation = f"Pv = {basis.pv[i]:.2f}"
-    plt.annotate(annotation, xy=(0.15, 0.15), xycoords='figure fraction',
-                 size=22)
-    plt.show()
-    return
-
-
 def plot_charge_density(xtal, basis, rc, i):
     # plots radial charge density of atom i in the basis
     r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
@@ -928,6 +895,7 @@ def update_variables(xtal, basis, rc):
     33,34,35 G = unit cell angles *** NOT YET IMPLEMENTED ***
     40 H = convergence angle
     41 I = accelerating_voltage_kv *** NOT YET IMPLEMENTED ***
+    51 J = Pv
     50 K = Kappa
     """
 
@@ -1024,6 +992,8 @@ def update_variables(xtal, basis, rc):
                     basis.kappa[j] = var*1.0
                 else:
                     basis.kappa[j] = np.clip(var, 0.7, 1.3)
+            elif sub[i] == 1:  # Pv
+                basis.pv[j] = var*1.0
 
 
 def print_montage(bloch, cbed, rc, images, image_type, j):
@@ -1525,9 +1495,66 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     return dydx
 
 
+def plot_f_e(basis, rc, s, f_kappa, f_k, i):
+    # plot the scattering factor only when it's being refined
+    fig, ax = plt.subplots(1, 1)
+    w_f = 10
+    fig.set_size_inches(w_f, w_f)
+    smax = 300
+    plt.plot(s[1:smax], f_kappa[1:smax], label='$f_e$')
+    # plt.plot(s[:smax], f_x[:smax], label='$f_X$')
+    plt.plot(s[1:smax], f_k[1:smax], linestyle='-.', label='$f_e(0)$')
+    # plt.plot(s[:smax], f_xx[:smax], linestyle='-.', label='$f_X(e)$')
+    # plt.yscale('log')
+    ax.set_ylim(bottom=0)
+    # ax.set_xlim(left=0)
+    # ax.set_ylim(top=10)
+    ax.set_xlabel(r'$s$ (Å$^{-1}$)', size=24)
+    ax.set_ylabel(r'$f_e$', size=24)
+    ax.legend(loc='best', fontsize=22)
+    # plt.xscale('log')
+    plt.xticks(fontsize=22)
+    plt.yticks(fontsize=22)
+    plt.grid(True, which='both')
+    tit = f"Electron scattering factor for atom {basis.atom_label[i]}"
+    plt.title(tit, fontsize=24)
+    annotation = f"Kappa = {basis.kappa[i]:.2f}"
+    plt.annotate(annotation, xy=(0.15, 0.2), xycoords='figure fraction',
+                 size=22)
+    annotation = f"Pv = {basis.pv[i]:.2f}"
+    plt.annotate(annotation, xy=(0.15, 0.15), xycoords='figure fraction',
+                 size=22)
+    plt.show()
+    return
+
+
+def plot_f_x(s, f_x_v, f_x_c, name):
+    """
+    Utility subroutine to plot x-ray scattering factors
+    """
+    fig, ax = plt.subplots(1, 1)
+    w_f = 10
+    fig.set_size_inches(w_f, w_f)
+    plt.plot(s, f_x_v, label='valence')
+    if f_x_c is not None:
+        plt.plot(s, f_x_c, linestyle='-.', label='core')
+        plt.plot(s, f_x_v+f_x_c, linestyle=':', label='total')
+    plt.xticks(fontsize=22)
+    plt.yticks(fontsize=22)
+    plt.grid(True, which='both')
+    tit = f"X-ray scattering factor for atom {name}"
+    plt.title(tit, fontsize=24)
+    ax.set_xlabel(r'$s$ (Å$^{-1}$)', size=24)
+    ax.set_ylabel('$f_x$', size=24)
+    ax.set_xlim(left=0)
+    ax.legend(loc='best', fontsize=22)
+    # plt.xscale('log')
+    plt.show()
+
+
 def plot_f_g(xtal, basis, rc, bloch, j=0):
     """
-    Utility subroutine to plot scattering factors
+    Utility subroutine to plot electron scattering factors
     """
     Z = basis.atomic_number[j]
 

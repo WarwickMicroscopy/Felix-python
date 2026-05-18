@@ -273,12 +273,6 @@ elif rc.scatter_factor_method > 3:
         print("  Using Coppens RHF scattering factors with Kappa")
     else:
         print("  Using Bunge RHF scattering factors with Kappa")
-    # initialise pv, pc, kappa and electron density
-    basis.pv = np.zeros(basis.n_atoms, dtype=float)
-    basis.pc = np.zeros(basis.n_atoms, dtype=float)
-    # initial kappa is 1.0 for a neutral atom
-    basis.kappa = np.ones(basis.n_atoms, dtype=float)
-    # basis.kappa[1] = 1.05  # *** hack for LiNbO3 ***
 else:
     raise ValueError("No scattering factors chosen in felix.inp")
 
@@ -312,14 +306,24 @@ else:  # atom-specific refinements can be done simultaneously
     if 'E' in rc.refine_mode:
         atm = 1
         print("Refining Anisotropic atomic displacement parameters, E")
+    if 'J' in rc.refine_mode:
+        atm = 1
+        print("Refining valence electron polulation, J")
     if 'K' in rc.refine_mode:
         atm = 1
         print("Refining Kappa, K")
         # check we're using RHF scattering factors
+    if 'J' in rc.refine_mode or 'K' in rc.refine_mode:
         if rc.scatter_factor_method < 4:
             raise ValueError("scatter_factor_method must be 4 or 5 for kappa refinement")
         else:
+            # initialise pv, pc, kappa and electron density
+            basis.pv = np.zeros(basis.n_atoms, dtype=float)
+            basis.pc = np.zeros(basis.n_atoms, dtype=float)
+            # initial kappa is 1.0 for a neutral atom
+            basis.kappa = np.ones(basis.n_atoms, dtype=float)
             px.electron_density(xtal, basis, rc)
+            # basis.pv[2] = 5  # *** hack for LiNbO3 ***
 
     if atm == 1:
         # error check - do specified atom sites make sense
@@ -380,8 +384,8 @@ rc.n_out = len(hkl.input_hkls)+1  # we expect 000 NOT to be in the hkl list
 # 33,34,35 G = unit cell angles *** NOT YET IMPLEMENTED ***
 # 40 H = convergence angle
 # 41 I = accelerating_voltage_kv *** NOT YET IMPLEMENTED ***
-# 50 J = Kappa
-# 51 K = valence electrons
+# 50 K = Kappa
+# 51 J = valence electrons
 rc.n_variables = 0
 rc.refined_variable = []  # array of floats, values to be refined
 rc.refined_variable_type = []  # array of integers corresponding to above
@@ -493,19 +497,19 @@ if 'S' not in rc.refine_mode:
         rc.atom_refine_flag.append(-1)
         rc.atom_refine_vec.append(nullvec)  # no atom movement
 
+    if 'J' in rc.refine_mode:
+        for i in range(n_sites):
+            rc.refined_variable.append(basis.pv[rc.atomic_sites[i]])
+            rc.refined_variable_type.append(51)
+            rc.atom_refine_flag.append(rc.atomic_sites[i])
+            rc.atom_refine_vec.append(nullvec)  # no atom movement
+
     if 'K' in rc.refine_mode:
         for i in range(n_sites):
             rc.refined_variable.append(basis.kappa[rc.atomic_sites[i]])
             rc.refined_variable_type.append(50)
             rc.atom_refine_flag.append(rc.atomic_sites[i])
             rc.atom_refine_vec.append(nullvec)  # no atom movement
-
-    # if 'K' in rc.refine_mode:
-    #     for i in range(n_sites):
-    #         rc.refined_variable.append(basis.pv[rc.atomic_sites[i]])
-    #         rc.refined_variable_type.append(51)
-    #         rc.atom_refine_flag.append(rc.atomic_sites[i])
-    #         rc.atom_refine_vec.append(nullvec)  # no atom movement
 
     # Total number of independent variables
     rc.n_variables = len(rc.refined_variable)

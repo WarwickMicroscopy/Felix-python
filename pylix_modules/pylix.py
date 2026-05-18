@@ -1217,8 +1217,8 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
     cell.f_g_prime = np.zeros([cell.n_atoms, bloch.n_hkl, bloch.n_hkl],
                               dtype=np.complex128)
     # update Coppens orbitals (whole basis)
-    if rc.scatter_factor_method > 3:
-        electron_density(xtal, basis, rc)
+    # if rc.scatter_factor_method > 3:
+    #     electron_density(xtal, basis, rc)
     for i in range(basis.n_atoms):
         # get the scattering factor for the basis basis.f_g
         if rc.scatter_factor_method == 0:
@@ -1442,6 +1442,7 @@ def wave_functions(bloch, rc):
 def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list,
                min_weak_beams, big_k_mag):
     """
+    *** Legacy subroutine, not currently used ***
     Updates the Ug-Sg matrix usingweak beams according to their perturbation
     strength. We start with all non-strong beams in the list.
     We then raise the threshold perturbation strength until we have fewer than
@@ -1601,8 +1602,6 @@ def electron_configuration(Z):
         n = min(cap, remaining)
         occ[orb] = n
         remaining -= n
-
-    # ---- FIXES FOR KNOWN EXCEPTIONS ----
     exceptions = {
         24: ('3d', '4s', 5, 1),   # Cr: 3d5 4s1
         29: ('3d', '4s', 10, 1),  # Cu: 3d10 4s1
@@ -1705,7 +1704,7 @@ def coppens_R_nl(Z, orbital, r):
     radial orbitals using the parameterisation of Coppens & co
     https://harker.chem.buffalo.edu/group/wavtable.html
 
-    Each slater-type orbitals sto is given by
+    Each slater-type orbital sto is given by
 
     S_jl = N_jl*r^(n_jl-1)*exp(-Z_jl*r)
 
@@ -1744,10 +1743,13 @@ def electron_density(xtal, basis, rc):
     Calculates radial electron densities in core and valence shells
     Uses Coppens/Bunge parameterisation of Slater-type orbitals (3 < Z < 53)
     Result is normalized and scaled by pv & pc in kappa refinement
-    
-    *** to be run as an initial set up routine and for subsequent graphical
-    purposes, now replaced by analytical form of f_kappa  ***
 
+    *** I am fairly sure there is a mistake here *** but can't find it
+    scattering factors from this numerical integration do not agree with
+    those from analytically exact integration for kappa !=1
+
+    This subroutine is now run as an initial set up routine
+    and for subsequent graphical output
     """
     basis.core = np.zeros([basis.n_atoms, xtal.n_points], dtype=float)
     basis.valence = np.zeros([basis.n_atoms, xtal.n_points], dtype=float)
@@ -1763,45 +1765,47 @@ def electron_density(xtal, basis, rc):
             basis.pv[i] = orbi["pv"]
             basis.pc[i] = orbi["pc"]
 
-        # electron density rho, R_nl^2
-        n_e_core = 0.0
-        rho_core = 0.0
-        for j in orbi['core_orbitals']:
-            n_c_j = orbi['occupation'][j]
-            n_e_core += n_c_j
-            if rc.scatter_factor_method == 4:
-                R_nl = coppens_R_nl(Z, j, r)
-            else:
-                R_nl = bunge_R_nl(Z, j, r)
-            rho_core += (R_nl**2) * n_c_j
+        # calculate charge density and plot
 
-        # NB for valence electrons we use r/kappa rather than r
-        kr = r/basis.kappa[i]
-        rho_valence = 0.0
-        n_e_valence = 0.0  # *** change to basis.n_e_valence[i]? ***
-        for j in orbi['valence_orbitals']:
-            n_v_j = orbi['occupation'][j]
-            n_e_valence += n_v_j
-            if rc.scatter_factor_method == 4:
-                R_nl = coppens_R_nl(Z, j, kr)
-            else:
-                R_nl = bunge_R_nl(Z, j, kr)
-            rho_valence += (R_nl**2) * n_v_j
-
-        # normalize and scale by pv & pc
-        basis.core[i, :] = basis.pc[i] * rho_core \
-            / np.trapz(rho_core * r**2, r)
-        basis.valence[i, :] = kappa**3 * basis.pv[i] * rho_valence \
-            / np.trapz(rho_valence * r**2, r)
-
-        # p_atom(r)
-        rho_total = (basis.core[i, :] + basis.valence[i, :])
-        # atomic charge
-        basis.n_electrons[i] = np.trapz(rho_total * r**2, r)
-        label = basis.atom_label[i]
-        print(f"  Atom {label}: Oxidation number {(Z-basis.n_electrons[i]):.2f}")
-        # plot
         if rc.plot > 1:
+            # electron density rho, R_nl^2
+            n_e_core = 0.0
+            rho_core = 0.0
+            for j in orbi['core_orbitals']:
+                n_c_j = orbi['occupation'][j]
+                n_e_core += n_c_j
+                if rc.scatter_factor_method == 4:
+                    R_nl = coppens_R_nl(Z, j, r)
+                else:
+                    R_nl = bunge_R_nl(Z, j, r)
+                rho_core += (R_nl**2) * n_c_j
+
+            # NB for valence electrons we use r*kappa rather than r
+            # see 'Coppens X-ray charge density and chemical bonding', Eq. 3.18
+            kr = r*basis.kappa[i]
+            rho_valence = 0.0
+            n_e_valence = 0.0
+            for j in orbi['valence_orbitals']:
+                n_v_j = orbi['occupation'][j]
+                n_e_valence += n_v_j
+                if rc.scatter_factor_method == 4:
+                    R_nl = coppens_R_nl(Z, j, kr)
+                else:
+                    R_nl = bunge_R_nl(Z, j, kr)
+                rho_valence += (R_nl**2) * n_v_j
+
+            # normalize and scale by pv & pc
+            basis.core[i, :] = basis.pc[i] * rho_core \
+                / np.trapz(rho_core * r**2, r)
+            basis.valence[i, :] = kappa**3 * basis.pv[i] * rho_valence \
+                / np.trapz(rho_valence * r**2, r)
+
+            # p_atom(r)
+            rho_total = (basis.core[i, :] + basis.valence[i, :])
+            # atomic charge
+            basis.n_electrons[i] = np.trapz(rho_total * r**2, r)
+            label = basis.atom_label[i]
+            print(f"  Atom {label}: Oxidation number {(Z-basis.n_electrons[i]):.2f}")
             sim.plot_charge_density(xtal, basis, rc, i)
     return
 
@@ -1822,33 +1826,37 @@ def f_kappa(xtal, basis, rc, g_pool_mag, i):
     size [n_hkl, n_hkl]
 
     """
-    # physics to crystallographic convention
-    # my g = 2*pi*g' where g' is the crystallographic convention
-    # x-ray structure factors are given in s = sin(theta)/lambda = 1/2d =g'/2
-    # so s = g/(4*pi)
-    s = g_pool_mag / (4*np.pi)
+    # # OLD WAY - numeric integration
+    # # physics to crystallographic convention
+    # # my g = 2*pi*g' where g' is the crystallographic convention
+    # # x-ray structure factors are given in s = sin(theta)/lambda = 1/2d =g'/2
+    # # so s = g/(4*pi)
+    # s = g_pool_mag / (4*np.pi)
 
-    # array in real space to calculate integral
-    # may need more points at small r?
-    r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
+    # # array in real space to calculate integral
+    # # may need more points at small r?
+    # r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
 
-    # integrate to get the structure factor
-    # NB we use sinc(qr) = sinc(2sr) ???
-    qr = 2 * np.outer(s, r)
-    base_core = basis.core[i] * np.sinc(qr) * r**2
-    base_val = basis.valence[i] * np.sinc(qr) * r**2
-    f_x_core = np.trapz(base_core, r, axis=1)
-    f_x_valence = np.trapz(base_val, r, axis=1)
-    f_x = f_x_core + f_x_valence
+    # # integrate to get the structure factor
+    # # NB we use sinc(qr) = sinc(2sr)
+    # # The sinc term for valence electrons uses s/kappa rather than s,
+    # # see 'Coppens X-ray charge density and chemical bonding', Eq. 3.18
+    # qr = 2 * np.outer(s, r)
+    # base_core = basis.core[i] * np.sinc(qr) * r**2
+    # base_val = basis.valence[i] * np.sinc(qr/basis.kappa[i]) * r**2
+    # f_x_core = np.trapz(base_core, r, axis=1)
+    # f_x_valence = np.trapz(base_val, r, axis=1)
+    # f_x = f_x_core + f_x_valence
 
-    # new way
+    # NEW WAY - analytical integration
     s = g_pool_mag / 2
     s[0] = 1.0  # to avoid divide by zero error, we replace f[0] later
 
     Z = basis.atomic_number[i]
     orbi = orb(basis.atomic_number[i])
 
-    # core X-ray scattering factor
+    # core X-ray scattering factor using analytical form of integral
+    # done all in one go using numpy broadcasting
     f_x_coro = np.zeros_like(s)
     s3 = s[:, None, None]
     for orbit in orbi['core_orbitals']:
@@ -1905,15 +1913,14 @@ def f_kappa(xtal, basis, rc, g_pool_mag, i):
              / (sk3 * (ZZ[None, :, :]**2 + sk3**2)**(nn[None, :, :] / 2)))
         f_x_valenco += n_c_j * np.sum(f, axis=(1, 2))
     # set the zero point
-    f_x_valenco[0] = basis.pv[i]
-    f_x_valenco *= basis.kappa[i]  # change the fx scale
+    f_x_valenco[0] = orbi["pv"]
+    f_x_valenco *= basis.pv[i]/orbi["pv"]  # scale the value
     s[0] = 0.0
 
-    plt.plot(s, f_x_coro)
-    plt.plot(s, f_x_core)
-    plt.plot(s, f_x_valence)
-    plt.plot(s, f_x_valenco)
-    plt.show()
+    # plot X-ray scattering factor
+    if rc.plot > 1:
+        # sim.plot_f_x(s, f_x_valenco, None, basis.atom_label[i])
+        sim.plot_f_x(s, f_x_valenco, f_x_coro, basis.atom_label[i])
 
     f_kappa = np.zeros_like(g_pool_mag, dtype=float)
 
@@ -1940,14 +1947,8 @@ def f_kappa(xtal, basis, rc, g_pool_mag, i):
     f_k = f_kirkland(basis.atomic_number[i], g_pool_mag).ravel()
 
     # plot the scattering factor
-    if rc.plot > 2:
+    if rc.plot > 1:
         sim.plot_f_e(basis, rc, s, f_kappa, f_k, i)
-        if rc.iter_count == 0:
-            sim.plot_f_e(basis, rc, s, f_kappa, f_k, i)
-        # else:
-        #     # plot the radial charge density only when it's being refined
-        #     if rc.refined_variable_type[i] // 10 == 5:
-        #         sim.plot_f_e(basis, rc, s, f_kappa, f_k, i)
 
     return f_kappa
 
