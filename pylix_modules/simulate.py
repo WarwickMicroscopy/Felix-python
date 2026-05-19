@@ -1422,12 +1422,13 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     else:
         r3_var[1] = 1.0*rc.refined_variable[j]
         r3_fom[1] = 1.0*fom
-        # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
-        print("-b-----------------------------")  # {r3_var},{r3_fom}")
         if fom < rc.best_fit:
             rc.best_fit = fom*1.0
             rc.best_var = np.copy(rc.refined_variable)
+        # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
+        print("-b-----------------------------")  # {r3_var},{r3_fom}")
     if not cont:
+        rc.refined_variable = np.copy(rc.best_var)
         dydx[j] = 0.0
         return dydx
 
@@ -1444,14 +1445,15 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         print_LACBED(bloch, cbed, rc, 0)
     r3_var[2] = 1.0*rc.refined_variable[j]
     r3_fom[2] = 1.0*fom
-    # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
-    print("-c-----------------------------")  # {r3_var},{r3_fom}")
     if fom < rc.best_fit:
         rc.best_fit = fom*1.0
         rc.best_var = np.copy(rc.refined_variable)
     if not cont:
+        rc.refined_variable = np.copy(rc.best_var)
         dydx[j] = 0.0
         return dydx
+    # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
+    print("-c-----------------------------")  # {r3_var},{r3_fom}")
 
     # Error estimate
     # rc.refined_variable_sigma[j] = variable_sigma(r3_var, r3_fom)
