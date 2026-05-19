@@ -1411,26 +1411,23 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
     # simulate and get figure of merit
     fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
+    if fom < rc.best_fit:
+        rc.best_fit = fom*1.0
+        rc.best_var = np.copy(rc.refined_variable)
     if rc.plot > 1:
         print_LACBED(bloch, cbed, rc, 0)
-    # check for no effect
+    # check for no effect or parameter out of range
     improvement = rc.best_fit - fom
-    if abs(improvement) < 0.1*rc.exit_criteria:
-        cont = False
-        # print(f"{variable_message(t)} has no significant effect")
-        print("-next--------------------------")  # {r3_var},{r3_fom}")
+    if abs(improvement) < 0.1*rc.exit_criteria or cont is False:
+        # we leave best_var unchanged and go on to the next
+        print("-next--------------------------")
+        dydx[j] = 0.0
+        return dydx
     else:
         r3_var[1] = 1.0*rc.refined_variable[j]
         r3_fom[1] = 1.0*fom
-        if fom < rc.best_fit:
-            rc.best_fit = fom*1.0
-            rc.best_var = np.copy(rc.refined_variable)
         # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
         print("-b-----------------------------")  # {r3_var},{r3_fom}")
-    if not cont:
-        rc.refined_variable = np.copy(rc.best_var)
-        dydx[j] = 0.0
-        return dydx
 
     # Third point
     print("Refining, point 3 of 3")
@@ -1441,15 +1438,15 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         rc.refined_variable += np.exp(0.4)*delta
     rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
     fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
+    if fom < rc.best_fit:
+        rc.best_fit = fom*1.0
+        rc.best_var = np.copy(rc.refined_variable)
     if rc.plot > 1:
         print_LACBED(bloch, cbed, rc, 0)
     r3_var[2] = 1.0*rc.refined_variable[j]
     r3_fom[2] = 1.0*fom
-    if fom < rc.best_fit:
-        rc.best_fit = fom*1.0
-        rc.best_var = np.copy(rc.refined_variable)
-    if not cont:
-        rc.refined_variable = np.copy(rc.best_var)
+    if cont is False:
+        print("-next--------------------------")
         dydx[j] = 0.0
         return dydx
     # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
@@ -1471,13 +1468,13 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         if not cont:
             minny = True
         fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
+        if fom < rc.best_fit:
+            rc.best_fit = fom*1.0
+            rc.best_var = np.copy(rc.refined_variable)
         if rc.plot > 1:
             print_LACBED(bloch, cbed, rc, 0)
         # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
         print("-.-----------------------------")  # {r3_var}: {r3_fom}")
-        if fom < rc.best_fit:
-            rc.best_fit = fom*1.0
-            rc.best_var = np.copy(rc.refined_variable)
         improvement = rc.best_fit - fom
         if (improvement > 0.1*rc.exit_criteria):  # it's better, keep going
             # replace worst point with this one

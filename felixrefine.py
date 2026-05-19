@@ -308,7 +308,7 @@ else:  # atom-specific refinements can be done simultaneously
         print("Refining Anisotropic atomic displacement parameters, E")
     if 'J' in rc.refine_mode:
         atm = 1
-        print("Refining valence electron polulation, J")
+        print("Refining valence electron population, J")
     if 'K' in rc.refine_mode:
         atm = 1
         print("Refining Kappa, K")
@@ -323,7 +323,12 @@ else:  # atom-specific refinements can be done simultaneously
             # initial kappa is 1.0 for a neutral atom
             basis.kappa = np.ones(basis.n_atoms, dtype=float)
             px.electron_density(xtal, basis, rc)
-            # basis.pv[2] = 5  # *** hack for LiNbO3 ***
+            basis.pv[0] = 4.4  # *** hack for LiNbO3 ***
+            basis.pv[1] = 3.0  # *** hack for LiNbO3 ***
+            basis.pv[2] = 6.0  # *** hack for LiNbO3 ***
+            basis.pv[0] = 0.84  # *** hack for LiNbO3 ***
+            basis.pv[1] = 0.92  # *** hack for LiNbO3 ***
+            basis.pv[2] = 0.97  # *** hack for LiNbO3 ***
 
     if atm == 1:
         # error check - do specified atom sites make sense
@@ -667,16 +672,16 @@ if 'S' not in rc.refine_mode:
     df = 1.0
     rc.refinement_scale *= 2.0
     while df >= rc.exit_criteria and rc.refinement_scale >= rc.precision:
-        if df >= rc.exit_criteria:
-            # reduce refinement scale for next round
-            # rc.refinement_scale *= (1 - 1 / (1 + rc.n_variables))
-            rc.refinement_scale *= 0.5
-            print(f"Step size {rc.refinement_scale:g}")
         # rc.refined_variable is the working array of variables
         # best_var is the best array of variables during this refinement cycle
         rc.best_var = np.copy(rc.refined_variable)
         # next_var is the predicted next (best) point
         rc.next_var = np.copy(rc.refined_variable)
+        if df >= rc.exit_criteria:
+            # reduce refinement scale for next round
+            # rc.refinement_scale *= (1 - 1 / (1 + rc.n_variables))
+            rc.refinement_scale *= 0.5
+            print(f"Step size {rc.refinement_scale:g}")
 
         if rc.refine_method == 0:
             print("Gradient descent, one parameter at a time")
@@ -688,9 +693,6 @@ if 'S' not in rc.refine_mode:
                 np.random.shuffle(indices)
             for i in indices:
                 dydx[i] = 1.0
-                # print(f"Refinement vector {dydx}")
-                # single is just multiparameter with one non-zero value
-                # rc.next_var = rc.best_var - dydx*rc.refinement_scale
                 dydx = sim.refine_multi_variable(xtal, basis, cell, hkl,
                                                  bloch, cbed, rc, dydx)
 
