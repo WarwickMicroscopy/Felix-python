@@ -1920,7 +1920,8 @@ def f_kappa(xtal, basis, rc, g_pool_mag, i):
     # plot X-ray scattering factor
     if rc.plot > 1:
         # sim.plot_f_x(s, f_x_valenco, None, basis.atom_label[i])
-        sim.plot_f_x(s, f_x_valenco, f_x_coro, basis.atom_label[i])
+        sim.plot_f_x(s, f_x_valenco, f_x_coro,
+                     basis.kappa[i], basis.pv[i], basis.atom_label[i])
 
     f_kappa = np.zeros_like(g_pool_mag, dtype=float)
 

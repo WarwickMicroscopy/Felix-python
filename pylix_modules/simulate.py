@@ -1529,7 +1529,7 @@ def plot_f_e(basis, rc, s, f_kappa, f_k, i):
     return
 
 
-def plot_f_x(s, f_x_v, f_x_c, name):
+def plot_f_x(s, f_x_v, f_x_c, kappa, pv, name):
     """
     Utility subroutine to plot x-ray scattering factors
     """
@@ -1550,6 +1550,12 @@ def plot_f_x(s, f_x_v, f_x_c, name):
     ax.set_xlim(left=0)
     ax.legend(loc='best', fontsize=22)
     # plt.xscale('log')
+    annotation = f"Kappa = {kappa:.2f}"
+    plt.annotate(annotation, xy=(0.6, 0.8), xycoords='figure fraction',
+                 size=22)
+    annotation = f"Pv = {pv:.2f}"
+    plt.annotate(annotation, xy=(0.6, 0.75), xycoords='figure fraction',
+                 size=22)
     plt.show()
 
 
