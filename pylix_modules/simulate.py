@@ -1387,7 +1387,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         if rc.plot == 3:  # also do difference image
             print_LACBED(bloch, cbed, rc, 2)
 
-        print("-a-----------------------------")  # "{r3_var},{r3_fom}")
+        print(f"-a-----------------------------{rc.iter_count}")  # "{r3_var},{r3_fom}")
 
     # First point: incoming best simulation
     r3_var = np.zeros(3)
@@ -1418,16 +1418,16 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         print_LACBED(bloch, cbed, rc, 0)
     # check for no effect or parameter out of range
     improvement = rc.best_fit - fom
-    if abs(improvement) < 0.1*rc.exit_criteria or cont is False:
+    if abs(improvement) < 0.1*abs(rc.precision) or cont is False:
         # we leave best_var unchanged and go on to the next
-        print("-next--------------------------")
+        print(f"-next--------------------------{rc.iter_count}")
         dydx[j] = 0.0
         return dydx
     else:
         r3_var[1] = 1.0*rc.refined_variable[j]
         r3_fom[1] = 1.0*fom
         # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
-        print("-b-----------------------------")  # {r3_var},{r3_fom}")
+        print(f"-b-----------------------------{rc.iter_count}")  # {r3_var},{r3_fom}")
 
     # Third point
     print("Refining, point 3 of 3")
@@ -1446,11 +1446,11 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     r3_var[2] = 1.0*rc.refined_variable[j]
     r3_fom[2] = 1.0*fom
     if cont is False:
-        print("-next--------------------------")
+        print("f-next--------------------------{rc.iter_count}")
         dydx[j] = 0.0
         return dydx
     # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
-    print("-c-----------------------------")  # {r3_var},{r3_fom}")
+    print(f"-c-----------------------------{rc.iter_count}")  # {r3_var},{r3_fom}")
 
     # Error estimate
     # rc.refined_variable_sigma[j] = variable_sigma(r3_var, r3_fom)
@@ -1474,9 +1474,9 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         if rc.plot > 1:
             print_LACBED(bloch, cbed, rc, 0)
         # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
-        print("-.-----------------------------")  # {r3_var}: {r3_fom}")
+        print(f"-.-----------------------------{rc.iter_count}")  # {r3_var}: {r3_fom}")
         improvement = rc.best_fit - fom
-        if (improvement > 0.1*rc.exit_criteria):  # it's better, keep going
+        if (improvement > 0.1*abs(rc.precision)):  # it's better, keep going
             # replace worst point with this one
             i = np.argmax(r3_fom)
             r3_var[i] = 1.0*rc.refined_variable[j]

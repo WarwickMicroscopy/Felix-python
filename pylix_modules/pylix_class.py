@@ -61,7 +61,6 @@ class RunControl:
     refine_method = None
     refinement_scale = None
     weighting_flag = None
-    exit_criteria = None
     precision = None
     correlation_type = None
     atomic_sites = None
