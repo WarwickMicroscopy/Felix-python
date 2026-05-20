@@ -326,9 +326,9 @@ else:  # atom-specific refinements can be done simultaneously
             basis.pv[0] = 4.4  # *** hack for LiNbO3 ***
             basis.pv[1] = 3.0  # *** hack for LiNbO3 ***
             basis.pv[2] = 6.0  # *** hack for LiNbO3 ***
-            basis.pv[0] = 0.84  # *** hack for LiNbO3 ***
-            basis.pv[1] = 0.92  # *** hack for LiNbO3 ***
-            basis.pv[2] = 0.97  # *** hack for LiNbO3 ***
+            basis.kappa[0] = 0.84  # *** hack for LiNbO3 ***
+            basis.kappa[1] = 0.92  # *** hack for LiNbO3 ***
+            basis.kappa[2] = 0.97  # *** hack for LiNbO3 ***
 
     if atm == 1:
         # error check - do specified atom sites make sense

@@ -71,7 +71,7 @@ exit_ criteria, refinement_ scale & precision_:
         Typical exit criteria 0.05% = 0.0005
         Individual variable refinement exits when improvement in FoM falls below precision_/10
     When negative:
-        Stop when refinement scale becomes smaller than precision
+        Stop when refinement scale becomes smaller than precision_.
 # ------------------------------------
 
 # Control flags
@@ -94,8 +94,8 @@ g_limit                   = 0.0
 incident_beam_direction   = [1, -1, 0]
 x_direction               = [0, 0, -1]
 normal                    = [1, -1, 0]
-initial_thickness         = 1100.0
-final_thickness           = 1301.0
+initial_thickness         = 1120.0
+final_thickness           = 1321.0
 delta_thickness           = 20.0
 debye_waller_constant     = 0.0
 absorption_per            = 10.0
@@ -114,11 +114,11 @@ print_flag                = 0
 debug                     = 0
 
 # Refinement specific flags
-refine_mode               = 'J,K'
+refine_mode               = 'E,J,K'
 refine_method             = 0
-refinement_scale          = 0.05
-correlation_type          = 1
+refinement_scale          = 0.005
+correlation_type          = 2
 atomic_sites              = [2]
-precision                 = -0.025
+precision                 = -0.0025
 weighting_flag            = 0
 no_of_ugs                 = 40

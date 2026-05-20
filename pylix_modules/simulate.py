@@ -1446,7 +1446,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     r3_var[2] = 1.0*rc.refined_variable[j]
     r3_fom[2] = 1.0*fom
     if cont is False:
-        print("f-next--------------------------{rc.iter_count}")
+        print(f"-next--------------------------{rc.iter_count}")
         dydx[j] = 0.0
         return dydx
     # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
