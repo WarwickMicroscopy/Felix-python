@@ -671,13 +671,13 @@ if 'S' not in rc.refine_mode:
     # Refinement loop
     df = 1.0
     rc.refinement_scale *= 2.0
-    while df >= rc.exit_criteria and rc.refinement_scale >= rc.precision:
+    while df >= rc.precision and rc.refinement_scale >= abs(rc.precision):
         # rc.refined_variable is the working array of variables
         # best_var is the best array of variables during this refinement cycle
         rc.best_var = np.copy(rc.refined_variable)
         # next_var is the predicted next (best) point
         rc.next_var = np.copy(rc.refined_variable)
-        if df >= rc.exit_criteria:
+        if df >= abs(rc.precision):
             # reduce refinement scale for next round
             # rc.refinement_scale *= (1 - 1 / (1 + rc.n_variables))
             rc.refinement_scale *= 0.5
@@ -695,7 +695,6 @@ if 'S' not in rc.refine_mode:
                 dydx[i] = 1.0
                 dydx = sim.refine_multi_variable(xtal, basis, cell, hkl,
                                                  bloch, cbed, rc, dydx)
-
         elif rc.refine_method == 1:
             print("Multiparameter refinement, finding parameter gradients")
             # =========== step 1: individual variable minimisation
@@ -743,10 +742,10 @@ if 'S' not in rc.refine_mode:
 
         rc.last_fit = np.copy(rc.best_fit)
         rc.refined_variable = np.copy(rc.best_var)
-        if rc.exit_criteria > 0:
-            print(f"Improvement in fit {100*df:.2f}%, will stop at {100*rc.exit_criteria:.2f}%")
+        if rc.precision > 0:
+            print(f"Improvement in fit {100*df:.2f}%, will stop at {100*rc.precision:.2f}%")
         else:
-            print(f"Improvement in fit {100*df:.2f}%, will stop after step size < {rc.precision}")
+            print(f"Improvement in fit {100*df:.2f}%, will stop after step size < {abs(rc.precision)}")
         print("-------------------------------")
     print(f"Refinement complete after {rc.iter_count} simulations.  Refined values: {rc.best_var}")
 
