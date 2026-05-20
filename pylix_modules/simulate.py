@@ -1463,9 +1463,8 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         next_x, minny = px.convex(r3_var, r3_fom)
         rc.refined_variable[j] *= next_x/last_x
         # print(f"**..** next x = {rc.refined_variable[j]}")
-        rc.refined_variable[j], cont = variable_check(rc.refined_variable[j],
-                                                      t)
-        if not cont:
+        rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
+        if cont is False:
             minny = True
         fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
         improvement = rc.best_fit - fom
@@ -1486,6 +1485,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         # Error estimate
         rc.refined_variable_sigma[j] = variable_sigma(r3_var, r3_fom)
     # we have taken the principal variable to a minimum
+    rc.refined_variable = np.copy(rc.best_var)
     dydx[j] = 0.0
     print(f"    ====Refined variable {j}====")
     print_LACBED(bloch, cbed, rc, 0)
