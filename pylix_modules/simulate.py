@@ -1418,11 +1418,16 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     if rc.plot > 1:
         print_LACBED(bloch, cbed, rc, 0)
     # check for no effect or parameter out of range
-    if abs(improvement) < 0.1*abs(rc.precision) or cont is False:
+    if abs(improvement) < 0.1*abs(rc.precision):
         # we leave best_var unchanged and go on to the next
+        print(f"    Improvement {abs(improvement)} is smaller than {0.1*abs(rc.precision)}")
         print(f"-next=========================={rc.iter_count}")
         dydx[j] = 0.0
         return dydx
+    elif cont is False:
+        print("    Parameter out of range")
+        print(f"-next=========================={rc.iter_count}")
+        dydx[j] = 0.0
     else:
         r3_var[1] = 1.0*rc.refined_variable[j]
         r3_fom[1] = 1.0*fom
@@ -1445,10 +1450,10 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         print_LACBED(bloch, cbed, rc, 0)
     r3_var[2] = 1.0*rc.refined_variable[j]
     r3_fom[2] = 1.0*fom
-    if cont is False:
-        print(f"-next=========================={rc.iter_count}")
-        dydx[j] = 0.0
-        return dydx
+    # if cont is False:
+    #     print(f"-next=========================={rc.iter_count}")
+    #     dydx[j] = 0.0
+    #     return dydx
     # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
     print(f"-c-----------------------------{rc.iter_count}")  # {r3_var},{r3_fom}")
 

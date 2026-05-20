@@ -1806,7 +1806,8 @@ def electron_density(xtal, basis, rc):
             basis.n_electrons[i] = np.trapz(rho_total * r**2, r)
             label = basis.atom_label[i]
             print(f"  Atom {label}: Oxidation number {(Z-basis.n_electrons[i]):.2f}")
-            sim.plot_charge_density(xtal, basis, rc, i)
+            if rc.plot > 2:
+                sim.plot_charge_density(xtal, basis, rc, i)
     return
 
 
@@ -1918,7 +1919,7 @@ def f_kappa(xtal, basis, rc, g_pool_mag, i):
     s[0] = 0.0
 
     # plot X-ray scattering factor
-    if rc.plot > 1:
+    if rc.plot > 2:
         # sim.plot_f_x(s, f_x_valenco, None, basis.atom_label[i])
         sim.plot_f_x(s, f_x_valenco, f_x_coro,
                      basis.kappa[i], basis.pv[i], basis.atom_label[i])
@@ -1948,7 +1949,7 @@ def f_kappa(xtal, basis, rc, g_pool_mag, i):
     f_k = f_kirkland(basis.atomic_number[i], g_pool_mag).ravel()
 
     # plot the scattering factor
-    if rc.plot > 1:
+    if rc.plot > 2:
         sim.plot_f_e(basis, rc, s, f_kappa, f_k, i)
 
     return f_kappa
