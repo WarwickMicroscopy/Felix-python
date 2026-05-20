@@ -1411,16 +1411,16 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
     # simulate and get figure of merit
     fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
+    improvement = rc.best_fit - fom
     if fom < rc.best_fit:
         rc.best_fit = fom*1.0
         rc.best_var = np.copy(rc.refined_variable)
     if rc.plot > 1:
         print_LACBED(bloch, cbed, rc, 0)
     # check for no effect or parameter out of range
-    improvement = rc.best_fit - fom
     if abs(improvement) < 0.1*abs(rc.precision) or cont is False:
         # we leave best_var unchanged and go on to the next
-        print(f"-next--------------------------{rc.iter_count}")
+        print(f"-next=========================={rc.iter_count}")
         dydx[j] = 0.0
         return dydx
     else:
@@ -1446,7 +1446,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     r3_var[2] = 1.0*rc.refined_variable[j]
     r3_fom[2] = 1.0*fom
     if cont is False:
-        print(f"-next--------------------------{rc.iter_count}")
+        print(f"-next=========================={rc.iter_count}")
         dydx[j] = 0.0
         return dydx
     # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
@@ -1468,6 +1468,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         if not cont:
             minny = True
         fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
+        improvement = rc.best_fit - fom
         if fom < rc.best_fit:
             rc.best_fit = fom*1.0
             rc.best_var = np.copy(rc.refined_variable)
@@ -1475,7 +1476,6 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
             print_LACBED(bloch, cbed, rc, 0)
         # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
         print(f"-.-----------------------------{rc.iter_count}")  # {r3_var}: {r3_fom}")
-        improvement = rc.best_fit - fom
         if (improvement > 0.1*abs(rc.precision)):  # it's better, keep going
             # replace worst point with this one
             i = np.argmax(r3_fom)
