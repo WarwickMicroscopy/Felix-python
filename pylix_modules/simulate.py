@@ -1463,14 +1463,14 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     # We continue downhill until we get a predicted minnymum
     minny = False
     while minny is False:
-        last_x = 1.0*rc.refined_variable[j]
         # predict the next point as a minimum or a step on
         next_x, minny = px.convex(r3_var, r3_fom)
-        rc.refined_variable[j] *= next_x/last_x
-        # print(f"**..** next x = {rc.refined_variable[j]}")
+        # version that scales the whole vector
+        # last_x = 1.0*rc.refined_variable[j]
+        # rc.refined_variable[j] *= next_x/last_x
+        # version that just changes one variable 
+        rc.refined_variable[j] = next_x
         rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
-        if cont is False:
-            minny = True
         fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
         improvement = rc.best_fit - fom
         if fom < rc.best_fit:
@@ -1480,7 +1480,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
             print_LACBED(bloch, cbed, rc, 0)
         # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
         print(f"-.-----------------------------{rc.iter_count}")  # {r3_var}: {r3_fom}")
-        if (improvement > 0.1*abs(rc.precision)):  # it's better, keep going
+        if (improvement > 0.1*abs(rc.precision)) and cont is True:  # it's better, keep going
             # replace worst point with this one
             i = np.argmax(r3_fom)
             r3_var[i] = 1.0*rc.refined_variable[j]

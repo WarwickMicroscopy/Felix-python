@@ -269,6 +269,18 @@ elif rc.scatter_factor_method == 2:
 elif rc.scatter_factor_method == 3:
     print("  Using Doyle & Turner scattering factors")
 elif rc.scatter_factor_method > 3:
+    # initialise pv, pc, kappa and electron density
+    basis.pv = np.zeros(basis.n_atoms, dtype=float)
+    basis.pc = np.zeros(basis.n_atoms, dtype=float)
+    # initial kappa is 1.0 for a neutral atom
+    basis.kappa = np.ones(basis.n_atoms, dtype=float)
+    px.electron_density(xtal, basis, rc)
+    basis.pv[0] = 4.4  # *** hack for LiNbO3 ***
+    basis.pv[1] = 3.4  # *** hack for LiNbO3 ***
+    basis.pv[2] = 6.155  # *** hack for LiNbO3 ***
+    basis.kappa[0] = 0.84  # *** hack for LiNbO3 ***
+    basis.kappa[1] = 0.92  # *** hack for LiNbO3 ***
+    basis.kappa[2] = 0.97  # *** hack for LiNbO3 ***
     if rc.scatter_factor_method == 4:
         print("  Using Coppens RHF scattering factors with Kappa")
     else:
@@ -316,19 +328,6 @@ else:  # atom-specific refinements can be done simultaneously
     if 'J' in rc.refine_mode or 'K' in rc.refine_mode:
         if rc.scatter_factor_method < 4:
             raise ValueError("scatter_factor_method must be 4 or 5 for kappa refinement")
-        else:
-            # initialise pv, pc, kappa and electron density
-            basis.pv = np.zeros(basis.n_atoms, dtype=float)
-            basis.pc = np.zeros(basis.n_atoms, dtype=float)
-            # initial kappa is 1.0 for a neutral atom
-            basis.kappa = np.ones(basis.n_atoms, dtype=float)
-            px.electron_density(xtal, basis, rc)
-            basis.pv[0] = 4.4  # *** hack for LiNbO3 ***
-            basis.pv[1] = 3.0  # *** hack for LiNbO3 ***
-            basis.pv[2] = 6.0  # *** hack for LiNbO3 ***
-            basis.kappa[0] = 0.84  # *** hack for LiNbO3 ***
-            basis.kappa[1] = 0.92  # *** hack for LiNbO3 ***
-            basis.kappa[2] = 0.97  # *** hack for LiNbO3 ***
 
     if atm == 1:
         # error check - do specified atom sites make sense
@@ -677,11 +676,10 @@ if 'S' not in rc.refine_mode:
         rc.best_var = np.copy(rc.refined_variable)
         # next_var is the predicted next (best) point
         rc.next_var = np.copy(rc.refined_variable)
-        if df >= abs(rc.precision):
-            # reduce refinement scale for next round
-            # rc.refinement_scale *= (1 - 1 / (1 + rc.n_variables))
-            rc.refinement_scale *= 0.5
-            print(f"Step size {rc.refinement_scale:g}")
+        # reduce refinement scale for next round
+        # rc.refinement_scale *= (1 - 1 / (1 + rc.n_variables))
+        rc.refinement_scale *= 0.5
+        print(f"Step size {rc.refinement_scale:g}")
 
         if rc.refine_method == 0:
             print("Gradient descent, one parameter at a time")
