@@ -2269,7 +2269,7 @@ def read_dm3(file_path, x, debug):
         print(f"{file_path} not found")
 
 
-def parabo3(x, y):
+def parabo3(x, y, dy=0):
     # y=a*x^2+b*x+c
     d = x[0]*x[0]*(x[1]-x[2]) + x[1]*x[1]*(x[2]-x[0]) + x[2]*x[2]*(x[0]-x[1])
     if (abs(d) > 1e-10):  # we get zero d if all three inputs are the same
@@ -2280,14 +2280,16 @@ def parabo3(x, y):
             x[2]*x[2]*(x[0]*y[1]-x[1]*y[0])) / d
         x_v = -b/(2*a)  # x-coord
         y_v = c-b*b/(4*a)  # y-coord
+        dx = np.sqrt(dy/a)  # error in x corresponding to dy
     else:
         x_v = x[np.argmin(y)]
         y_v = y[np.argmin(y)]
+        dx = 0
 
-    return x_v, y_v
+    return x_v, y_v, dy
 
 
-def convex(x, y):
+def convex(x, y, dy):
     # Checks three points (x = variable, y = figure of merit) to see if a
     # parabolic fit to a minimum is possible.  If so, returns the predicted
     # minimum. If not, returns the next x to check (both cases, minny=False).
@@ -2334,10 +2336,10 @@ def convex(x, y):
         next_x = x[y_min] + np.exp(0.75) * last_dx
         print(f"Convex, will contine to {next_x:.5f}")
     else:
-        next_x, next_y = parabo3(x, y)
+        next_x, next_y, dx = parabo3(x, y, dy)
         print(f"Concave, predict minimum at {next_x:.5f} with fit index {100*next_y:.2f}%")
 
-    return next_x, minny
+    return next_x, minny, dx
 
 
 def get_git():

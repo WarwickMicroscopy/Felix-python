@@ -418,8 +418,8 @@ def cc_d_xy(img1, img2):
         # Find best one
         if np.argmax(corr) == 0:  # best position is at (0, 0) + (x, y)
             # sub-pixel
-            sx, fx = px.parabo3(coord+x, np.array([corr[2], corr[0], corr[1]]))
-            sy, fy = px.parabo3(coord+y, np.array([corr[4], corr[0], corr[3]]))
+            sx, fx, _ = px.parabo3(coord+x, np.array([corr[2], corr[0], corr[1]]))
+            sy, fy, _ = px.parabo3(coord+y, np.array([corr[4], corr[0], corr[3]]))
             break
         x, y = shifts[np.argmax(corr)]
         if x >= d_max or y >= d_max:
@@ -1238,9 +1238,12 @@ def refine_single_variable(xtal, basis, cell, hkl, bloch, cbed, rc, i):
     Returns:
         dydx_i: the gradient of this variable
     '''
+    # uncertainty in figure of merit  ***hack at the moment to fixed value***
+    dy = 0.003
     r3_var = np.zeros(3)  # for parabolic minimum
     r3_fom = np.zeros(3)
-    # Check if ADP is negative, skip if so NB u12,u13,u23 can be -ve
+    # Check if ADP is negative, skip if so.
+    # NB u12,u13,u23 can be -ve
     if 21 < rc.refined_variable_type[i] < 26 and rc.refined_variable[i] < 1e-10:
         dydx_i = 0.0
     else:
@@ -1290,7 +1293,7 @@ def refine_single_variable(xtal, basis, cell, hkl, bloch, cbed, rc, i):
             exclude = True
             print(f"  Low effect, fixed at {rc.best_var[i]}")
         else:
-            rc.next_var[i], exclude = px.convex(r3_var, r3_fom)
+            rc.next_var[i], exclude, dx = px.convex(r3_var, r3_fom, dy)
         # predict the next point as a minimum or a step onwards
         # rc.next_var gets passed on to the multidimensional refinement
         # as a global variable
@@ -1342,6 +1345,9 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
 
     dydx = array of gradients, size [n_var]
     '''
+    # uncertainty in figure of merit  ***hack at the moment to fixed value***
+    dy = 0.003
+
     # starting point is the current best set of variables
     rc.last_fit = 1.0*rc.best_fit
 
@@ -1457,14 +1463,12 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
     print(f"-c-----------------------------{rc.iter_count}")  # {r3_var},{r3_fom}")
 
-    # Error estimate
-    # rc.refined_variable_sigma[j] = variable_sigma(r3_var, r3_fom)
 
     # We continue downhill until we get a predicted minnymum
     minny = False
     while minny is False:
         # predict the next point as a minimum or a step on
-        next_x, minny = px.convex(r3_var, r3_fom)
+        next_x, minny, dx = px.convex(r3_var, r3_fom, dy)
         # version that scales the whole vector
         # last_x = 1.0*rc.refined_variable[j]
         # rc.refined_variable[j] *= next_x/last_x
@@ -1486,9 +1490,9 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
             r3_var[i] = 1.0*rc.refined_variable[j]
             r3_fom[i] = 1.0*fom
         else:  # we're done
+            # Error estimate
+            rc.refined_variable_sigma[j] = dx
             minny = True
-        # Error estimate
-        rc.refined_variable_sigma[j] = variable_sigma(r3_var, r3_fom)
     # we have taken the principal variable to a minimum
     rc.refined_variable = np.copy(rc.best_var)
     dydx[j] = 0.0
