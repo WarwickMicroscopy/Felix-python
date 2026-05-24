@@ -2286,7 +2286,7 @@ def parabo3(x, y, dy=0):
         y_v = y[np.argmin(y)]
         dx = 0
 
-    return x_v, y_v, dy
+    return x_v, y_v, dx
 
 
 def convex(x, y, dy):
