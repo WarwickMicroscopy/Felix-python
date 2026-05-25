@@ -2270,21 +2270,24 @@ def read_dm3(file_path, x, debug):
 
 
 def parabo3(x, y, dy=0):
+    # default values for no solution
+    x_v = x[np.argmin(y)]
+    y_v = y[np.argmin(y)]
+    dx = 0
     # y=a*x^2+b*x+c
+    a = 0
     d = x[0]*x[0]*(x[1]-x[2]) + x[1]*x[1]*(x[2]-x[0]) + x[2]*x[2]*(x[0]-x[1])
     if (abs(d) > 1e-10):  # we get zero d if all three inputs are the same
-        a =(x[0]*(y[2]-y[1]) + x[1]*(y[0]-y[2]) + x[2]*(y[1]-y[0])) / d
-        b =(x[0]*x[0]*(y[1]-y[2]) + x[1]*x[1]*(y[2]-y[0]) +
+        a = (x[0]*(y[2]-y[1]) + x[1]*(y[0]-y[2]) + x[2]*(y[1]-y[0])) / d
+        # a_inv = d / (x[0]*(y[2]-y[1]) + x[1]*(y[0]-y[2]) + x[2]*(y[1]-y[0]))
+        b = (x[0]*x[0]*(y[1]-y[2]) + x[1]*x[1]*(y[2]-y[0]) +
             x[2]*x[2]*(y[0]-y[1])) / d
-        c =(x[0]*x[0]*(x[1]*y[2]-x[2]*y[1]) + x[1]*x[1]*(x[2]*y[0]-x[0]*y[2]) +
+        c = (x[0]*x[0]*(x[1]*y[2]-x[2]*y[1]) + x[1]*x[1]*(x[2]*y[0]-x[0]*y[2]) +
             x[2]*x[2]*(x[0]*y[1]-x[1]*y[0])) / d
+    if (abs(a) > 1e-10):
         x_v = -b/(2*a)  # x-coord
         y_v = c-b*b/(4*a)  # y-coord
         dx = np.sqrt(dy/a)  # error in x corresponding to dy
-    else:
-        x_v = x[np.argmin(y)]
-        y_v = y[np.argmin(y)]
-        dx = 0
 
     return x_v, y_v, dx
 
