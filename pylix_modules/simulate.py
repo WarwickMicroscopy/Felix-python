@@ -1103,8 +1103,6 @@ def save_LACBED(xtal, bloch, cbed, rc):
 
 def print_current_var(xtal, basis, rc, i):
     # prints the variable being refined
-    # ***does this need to come after beam pool construction get the right 
-    # atomic charge???  YES
     typ = rc.refined_variable_type[i]  # variable type & subtype
     var = rc.refined_variable[i]  # variable 
     sigma = rc.refined_variable_sigma[i]  # error estimate
@@ -1117,31 +1115,31 @@ def print_current_var(xtal, basis, rc, i):
         formats = {
             10: ("Current Ug amplitude", "{:.3f}"),
             11: ("Current Ug phase", "{:.3f}"),
-            21: (f" Atom {label}: Current occupancy", "{:.3f}+/-", "{:.3f}"),
-            22: (f" Atom {label}: Current B_iso", "{:.3f}+/-", "{:.3f}"),
-            23: (f" Atom {label}: Current U[1,1]", "{:.5f}+/-", "{:.5f}"),
-            24: (f" Atom {label}: Current U[2,2]", "{:.5f}+/-", "{:.5f}"),
-            25: (f" Atom {label}: Current U[3,3]", "{:.5f}+/-", "{:.5f}"),
-            26: (f" Atom {label}: Current U[1,2]", "{:.5f}+/-", "{:.5f}"),
-            27: (f" Atom {label}: Current U[1,3]", "{:.5f}+/-", "{:.5f}"),
-            28: (f" Atom {label}: Current U[2,3]", "{:.5f}+/-", "{:.5f}"),
-            30: ("Current lattice parameter a", "{:.4f}+/-", "{:.4f}"),
-            31: ("Current lattice parameter b", "{:.4f}+/-", "{:.4f}"),
-            32: ("Current lattice parameter c", "{:.4f}+/-", "{:.4f}"),
-            33: ("Current lattice alpha", "{:.4f}+/-", "{:.4f}"),
-            34: ("Current lattice beta", "{:.4f}+/-", "{:.4f}"),
-            35: ("Current lattice gamma", "{:.4f}+/-", "{:.4f}"),
-            40: ("Current convergence angle", "{:.3f}+/-", "{:.3f} Å^-1"),
-            41: ("Current accelerating voltage", "{:.1f}+/-", "{:.1f} kV"),
-            50: (f" Atom {label}: Kappa", "{:.3f}+/-", "{:.3f}"),
-            51: (f" Atom {label}: Pv", "{:.4f}+/-", "{:.4f}")
+            21: (f" Atom {label}: Current occupancy", "{:.3f} +/-", "{:.3f}"),
+            22: (f" Atom {label}: Current B_iso", "{:.3f} +/-", "{:.3f}"),
+            23: (f" Atom {label}: Current U[1,1]", "{:.5f} +/-", "{:.5f}"),
+            24: (f" Atom {label}: Current U[2,2]", "{:.5f} +/-", "{:.5f}"),
+            25: (f" Atom {label}: Current U[3,3]", "{:.5f} +/-", "{:.5f}"),
+            26: (f" Atom {label}: Current U[1,2]", "{:.5f} +/-", "{:.5f}"),
+            27: (f" Atom {label}: Current U[1,3]", "{:.5f} +/-", "{:.5f}"),
+            28: (f" Atom {label}: Current U[2,3]", "{:.5f} +/-", "{:.5f}"),
+            30: ("Current lattice parameter a", "{:.4f} +/-", "{:.4f}"),
+            31: ("Current lattice parameter b", "{:.4f} +/-", "{:.4f}"),
+            32: ("Current lattice parameter c", "{:.4f} +/-", "{:.4f}"),
+            33: ("Current lattice alpha", "{:.4f} +/-", "{:.4f}"),
+            34: ("Current lattice beta", "{:.4f} +/-", "{:.4f}"),
+            35: ("Current lattice gamma", "{:.4f} +/-", "{:.4f}"),
+            40: ("Current convergence angle", "{:.3f} +/-", "{:.3f} Å^-1"),
+            41: ("Current accelerating voltage", "{:.1f} +/-", "{:.1f} kV"),
+            50: (f" Atom {label}: Kappa", "{:.3f} +/-", "{:.3f}"),
+            51: (f" Atom {label}: Pv", "{:.4f} +/-", "{:.4f}")
                 }
         if typ == 20:  # atomic coords
             with np.printoptions(formatter={'float': lambda x: f"{x:.5f}"}):
                 print(f"  Atom {atom_id}: {label}  {basis.atom_position[atom_id, :]}")
         elif typ in formats:
             label, fmt, fmt_s = formats[typ]
-            print(f"  {label} {fmt.format(var)}{fmt.format(sigma)}")
+            print(f"  {label} {fmt.format(var)} {fmt_s.format(sigma)}")
     else:
         formats = {
             10: ("Current Ug amplitude", "{:.3f}"),
