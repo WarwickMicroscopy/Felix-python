@@ -2277,14 +2277,14 @@ def parabo3(x, y, dy=0):
     # y=a*x^2+b*x+c
     a = 0
     d = x[0]*x[0]*(x[1]-x[2]) + x[1]*x[1]*(x[2]-x[0]) + x[2]*x[2]*(x[0]-x[1])
-    if (abs(d) > 1e-10):  # we get zero d if all three inputs are the same
+    if abs(d) > 1e-10:  # we get zero d if all three inputs are the same
         a = (x[0]*(y[2]-y[1]) + x[1]*(y[0]-y[2]) + x[2]*(y[1]-y[0])) / d
         # a_inv = d / (x[0]*(y[2]-y[1]) + x[1]*(y[0]-y[2]) + x[2]*(y[1]-y[0]))
         b = (x[0]*x[0]*(y[1]-y[2]) + x[1]*x[1]*(y[2]-y[0]) +
             x[2]*x[2]*(y[0]-y[1])) / d
         c = (x[0]*x[0]*(x[1]*y[2]-x[2]*y[1]) + x[1]*x[1]*(x[2]*y[0]-x[0]*y[2]) +
             x[2]*x[2]*(x[0]*y[1]-x[1]*y[0])) / d
-    if (abs(a) > 1e-10):
+    if abs(a) > 1e-10:
         x_v = -b/(2*a)  # x-coord
         y_v = c-b*b/(4*a)  # y-coord
         dx = np.sqrt(dy/a)  # error in x corresponding to dy
@@ -2304,7 +2304,7 @@ def convex(x, y, dy):
     # error check - same x points
     if np.min(np.diff(np.sort(x))) < 1e-6:
         return x[np.argmin(y)], True
-
+    dx = 0  # default value to return
     tol = 1e-10
     hi = np.argmax(x)  # index of lowest x
     lo = np.argmin(x)  # index of highest x
