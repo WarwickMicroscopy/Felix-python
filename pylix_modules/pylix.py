@@ -2304,7 +2304,8 @@ def convex(x, y, dy):
     # error check - same x points
     if np.min(np.diff(np.sort(x))) < 1e-6:
         return x[np.argmin(y)], True
-    dx = 0  # default value to return
+    dx = 0  # default values to return
+    minny = False
     tol = 1e-10
     hi = np.argmax(x)  # index of lowest x
     lo = np.argmin(x)  # index of highest x
@@ -2315,20 +2316,19 @@ def convex(x, y, dy):
     else:
         y_half = y[hi] + (y[mid] - y[hi]) * (x[hi]-x_half)/(x[hi]-x[mid])
 
-    # check for no change in the figure of merit
-    if abs(y[hi] - y[lo]) < tol:
-        return x[mid], True
-
-    # check for mimimum capture
-    minny = False
-    if y[mid] < y[hi] and y[mid] < y[lo]:
-        minny = True
-
     # convexity is the difference between y_half
     # and a straight line between y[lo] and y[hi]
     convexity = y_half - 0.5*(y[hi] + y[lo])
 
-    if convexity > -0.1 * abs(y[hi] - y[lo]):
+    # check for mimimum capture
+    if y[mid] < y[hi] and y[mid] < y[lo]:
+        minny = True
+
+    # check for no change in the figure of merit
+    if abs(y[hi] - y[lo]) < tol:
+        next_x = x[mid]
+        minny = True
+    elif convexity > -0.1 * abs(y[hi] - y[lo]):
         # find the size of the step between the two lowest y
         y_max = np.argmax(y)  # index of highest y
         y_min = np.argmin(y)  # index of lowest y
