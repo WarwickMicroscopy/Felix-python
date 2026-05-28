@@ -169,6 +169,8 @@ class Cif:
     atom_site_aniso_u_23 = None
     atom_site_aniso_label = None
     atom_site_aniso_type_symbol = None
+    atom_site_pv = None
+    atom_site_kappa = None
     atom_type_symbol = None
     atom_type_oxidation_number = None
 

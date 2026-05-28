@@ -58,12 +58,13 @@ _space_group_symop_operation_xyz
 16 '-x+y+1/3, -x+2/3, z+2/3'
 17 '-y+1/3, x-y+2/3, z+2/3'
 18 'x+1/3, y+2/3, z+2/3'
+
 loop_
 _atom_type_symbol
 _atom_type_oxidation_number
-Li1+ 1
-Nb5+ 5
-O2- -2
+Nb5+  5
+O2-  -2
+
 loop_
 _atom_site_label
 _atom_site_type_symbol
@@ -74,9 +75,13 @@ _atom_site_fract_y
 _atom_site_fract_z
 _atom_site_B_iso_or_equiv
 _atom_site_occupancy
-Li1 Li1+ 6 a 0 0 0.2909 0.0 1.0
-Nb1 Nb5+ 6 a 0 0 0.9985 0.36 1.
-O1 O2- 18 b 0.0571 0.3369 0.0621 0.56 1.
+_atom_site_pv
+_atom_site_kappa
+Li1 Li1+ 6 a 0 0 0.2914 0.0 0.5  4.4  0.84
+Nb1 Nb5+ 6 a 0 0 0.9986 0.3 1.0  3.40  0.888
+O1 O2- 18 b 0.0556 0.3419 0.0620 0.16 1.0  6.15  0.973
+Mg1 Mg1+ 6 a 0 0 0.2914 0.0 0.5  0  0
+
 loop_
 _atom_site_aniso_label
 _atom_site_aniso_type_symbol
@@ -86,6 +91,6 @@ _atom_site_aniso_U_33
 _atom_site_aniso_U_12
 _atom_site_aniso_U_13
 _atom_site_aniso_U_23
-Nb1 Nb5+ 0.00567 0.00535 0.00342 0.00296 0 0
-O1 O2- 0.0132 0.006 0.00515 0.00 0.00 -0.00188
+Nb1 Nb5+ 0.00311 0.00221 0.00249 0.00027 0.00037 0.00034
+O1 O2- 0.00158 0.0 0.00465 0.00317 -0.00109 0.00144
 #End of TTdata_84578-ICSD

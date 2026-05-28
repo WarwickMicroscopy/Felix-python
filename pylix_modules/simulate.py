@@ -1445,6 +1445,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         print("    Parameter out of range")
         print(f"-next=========================={rc.iter_count}")
         dydx[j] = 0.0
+        return dydx
     else:
         r3_var[1] = 1.0*rc.refined_variable[j]
         r3_fom[1] = 1.0*fom

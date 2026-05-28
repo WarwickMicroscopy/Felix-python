@@ -167,6 +167,19 @@ for i in range(basis.n_atoms):
         group_id += 1
         basis.mult_occ[cluster] = group_id
 
+# kappa and pv
+if "atom_site_pv" in cif_dict or "atom_site_kappa" in cif_dict:
+    # initialise pv, pc, kappa and electron density
+    basis.pv = np.zeros(basis.n_atoms, dtype=float)
+    basis.pc = np.zeros(basis.n_atoms, dtype=float)
+    # initial kappa is 1.0 for a neutral atom
+    basis.kappa = np.ones(basis.n_atoms, dtype=float)
+    for i in range(basis.n_atoms):
+        basis.kappa[i] = cif.atom_site_kappa[i][0]
+        basis.pv[i] = cif.atom_site_pv[i][0]
+    if basis.kappa[i] == 0:  # zero kappa means calclulate it
+        basis.kappa[i] = 1
+
 # Thermal displacement parameters, we work with u_aniso
 # ADP tensor Uij with isotropic components on the diagonal
 basis.u_aniso = np.zeros((basis.n_atoms, 3, 3))
@@ -219,6 +232,7 @@ if "atom_type_symbol" in cif_dict:
     # is there a case where oxidation state is just extracted from the end
     # of atom_type_symbol?  If so, it should go here
 
+# coordinate refinement
 basis.atom_delta = np.zeros([basis.n_atoms, 3])  # direction of movement
 basis.n_electrons = np.zeros(basis.n_atoms, dtype=float)  # for kappa refinement
 
@@ -269,18 +283,13 @@ elif rc.scatter_factor_method == 2:
 elif rc.scatter_factor_method == 3:
     print("  Using Doyle & Turner scattering factors")
 elif rc.scatter_factor_method > 3:
-    # initialise pv, pc, kappa and electron density
-    basis.pv = np.zeros(basis.n_atoms, dtype=float)
-    basis.pc = np.zeros(basis.n_atoms, dtype=float)
-    # initial kappa is 1.0 for a neutral atom
-    basis.kappa = np.ones(basis.n_atoms, dtype=float)
+    if "atom_site_pv" not in cif_dict and "atom_site_kappa" not in cif_dict:
+        # initialise pv, pc, kappa and electron density
+        basis.pv = np.zeros(basis.n_atoms, dtype=float)
+        basis.pc = np.zeros(basis.n_atoms, dtype=float)
+        # initial kappa is 1.0 for a neutral atom
+        basis.kappa = np.ones(basis.n_atoms, dtype=float)        
     px.electron_density(xtal, basis, rc)
-    basis.pv[0] = 4.4  # *** hack for LiNbO3 ***
-    basis.pv[1] = 3.4  # *** hack for LiNbO3 ***
-    basis.pv[2] = 6.155  # *** hack for LiNbO3 ***
-    basis.kappa[0] = 0.84  # *** hack for LiNbO3 ***
-    basis.kappa[1] = 0.888  # *** hack for LiNbO3 ***
-    basis.kappa[2] = 0.973  # *** hack for LiNbO3 ***
     if rc.scatter_factor_method == 4:
         print("  Using Coppens RHF scattering factors with Kappa")
     else:

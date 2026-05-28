@@ -10,7 +10,7 @@ from CifFile import CifFile
 import struct
 from pylix_modules import simulate as sim  # simulation control and output
 from pylix_modules import pylix_dicts as fu
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import math
 
 
@@ -171,6 +171,8 @@ def read_cif(filename):
         "_cell_angle_gamma",
         "_cell_volume",
         "_atom_type_oxidation_number",
+        "_atom_site_pv",
+        "_atom_site_kappa",
         "_atom_site_fract_x",
         "_atom_site_fract_y",
         "_atom_site_fract_z",
@@ -1184,11 +1186,6 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
     bloch.g_matrix : size [n_hkl,n_hkl]
     bloch.g_dot_norm : size [n_hkl,n_hkl]
     """
-    # calculate g.r for all g-vectors and atoms [n_hkl, n_hkl, cell.n_atoms]
-    g_dot_r = np.einsum('ijk,lk->ijl', bloch.g_matrix, cell.atom_coordinate)
-    # exp(i g.r) [n_hkl, n_hkl, cell.n_atoms]
-    phase = np.exp(-1j * g_dot_r)
-
     # NB scattering factor methods accept and return
     # up to 2D[n_hkl, n_hkl] array of
     # g magnitudes but only one atom type.
@@ -1234,9 +1231,7 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
                         dtype=np.complex128)
     cell.f_g_prime = np.zeros([cell.n_atoms, bloch.n_hkl, bloch.n_hkl],
                               dtype=np.complex128)
-    # update Coppens orbitals (whole basis)
-    # if rc.scatter_factor_method > 3:
-    #     electron_density(xtal, basis, rc)
+
     for i in range(basis.n_atoms):
         # get the scattering factor for the basis basis.f_g
         if rc.scatter_factor_method == 0:
@@ -1270,6 +1265,7 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
                                                      basis.atomic_number[i],
                                                      bloch.electron_velocity)
         if rc.debug > 0:
+            print("____")
             print(f"basis.f_g [{i}]")
             print(f"{basis.f_g[i, :5, :5]}")
             print("  ")
@@ -1283,6 +1279,11 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
             if cell.atom_label[j] == basis.atom_label[i]:
                 cell.f_g[j, :, :] = basis.f_g[i, :, :]
 
+    # calculate g.r for all g-vectors and atoms [n_hkl, n_hkl, cell.n_atoms]
+    g_dot_r = np.einsum('ijk,lk->ijl', bloch.g_matrix, cell.atom_coordinate)
+    # exp(i g.r) [n_hkl, n_hkl, cell.n_atoms]
+    phase = np.exp(-1j * g_dot_r)
+
     # now make up the full matrix
     Fg_matrix = np.zeros([bloch.n_hkl, bloch.n_hkl], dtype=np.complex128)
     for i in range(cell.n_atoms):
@@ -1291,6 +1292,10 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
                                * phase[:, :, i]
                                * cell.occupancy[i]
                                * np.exp(-Ugg[i, :, :] / 2))
+    if rc.debug > 0:
+        print("Fg_matrix")
+        print(f"{Fg_matrix[:5, :5]}")
+
     # Conversion factor from F_g to U_g
     Fg_to_Ug = bloch.relativistic_correction / (np.pi * xtal.cell_volume)
     bloch.ug_matrix = Fg_to_Ug * Fg_matrix
@@ -1778,8 +1783,10 @@ def electron_density(xtal, basis, rc):
         orbi = orb(basis.atomic_number[i])
         # set up pv and pc if it's the baseline simulation
         if rc.iter_count == 0:
-            basis.pv[i] = orbi["pv"]
             basis.pc[i] = orbi["pc"]
+            # NB zero pv in the cif means 'calculate the default'
+            if basis.pv[i] != 0:
+                basis.pv[i] = orbi["pv"]
 
         # calculate charge density and plot
 
@@ -1944,11 +1951,6 @@ def f_kappa(xtal, basis, rc, g_pool_mag, i):
 
     # g ≠ 0, the Mott-Bethe conversion
     mask = (g_pool_mag != 0)
-    # old
-    # s = g_pool_mag / (4*np.pi)
-    # f_kappa[mask] = xtal.mott*(basis.atomic_number[i] -
-    #                            f_x[mask]) / (s[mask]**2)
-    # new
     f_x = f_x_coro + f_x_valenco
     f_kappa[mask] = 4*np.pi**2*xtal.mott*(basis.atomic_number[i] -
                                 f_x[mask]) / (s[mask]**2)
