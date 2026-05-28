@@ -818,15 +818,14 @@ def figure_of_merit(bloch, cbed, rc):
     if rc.image_processing == 2:
         print(f"  Best blur={rc.blur_radius:.1f}")
     if rc.n_thickness > 1:
+        # mean figure of merit
         rc.best_t = np.argmin(np.mean(fom_array, axis=1))
         t_nm = 0.1*rc.thickness[rc.best_t]
-        # mean figure of merit
-        # error in thickness, from 5 best values
-        # i0, i1 = take_5(fom_array[rc.best_t, :])
-        # t_sigma = variable_sigma(rc.thickness[i0:i1], fom_array[:, i0:i1])
-        t_sigma = 0
+        # take error in thickness as std dev of individual best t
+        best_fom = np.argmin(fom_array, axis=0)  # locations of best FoMs
+        t_sigma = np.std(rc.thickness[best_fom])
 
-        print(f"  Best thickness {t_nm:.1f}+/-{0.1*t_sigma:.1f} nm")
+        print(f"  Best thickness {t_nm:.1f} +/- {0.1*t_sigma:.1f} nm")
         # mean figure of merit
         fom = np.mean(fom_array[rc.best_t])
     else:
@@ -936,9 +935,15 @@ def update_variables(xtal, basis, rc):
                     # get the indices of atoms on the same site
                     mask = basis.mult_occ == basis.mult_occ[j]
                     mask[j] = False
-                    # scale their occupancies in propotion to existing
-                    basis.occupancy[mask] *= (1 - var) \
-                        / basis.occupancy[mask].sum()
+                    # sum of occupancies not being refined
+                    other_occ_sum = basis.occupancy[mask].sum()
+                    # scale their occupancies in proportion to existing
+                    # minimum allowed occupancy is 1%
+                    if other_occ_sum > 0.01:
+                        basis.occupancy[mask] *= (1 - var) \
+                            / basis.occupancy[mask].sum()
+                    else:
+                        basis.occupancy[mask] = 0.0
 
             elif sub[i] == 2:   # Iso ADPs
                 if 0 < var:  # must lie in range
@@ -1326,6 +1331,14 @@ def variable_check(x, t):
             x = 0.0
             continue_ = False
             print("  ***Refined variable set to zero***")
+
+    # Occupancy upper limit
+    if t == 21:
+        if x > 1.0:
+            x = 1.0
+            continue_ = False
+            print("  ***Occupancy set to 1.0***")
+        
     return x, continue_
 
 
@@ -1344,7 +1357,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     dydx = array of gradients, size [n_var]
     '''
     # uncertainty in figure of merit  ***hack at the moment to fixed value***
-    dy = 0.003
+    dy = 0.0003  # 0.03%
 
     # starting point is the current best set of variables
     rc.last_fit = 1.0*rc.best_fit
@@ -1464,6 +1477,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
 
     # We continue downhill until we get a predicted minnymum
     minny = False
+    dx = 0
     while minny is False:
         # predict the next point as a minimum or a step on
         next_x, minny, dx = px.convex(r3_var, r3_fom, dy)
@@ -1488,12 +1502,12 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
             r3_var[i] = 1.0*rc.refined_variable[j]
             r3_fom[i] = 1.0*fom
         else:  # we're done
-            # Error estimate
-            rc.refined_variable_sigma[j] = dx
             minny = True
     # we have taken the principal variable to a minimum
     rc.refined_variable = np.copy(rc.best_var)
     dydx[j] = 0.0
+    # Error estimate
+    rc.refined_variable_sigma[j] = dx
     print(f"    ====Refined variable {j}====")
     print_LACBED(bloch, cbed, rc, 0)
     if rc.plot == 3:  # also do difference image

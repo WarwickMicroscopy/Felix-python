@@ -279,7 +279,7 @@ elif rc.scatter_factor_method > 3:
     basis.pv[1] = 3.4  # *** hack for LiNbO3 ***
     basis.pv[2] = 6.155  # *** hack for LiNbO3 ***
     basis.kappa[0] = 0.84  # *** hack for LiNbO3 ***
-    basis.kappa[1] = 0.853  # *** hack for LiNbO3 ***
+    basis.kappa[1] = 0.888  # *** hack for LiNbO3 ***
     basis.kappa[2] = 0.973  # *** hack for LiNbO3 ***
     if rc.scatter_factor_method == 4:
         print("  Using Coppens RHF scattering factors with Kappa")

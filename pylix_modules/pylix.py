@@ -346,21 +346,39 @@ def unique_atom_positions(xtal, basis, cell, rc):
     # reshape, size [n_symops*basis.n_atoms, 3, 3]
     all_u_aniso = all_u_aniso.reshape(-1, 3, 3)
 
-    # Normalize positions to be within [0, 1]
+    # Positions to be within [0, 1]
     all_atom_position %= 1.0
     # make small values precisely zero
     all_atom_position[np.abs(all_atom_position) < tol] = 0.0
 
     # Reduce to the set of unique fractional atomic positions using tol
-    dist_matrix = np.linalg.norm(all_atom_position[:, np.newaxis, :] -
-                                 all_atom_position[np.newaxis, :, :], axis=-1)
-    unique_mask = np.ones(len(all_atom_position), dtype=bool)
+    # dist_matrix = np.linalg.norm(all_atom_position[:, np.newaxis, :] -
+    #                              all_atom_position[np.newaxis, :, :], axis=-1)
+
+    # fractional coordinate differences
+    delta = all_atom_position[:, None, :] - all_atom_position[None, :, :]
+    delta -= np.round(delta)  # periodic wrapping
+    dist_matrix = np.linalg.norm(delta, axis=-1)
+    unique_mask = np.ones(total_atoms, dtype=bool)
+
     i = []  # indices of unique atom positions
+    # for j in range(total_atoms):
+    #     if unique_mask[j]:  # If this point is still unique
+    #         i.append(j)
+    #         # Mark all points within tol as not unique
+    #         unique_mask &= (dist_matrix[j] > tol)
+
     for j in range(total_atoms):
-        if unique_mask[j]:  # If this point is still unique
-            i.append(j)
-            # Mark all points within tol as not unique
-            unique_mask &= (dist_matrix[j] > tol)
+        if not unique_mask[j]:
+            continue
+        i.append(j)
+        # same position within tolerance
+        same_pos = dist_matrix[j] < tol
+        # same label
+        same_label = (all_atom_label == all_atom_label[j])
+        # duplicates are only atoms with BOTH same position AND same label
+        duplicates = same_pos & same_label
+        unique_mask[duplicates] = False
 
     # Apply the same reduction to the labels, names, occupancies, and B_iso
     cell.atom_position = all_atom_position[i]
@@ -1272,8 +1290,6 @@ def Fg_matrix(xtal, basis, cell, bloch, rc):
         Fg_matrix = Fg_matrix+(cell.f_g[i, :, :]
                                * phase[:, :, i]
                                * cell.occupancy[i]
-                               # np.exp(-B_aniso[i, :, :] * (g_magnitude**2) /
-                               # (16*np.pi**2)))
                                * np.exp(-Ugg[i, :, :] / 2))
     # Conversion factor from F_g to U_g
     Fg_to_Ug = bloch.relativistic_correction / (np.pi * xtal.cell_volume)
@@ -2298,15 +2314,18 @@ def convex(x, y, dy):
     # minimum. If not, returns the next x to check (both cases, minny=False).
     # Looks to see if we have captured a minimum (minny=True).
 
+    # default values to return
+    dx = 0
+    minny = False
+    tol = 1e-10  # tolerance for FoM effect
+
     # error check - NaN, inf
     if not np.all(np.isfinite(x)) or not np.all(np.isfinite(y)):
         raise ValueError("x or y contains NaN or inf")
     # error check - same x points
     if np.min(np.diff(np.sort(x))) < 1e-6:
-        return x[np.argmin(y)], True
-    dx = 0  # default values to return
-    minny = False
-    tol = 1e-10
+        next_x = x[np.argmin(y)]
+        minny = True
     hi = np.argmax(x)  # index of lowest x
     lo = np.argmin(x)  # index of highest x
     mid = 3 - hi - lo  # index of mid x
