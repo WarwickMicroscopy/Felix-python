@@ -393,19 +393,23 @@ def cc_d_xy(img1, img2):
 
     d_max = 5
     s1 = s0[d_max:-d_max, d_max:-d_max]
-    moves = [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1),
-             (1, 1), (1, -1), (-1, 1), (-1, -1)]
-
+    moves = np.array([(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1),
+                      (1, 1), (1, -1), (-1, 1), (-1, -1)])
     x, y = (0, 0)
+    sx, sy = (0.0, 0.0)
     coord = np.array([-1, 0, 1])
     max_iter = 121
     for _ in range(max_iter):
         shifts = moves + np.array([x, y])
-        if np.any(shifts < 0) or  np.any(shifts > d_max):
+        valid = ((shifts[:,0] >= -d_max) &
+                 (shifts[:,0] <=  d_max) &
+                 (shifts[:,1] >= -d_max) &
+                 (shifts[:,1] <=  d_max))
+        if not np.all(valid):
             sx, sy = (0, 0)
             break
         e_stack = np.stack([e0[d_max+dx:-d_max+dx, d_max+dy:-d_max+dy]
-                            for dx, dy in shifts])  # shape (N, nx, ny)
+                        for dx, dy in shifts])  # shape (N, nx, ny)
         # Flatten
         e_flat = e_stack.reshape(e_stack.shape[0], -1)
         s_flat = s1.ravel()
@@ -423,10 +427,6 @@ def cc_d_xy(img1, img2):
             sx, fx, _ = px.parabo3(coord+x, np.array([corr[2], corr[0], corr[1]]))
             sy, fy, _ = px.parabo3(coord+y, np.array([corr[4], corr[0], corr[3]]))
             break
-        # x, y = shifts[np.argmax(corr)]
-        # if x < 0 or x >= d_max or y < 0 or y >= d_max:
-        #     sx, sy = (0, 0)
-        #     break
 
     t_ii = np.array([sx, sy])
     return t_ii
@@ -771,7 +771,6 @@ def figure_of_merit(bloch, cbed, rc):
                     # plt.show()
                     # plt.imshow(b)
                     # plt.show()
-                    print(j)
                     shift_ = cc_d_xy(b, a)
                     if rc.write_flag > 0:
                         np.set_printoptions(precision=1, suppress=True)
