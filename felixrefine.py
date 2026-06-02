@@ -177,8 +177,8 @@ if "atom_site_pv" in cif_dict or "atom_site_kappa" in cif_dict:
     for i in range(basis.n_atoms):
         basis.kappa[i] = cif.atom_site_kappa[i][0]
         basis.pv[i] = cif.atom_site_pv[i][0]
-    if basis.kappa[i] == 0:  # zero kappa means calclulate it
-        basis.kappa[i] = 1
+        if basis.kappa[i] < 0.5:  # zero kappa means calclulate it
+            basis.kappa[i] = 1
 
 # Thermal displacement parameters, we work with u_aniso
 # ADP tensor Uij with isotropic components on the diagonal
@@ -202,7 +202,7 @@ if "atom_site_aniso_label" in cif_dict:
     for i in range(basis.n_atoms):
         for j in range(len(cif.atom_site_aniso_label)):
             if cif.atom_site_aniso_label[j] == basis.atom_label[i]:
-                print(f"  Using anisotropic atomic displacement parameters for atom {i}")
+                print(f"  Using anisotropic atomic displacement parameters for {basis.atom_label[i]}")
                 # the data is in 2-tuples (second value is the error)
                 basis.u_aniso[i, 0, 0] = cif.atom_site_aniso_u_11[j][0]
                 basis.u_aniso[i, 1, 1] = cif.atom_site_aniso_u_22[j][0]
@@ -283,6 +283,10 @@ elif rc.scatter_factor_method == 2:
 elif rc.scatter_factor_method == 3:
     print("  Using Doyle & Turner scattering factors")
 elif rc.scatter_factor_method > 3:
+    if rc.scatter_factor_method == 4:
+        print("  Using Coppens RHF scattering factors")
+    else:
+        print("  Using Bunge RHF scattering factors")
     if "atom_site_pv" not in cif_dict and "atom_site_kappa" not in cif_dict:
         # initialise pv, pc, kappa and electron density
         basis.pv = np.zeros(basis.n_atoms, dtype=float)
@@ -290,10 +294,13 @@ elif rc.scatter_factor_method > 3:
         # initial kappa is 1.0 for a neutral atom
         basis.kappa = np.ones(basis.n_atoms, dtype=float)        
     px.electron_density(xtal, basis, rc)
-    if rc.scatter_factor_method == 4:
-        print("  Using Coppens RHF scattering factors with Kappa")
-    else:
-        print("  Using Bunge RHF scattering factors with Kappa")
+    for i in range(basis.n_atoms):
+        label = basis.atom_label[i]
+        Z = basis.atomic_number[i]
+        print(f"  {label}:")
+        print(f"    kappa = {basis.kappa[i]}")
+        print(f"    pv = {basis.pv[i]}")
+        print(f"    oxidation number {(Z-basis.n_electrons[i]):.2f}")
 else:
     raise ValueError("No scattering factors chosen in felix.inp")
 
@@ -603,8 +610,8 @@ else:
 # %% baseline simulation & beam pool optimisation if required
 print("-------------------------------")
 if 'O' in rc.refine_mode:
-    # diff_max, diff_mean, times = sim.optimise_pool(v)
-    sim.optimise_pool(xtal, basis, cell, hkl, bloch, cbed, rc)
+    diff_max, diff_mean, times = \
+        sim.optimise_pool(xtal, basis, cell, hkl, bloch, cbed, rc)
 else:
     print("Baseline simulation:")
     sim.simulate(xtal, basis, cell, hkl, bloch, cbed, rc)
@@ -757,8 +764,9 @@ if 'S' not in rc.refine_mode:
     print(f"Refinement complete after {rc.iter_count} simulations.  Refined values: {rc.best_var}")
 
 # %% final print
-rc.plot = 2
-px.electron_density(xtal, basis, rc)
+rc.plot = 5
+if rc.scatter_factor_method > 3:
+    px.electron_density(xtal, basis, rc)
 sim.print_LACBED(bloch, cbed, rc, 0)
 sim.print_LACBED(bloch, cbed, rc, 2)
 sim.save_LACBED(xtal, bloch, cbed, rc)

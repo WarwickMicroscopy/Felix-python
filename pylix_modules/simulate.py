@@ -399,9 +399,11 @@ def cc_d_xy(img1, img2):
     x, y = (0, 0)
     coord = np.array([-1, 0, 1])
     max_iter = 121
-    # fit_p = []
     for _ in range(max_iter):
         shifts = moves + np.array([x, y])
+        if np.any(shifts < 0) or  np.any(shifts > d_max):
+            sx, sy = (0, 0)
+            break
         e_stack = np.stack([e0[d_max+dx:-d_max+dx, d_max+dy:-d_max+dy]
                             for dx, dy in shifts])  # shape (N, nx, ny)
         # Flatten
@@ -421,13 +423,11 @@ def cc_d_xy(img1, img2):
             sx, fx, _ = px.parabo3(coord+x, np.array([corr[2], corr[0], corr[1]]))
             sy, fy, _ = px.parabo3(coord+y, np.array([corr[4], corr[0], corr[3]]))
             break
-        x, y = shifts[np.argmax(corr)]
-        if x >= d_max or y >= d_max:
-            sx, sy = (0, 0)
-            break
+        # x, y = shifts[np.argmax(corr)]
+        # if x < 0 or x >= d_max or y < 0 or y >= d_max:
+        #     sx, sy = (0, 0)
+        #     break
 
-    # plt.plot(fit_p)
-    # plt.show()
     t_ii = np.array([sx, sy])
     return t_ii
 
@@ -540,7 +540,7 @@ def optimise_pool(xtal, basis, cell, hkl, bloch, cbed, rc):
     """
     # baseline simulation = highest fidelity: pool 600 strong 250
     poo = 400
-    strong = np.array([300, 200, 150, 100, 50])
+    strong = np.array([300, 250, 200, 150, 100, 80, 50, 30])
     n_strong = len(strong)
     times = []
     rc.min_reflection_pool = poo
@@ -552,26 +552,26 @@ def optimise_pool(xtal, basis, cell, hkl, bloch, cbed, rc):
     print_LACBED(bloch, cbed, rc, 0)
     baseline = np.copy(cbed.lacbed_sim)
     cbed.diff_image = np.copy(cbed.lacbed_sim)
-    # subtract mean and divide by SD
-    for i in range(rc.n_thickness):
-        for j in range(rc.n_out):
-            a0 = baseline[i, :, :, j]
-            a = (a0 - np.mean(a0))/np.std(a0)
-            baseline[i, :, :, j] = a
+    # # subtract mean and divide by SD
+    # for i in range(rc.n_thickness):
+    #     for j in range(rc.n_out):
+    #         a0 = baseline[i, :, :, j]
+    #         a = (a0 - np.mean(a0))/np.std(a0)
+    #         baseline[i, :, :, j] = a
     # now do decreasing beam pool size and compare against baseline
     diff_max = np.zeros([n_strong, rc.n_thickness, rc.n_out])  # max difference
     diff_mean = np.zeros([n_strong, rc.n_thickness, rc.n_out])
     for k in range(1, n_strong):
         rc.min_strong_beams = strong[k]
         print("-------------------------------")
-        print(f"Simulation: beam pool {poo}, {strong[i]} strong beams")
+        print(f"Simulation: beam pool {poo}, {strong[k]} strong beams")
         t0 = time.time()
         simulate(xtal, basis, cell, hkl, bloch, cbed, rc)
         times.append(time.time()-t0)
         for i in range(rc.n_thickness):
             for j in range(rc.n_out):
-                a0 = cbed.lacbed_sim[i, :, :, j]
-                a = (a0 - np.mean(a0))/np.std(a0)
+                a = cbed.lacbed_sim[i, :, :, j]
+                # a = (a0 - np.mean(a0))/np.std(a0)
                 b = baseline[i, :, :, j]
                 pcc = b-a
                 cbed.diff_image[i, :, :, j] = pcc
@@ -771,6 +771,7 @@ def figure_of_merit(bloch, cbed, rc):
                     # plt.show()
                     # plt.imshow(b)
                     # plt.show()
+                    print(j)
                     shift_ = cc_d_xy(b, a)
                     if rc.write_flag > 0:
                         np.set_printoptions(precision=1, suppress=True)
@@ -805,7 +806,7 @@ def figure_of_merit(bloch, cbed, rc):
         rc.lacbed_fit_sigma[i] = np.std(fom_array[i,:])
 
         # difference images
-        if rc.plot == 3:
+        if rc.plot >= 3:
             for j in range(rc.n_out):
                 a0 = cbed.lacbed_sim[i, :, :, j]
                 b0 = cbed.lacbed_expt[:, :, j]
@@ -1100,6 +1101,7 @@ def save_LACBED(xtal, bloch, cbed, rc):
             signed_str = "".join(f"{x:+d}" for x in bloch.hkl_indices[bloch.hkl_output[i], :])
             fname = f"{xtal.chemical_formula}_{signed_str}_{t}nm.bin"
             cbed.lacbed_sim[j, :, :, i].tofile(fname)
+            # out_image[:, :, i].tofile(fname)
             fname = f"{xtal.chemical_formula}_{signed_str}_{t}nm.png"
             plt.imsave(fname, cbed.lacbed_sim[j, :, :, i], cmap='gray')
         os.chdir("..")
@@ -1357,7 +1359,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     dydx = array of gradients, size [n_var]
     '''
     # uncertainty in figure of merit  ***hack at the moment to fixed value***
-    dy = 0.0003  # 0.03%
+    dy = 0.00003  # 0.003%
 
     # starting point is the current best set of variables
     rc.last_fit = 1.0*rc.best_fit
@@ -1417,7 +1419,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
 
     # set the refinement scale
     # if rc.refined_variable_type[j] == 20:  # atom coordinates, absolute value
-    delta = dydx * rc.refinement_scale
+    delta = np.random.choice([-1, 1]) * dydx * rc.refinement_scale
     # delta = rc.best_var[j] * rc.refinement_scale
 
     # Second point

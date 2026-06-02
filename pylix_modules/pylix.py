@@ -1785,7 +1785,7 @@ def electron_density(xtal, basis, rc):
         if rc.iter_count == 0:
             basis.pc[i] = orbi["pc"]
             # NB zero pv in the cif means 'calculate the default'
-            if basis.pv[i] != 0:
+            if basis.pv[i] == 0:
                 basis.pv[i] = orbi["pv"]
 
         # calculate charge density and plot
@@ -1827,8 +1827,6 @@ def electron_density(xtal, basis, rc):
             rho_total = (basis.core[i, :] + basis.valence[i, :])
             # atomic charge
             basis.n_electrons[i] = np.trapz(rho_total * r**2, r)
-            label = basis.atom_label[i]
-            print(f"  Atom {label}: Oxidation number {(Z-basis.n_electrons[i]):.2f}")
             if rc.plot > 2:
                 sim.plot_charge_density(xtal, basis, rc, i)
     return
