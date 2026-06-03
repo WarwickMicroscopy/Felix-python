@@ -10,6 +10,7 @@ Returns the simulated LACBED patterns
 
 """
 import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
 from scipy.constants import c, h, e, m_e, angstrom, epsilon_0
 from scipy.ndimage import gaussian_filter
 from skimage import transform, registration
@@ -384,55 +385,55 @@ def cc_d_xy(img1, img2):
     """
     Sub-pixel shift to align img2 to img1 using sobel-filtered
     Pearson correlation.
+    Correlation is done on 1D vectors
+    We take the central sub-region of the simulation and compare with
+    a set of sub-regions of experiment
 
     Returns dy, dx : float
         Shift to apply to img2 so it aligns with img1
     """
     s0 = sobel(img1)  # simulation
     e0 = sobel(img2)  # experimental
+    
+    # normalise
+    s0 = (s0 - s0.mean()) / s0.std()
+    e0 = (e0 - e0.mean()) / e0.std()
+    nx, ny = e0.shape
 
+    # maximum pixel shift to search for best correlation
     d_max = 5
-    s1 = s0[d_max:-d_max, d_max:-d_max]
-    moves = np.array([(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1),
-                      (1, 1), (1, -1), (-1, 1), (-1, -1)])
-    x, y = (0, 0)
-    sx, sy = (0.0, 0.0)
-    coord = np.array([-1, 0, 1])
-    max_iter = 121
-    for _ in range(max_iter):
-        shifts = moves + np.array([x, y])
-        # valid = ((shifts[:,0] >= -d_max) &
-        #          (shifts[:,0] <=  d_max) &
-        #          (shifts[:,1] >= -d_max) &
-        #          (shifts[:,1] <=  d_max))
-        # if not np.all(valid):
-        #     sx, sy = (0, 0)
-        #     break
-        e_stack = np.stack([e0[d_max+dx:-d_max+dx, d_max+dy:-d_max+dy]
-                        for dx, dy in shifts])  # shape (N, nx, ny)
-        # Flatten
-        e_flat = e_stack.reshape(e_stack.shape[0], -1)
-        s_flat = s1.ravel()
-        s_mean = s_flat.mean()
-        s_std = s_flat.std()
+    nw = 2*d_max + 1
+    # vectorised central region of simulation
+    s1 = s0[d_max:nx-d_max, d_max:ny-d_max]
+    s_flat = s1.ravel()  # size [nx*ny]
 
-        # zncc
-        e_mean = e_flat.mean(axis=1)
-        e_std = e_flat.std(axis=1)
-        cov = ((e_flat - e_mean[:, None]) * (s_flat - s_mean)).mean(axis=1)
-        corr = cov / (e_std * s_std)
-        # Find best one
-        if np.argmax(corr) == 0:  # best position is at (0, 0) + (x, y)
-            # sub-pixel
-            sx, fx, _ = px.parabo3(coord+x, np.array([corr[2], corr[0], corr[1]]))
-            sy, fy, _ = px.parabo3(coord+y, np.array([corr[4], corr[0], corr[3]]))
-            break
-        x, y = shifts[np.argmax(corr)]
-        if abs(x) > d_max or abs(y) > d_max:
-            sx, sy = (0, 0)
-            break
-    t_ii = np.array([sx, sy])
-    return t_ii
+    # extract regions from experiment and vectorise
+    wx = nx - 2*d_max
+    wy = ny - 2*d_max
+    windows = sliding_window_view(e0, (wx, wy))
+    e_flat = windows.reshape(nw*nw, -1)  # size [nw*nw, nx*ny]
+
+    # zncc for nw*nw images
+    corr = (e_flat @ s_flat) / s_flat.size
+    # corr = np.mean(e_flat * s_flat, axis=1)
+    corr2d = corr.reshape(nw, nw)
+
+    # best correlation
+    ix, iy = np.unravel_index(np.argmax(corr2d), corr2d.shape)
+    xcorr = corr2d[ix-1:ix+2, iy]
+    ycorr = corr2d[ix, iy-1:iy+2]
+    dx = ix - d_max
+    dy = iy - d_max
+
+    if (ix == 0 or ix == 2*d_max or iy == 0 or iy == 2*d_max):
+        # maximum lies on boundary
+        sx, sy = 0.0, 0.0
+    else:    
+        #sub-pixel
+        sx, _, _ = px.parabo3(np.array([dx-1, dx, dx+1]), xcorr)
+        sy, _, _ = px.parabo3(np.array([dy-1, dy, dy+1]), ycorr)
+
+    return np.array([sx, sy])
 
 
 def cc_s_xy(img1, img2):
