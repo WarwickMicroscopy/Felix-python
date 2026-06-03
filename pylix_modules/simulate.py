@@ -401,13 +401,13 @@ def cc_d_xy(img1, img2):
     max_iter = 121
     for _ in range(max_iter):
         shifts = moves + np.array([x, y])
-        valid = ((shifts[:,0] >= -d_max) &
-                 (shifts[:,0] <=  d_max) &
-                 (shifts[:,1] >= -d_max) &
-                 (shifts[:,1] <=  d_max))
-        if not np.all(valid):
-            sx, sy = (0, 0)
-            break
+        # valid = ((shifts[:,0] >= -d_max) &
+        #          (shifts[:,0] <=  d_max) &
+        #          (shifts[:,1] >= -d_max) &
+        #          (shifts[:,1] <=  d_max))
+        # if not np.all(valid):
+        #     sx, sy = (0, 0)
+        #     break
         e_stack = np.stack([e0[d_max+dx:-d_max+dx, d_max+dy:-d_max+dy]
                         for dx, dy in shifts])  # shape (N, nx, ny)
         # Flatten
@@ -427,7 +427,10 @@ def cc_d_xy(img1, img2):
             sx, fx, _ = px.parabo3(coord+x, np.array([corr[2], corr[0], corr[1]]))
             sy, fy, _ = px.parabo3(coord+y, np.array([corr[4], corr[0], corr[3]]))
             break
-
+        x, y = shifts[np.argmax(corr)]
+        if abs(x) > d_max or abs(y) > d_max:
+            sx, sy = (0, 0)
+            break
     t_ii = np.array([sx, sy])
     return t_ii
 
@@ -756,6 +759,7 @@ def figure_of_merit(bloch, cbed, rc):
                                                            sigma=rc.blur_radius)
         rc.lacbed_expt = np.copy(cbed.lacbed_expt_raw)
         # sub-pixel shift for correlation if required
+        c_time = time.time()
         if rc.correlation_type> 1:
             for j in range(rc.n_out):
                 # we only do this for zncc images that exist
@@ -784,7 +788,9 @@ def figure_of_merit(bloch, cbed, rc):
                     # plt.imshow(c)
                     # plt.show()
                     cbed.lacbed_expt[:, :, j] = c
-
+        d_time = time.time()
+        if rc.debug > 0:
+            print(f"    Correlation took {d_time-c_time} s")
         # affine transformation option without a best thickness
         if rc.correlation_type == 3 and rc.iter_count == 0:
             affine(cbed, rc)
