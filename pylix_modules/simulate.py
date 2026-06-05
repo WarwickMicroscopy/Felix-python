@@ -1121,7 +1121,7 @@ def print_current_var(xtal, basis, rc, i):
     sigma = rc.refined_variable_sigma[i]  # error estimate
     atom_id = rc.atom_refine_flag[i]
     label = basis.atom_label[atom_id]
-    Z = basis.atomic_number[atom_id]
+    # Z = basis.atomic_number[atom_id]
 
     if sigma > 1e-06:
         # dictionary of format strings
@@ -1149,7 +1149,7 @@ def print_current_var(xtal, basis, rc, i):
                 }
         if typ == 20:  # atomic coords
             with np.printoptions(formatter={'float': lambda x: f"{x:.5f}"}):
-                print(f"  Atom {atom_id}: {label}  {basis.atom_position[atom_id, :]}")
+                print(f"  Atom {atom_id}: {label}  {basis.atom_position[atom_id, :]} +/- {sigma:.5f}")
         elif typ in formats:
             label, fmt, fmt_s = formats[typ]
             print(f"  {label} {fmt.format(var)} {fmt_s.format(sigma)}")
@@ -1424,9 +1424,12 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     # F = np.zeros(3)
 
     # set the refinement scale
-    # if rc.refined_variable_type[j] == 20:  # atom coordinates, absolute value
     delta = np.random.choice([-1, 1]) * dydx * rc.refinement_scale
-    # delta = rc.best_var[j] * rc.refinement_scale
+    if rc.refined_variable_type[j] == 20:  # atom coordinates
+        # reduce scale by an order of magnitude to allow it to be refined
+        # alongside other parameters like Biso
+        # *** should probably do the same for Uij refinement ***
+        delta *= 0.1
 
     # Second point
     print("Refining, point 2 of 3")

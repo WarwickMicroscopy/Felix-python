@@ -95,7 +95,6 @@ xtal.cell_c = cif.cell_length_c[0]
 xtal.cell_alpha = cif.cell_angle_alpha[0]*np.pi/180.0  # angles in radians
 xtal.cell_beta = cif.cell_angle_beta[0]*np.pi/180.0
 xtal.cell_gamma = cif.cell_angle_gamma[0]*np.pi/180.0
-basis.n_atoms = len(cif.atom_site_label)
 
 # symmetry operations
 if "space_group_symop_operation_xyz" in cif_dict:
@@ -109,6 +108,7 @@ else:
     raise ValueError("Symmetry operations not found in .cif")
 
 # extract the basis from the raw cif values
+basis.n_atoms = len(cif.atom_site_label)
 # take basis atom labels as given, removing any trailing blanks
 basis.atom_label = [s.rstrip() for s in cif.atom_site_label]
 # atom symbols, stripping any charge etc.
@@ -140,32 +140,6 @@ if cif.atom_site_occupancy is not None:
     basis.occupancy = np.array([tup[0] for tup in cif.atom_site_occupancy])
 else:
     basis.occupancy = np.ones([basis.n_atoms])
-
-# check for multiple occupancy on the same site
-tol = 0.0001  # tolerance for saying atoms are the same
-diff = basis.atom_position[:, None, :] - basis.atom_position[None, :, :]
-dist2 = np.sum(diff**2, axis=2)
-close = (dist2 <= tol**2) & (~np.eye(basis.n_atoms, dtype=bool))
-# mult_occ has 0 if no shared occupancy, increasing numbers otherwise
-basis.mult_occ = np.zeros(basis.n_atoms, dtype=int)
-visited = np.zeros(basis.n_atoms, dtype=bool)
-group_id = 0
-for i in range(basis.n_atoms):
-    if visited[i]:
-        continue
-    stack = [i]  # Find all atoms at position i
-    cluster = []
-    while stack:
-        j = stack.pop()
-        if visited[j]:
-            continue
-        visited[j] = True
-        cluster.append(j)
-        neighbors = np.where(close[j])[0]
-        stack.extend(neighbors)
-    if len(cluster) > 1:
-        group_id += 1
-        basis.mult_occ[cluster] = group_id
 
 # kappa and pv
 if "atom_site_pv" in cif_dict or "atom_site_kappa" in cif_dict:
@@ -266,6 +240,38 @@ rc.atomic_sites = np.array(rc.atomic_sites, dtype='int')
 
 # crystallography exp(2*pi*i*g.r) to physics convention exp(i*g.r)
 rc.g_limit = rc.g_limit * 2 * np.pi
+
+# reference frames
+px.reference_frames(xtal, cell, rc)
+
+# check for multiple occupancy on the same site
+tol = 0.5  # tolerance for saying atoms are the same, in Angstroms
+coords = basis.atom_position - np.round(basis.atom_position)  # periodic boundary fix
+coords = coords @ xtal.t_mat_c2o  # atom coords in Angstroms
+diff = coords[:, None, :] - coords[None, :, :]
+dist = np.sqrt(np.sum(diff**2, axis=2))
+close = (dist <= tol) & (~np.eye(basis.n_atoms, dtype=bool))
+
+# mult_occ has 0 if no shared occupancy, increasing numbers otherwise
+basis.mult_occ = np.zeros(basis.n_atoms, dtype=int)
+visited = np.zeros(basis.n_atoms, dtype=bool)
+group_id = 0
+for i in range(basis.n_atoms):
+    if visited[i]:
+        continue
+    stack = [i]  # Find all atoms at position i
+    cluster = []
+    while stack:
+        j = stack.pop()
+        if visited[j]:
+            continue
+        visited[j] = True
+        cluster.append(j)
+        neighbors = np.where(close[j])[0]
+        stack.extend(neighbors)
+    if len(cluster) > 1:
+        group_id += 1
+        basis.mult_occ[cluster] = group_id
 
 # output
 print(f"Zone axis: {rc.incident_beam_direction.astype(int)}")
@@ -761,7 +767,10 @@ if 'S' not in rc.refine_mode:
         else:
             print(f"Improvement in fit {100*df:.2f}%, will stop after step size < {abs(rc.precision)}")
         print("-------------------------------")
-    print(f"Refinement complete after {rc.iter_count} simulations.  Refined values: {rc.best_var}")
+    print(f"Refinement complete after {rc.iter_count} simulations.")
+    for i in range(rc.n_variables):
+        sim.print_current_var(xtal, basis, rc, i)
+
 
 # %% final print
 rc.plot = 5
