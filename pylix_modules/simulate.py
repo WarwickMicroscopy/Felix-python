@@ -1225,6 +1225,7 @@ def sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, i):
     # figure of merit
     fom = figure_of_merit(bloch, cbed, rc)
     rc.fit_log.append(fom)
+    rc.param_log.append(np.copy(rc.refined_variable))
     print(f"  Figure of merit {100*fom:.3f}% (previous best {100*rc.best_fit:.3f}%)")
 
     return fom

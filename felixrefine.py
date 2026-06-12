@@ -687,7 +687,8 @@ if 'S' not in rc.refine_mode:
     r3_fom = np.zeros(3)
 
     # for a plot
-    rc.fit_log = ([rc.last_fit])
+    rc.fit_log = ([rc.last_fit*1.0])
+    rc.param_log = ([np.copy(rc.refined_variable)])
 
     # Refinement loop
     df = 1.0

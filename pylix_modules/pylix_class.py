@@ -6,8 +6,7 @@ Created on Thu Nov  7 08:54:05 2024
 """
 import numpy as np
 from numpy.typing import NDArray
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 
 # ----------------------------------------------------------------------------
@@ -90,6 +89,7 @@ class RunControl:
     last_fit: float = 0.0
     best_var: NDArray[np.floating] | None = None
     fit_log: NDArray[np.floating] | None = None
+    param_log: NDArray[np.floating] | None = None
     df: float = 1.0
     fom: float = 1.0
     iter_count: int = 0
@@ -141,7 +141,7 @@ class Cbed:
     diff_image: NDArray[np.floating] | None = None
     diff_max: NDArray[np.floating] | None = None
     diff_mean: NDArray[np.floating] | None = None
-    times: NDArray[np.floating] | None = None
+    lacbed_ref: NDArray[np.floating] | None = None
 
 
 # ----------------------------------------------------------------------------
