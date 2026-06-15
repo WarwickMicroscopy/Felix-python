@@ -1071,6 +1071,7 @@ def print_LACBED(bloch, cbed, rc, image_type):
     elif image_type == 1:  # experiment output
         out_image = cbed.lacbed_expt
         print_montage(bloch, cbed, rc, out_image, image_type, 0)
+
     return
 
 
@@ -1187,27 +1188,27 @@ def print_current_var(xtal, basis, rc, i):
 def variable_message(vtype):
     """Map variable type → message string."""
     msg = {
-        10: "Changing Ug amplitude",
-        11: "Changing Ug phase",
-        20: "Changing atom coordinates",
-        21: "Changing occupancy",
-        22: "Changing B_iso",
-        23: "Changing U[1,1]",
-        24: "Changing U[2,2]",
-        25: "Changing U[3,3]",
-        26: "Changing U[1,2]",
-        27: "Changing U[1,3]",
-        28: "Changing U[2,3]",
-        30: "Changing lattice parameter a",
-        31: "Changing lattice parameter b",
-        32: "Changing lattice parameter c",
-        33: "Changing lattice alpha",
-        34: "Changing lattice beta",
-        35: "Changing lattice gamma",
-        40: "Changing convergence angle",
-        41: "Changing accelerating voltage",
-        50: "Changing Kappa",
-        51: "Changing Pv",
+        10: "Ug amplitude",
+        11: "Ug phase",
+        20: "Atom coordinates",
+        21: "Occupancy",
+        22: "B_iso",
+        23: "U[1,1]",
+        24: "U[2,2]",
+        25: "U[3,3]",
+        26: "U[1,2]",
+        27: "U[1,3]",
+        28: "U[2,3]",
+        30: "Lattice parameter a",
+        31: "Lattice parameter b",
+        32: "Lattice parameter c",
+        33: "Lattice alpha",
+        34: "Lattice beta",
+        35: "Lattice gamma",
+        40: "Convergence angle",
+        41: "Accelerating voltage",
+        50: "Kappa",
+        51: "Pv",
     }
     return msg[vtype]
 
@@ -1263,7 +1264,7 @@ def refine_single_variable(xtal, basis, cell, hkl, bloch, cbed, rc, i):
         r3_var[1] = rc.best_var[i]*1.0
         r3_fom[1] = rc.best_fit*1.0
         print(f"Finding gradient, variable {i+1} of {rc.n_variables}")
-        print(variable_message(rc.refined_variable_type[i]))
+        print(f"Changing {variable_message(rc.refined_variable_type[i])}")
         # print_current_var(rc, i)
 
         # delta is a small change in the current variable
@@ -1387,7 +1388,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     # index of principal variable
     j = np.argmax(abs(dydx))
     t = rc.refined_variable_type[j]
-    print(f"  Principal variable: {variable_message(t)}")
+    print(f"  Principal variable: changing {variable_message(t)}")
 
     # Check the gradient vector magnitude and initialize vector descent
     if not single:
@@ -1643,3 +1644,24 @@ def plot_f_g(xtal, basis, rc, bloch, j=0):
     print(f"kappa/kirkland = {f0/f0_k}")
 
     return
+
+
+def plot_parameter(rc, i):
+    # plot of parameter vs fit
+    fig, ax = plt.subplots(1, 1)
+    w_f = 10
+    fig.set_size_inches(w_f, w_f)
+    x = np.array(rc.param_log).ravel()
+    y = np.array(rc.fit_log).ravel()
+    idx = np.argsort(x)
+    xs = x[idx]
+    ys = y[idx]
+    plt.plot(xs, ys)
+    plt.scatter(xs, ys, linewidth=1, s=100)
+    plt.xticks(fontsize=22)
+    plt.yticks(fontsize=22)
+    plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1.0))
+    x_lab = variable_message(rc.refined_variable_type[i])
+    ax.set_xlabel(x_lab, size=24)
+    ax.set_ylabel('Figure of merit', size=24)
+    plt.show()

@@ -230,6 +230,6 @@ _atom_site_fract_y
 _atom_site_fract_z
 _atom_site_B_iso_or_equiv
 _atom_site_occupancy
-Ge1 Ge0+ 8 a 0 0 0 0.644 0.9
-Sn1 Sn0+ 8 a 0 0 0 0.644 0.1
+Ge1 Ge0+ 8 a 0 0 0 0.644 0.95
+Sn1 Sn0+ 8 a 0 0 0 0.644 0.05
 #End of data
