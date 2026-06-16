@@ -771,6 +771,12 @@ def figure_of_merit(bloch, cbed, rc):
         d_time = time.time()
         if rc.debug > 0:
             print(f"    Correlation took {d_time-c_time} s")
+
+        # normalised experimental images
+        mean = cbed.lacbed_expt.mean(axis=(0, 1), keepdims=True)
+        std  = cbed.lacbed_expt.std(axis=(0, 1), keepdims=True)
+        cbed.lacbed_expt_norm = (cbed.lacbed_expt - mean) / std
+
         # affine transformation option without a best thickness
         if rc.correlation_type == 3 and rc.iter_count == 0:
             affine(cbed, rc)
@@ -791,7 +797,7 @@ def figure_of_merit(bloch, cbed, rc):
         rc.lacbed_fit_sigma[i] = np.std(fom_array[i,:])
 
         # difference images
-        sim = cbed.lacbed_sim[i, :, :, j]
+        sim = cbed.lacbed_sim[i]
         mean = sim.mean(axis=(0, 1), keepdims=True)
         std  = sim.std(axis=(0, 1), keepdims=True)
         sim_norm = (sim - mean) / std
@@ -995,6 +1001,7 @@ def print_montage(bloch, cbed, rc, images, image_type, j):
     '''
     images[wid, wid, n] = array of n images each of size [wid, wid]
     j = thickness index in simulated pattern array
+    j = variable index in signature array
     '''
     if image_type == 0:
         lut = 'pink'
@@ -1009,7 +1016,7 @@ def print_montage(bloch, cbed, rc, images, image_type, j):
     for i in range(n):
         img = images[:, :, i]
         # difference or LACBED pattern
-        if image_type >= 2:
+        if image_type >= 2 and img.min() < 0:
             cmap = LinearSegmentedColormap.from_list(
                 "two_color_black_center",
                 [(0.0, "c"), (0.5, "k"), (1.0, "orange")])
@@ -1030,6 +1037,10 @@ def print_montage(bloch, cbed, rc, images, image_type, j):
         annotation = f"{rc.thickness[j]/10:.0f} nm"
         plt.annotate(annotation, xy=(0.105, 0.96), xycoords='figure fraction',
                      size=30, color='c', path_effects=[text_effect])
+    if image_type ==3:  # signature image
+        annotation = variable_message(rc.refined_variable_type[j])
+        plt.annotate(annotation, xy=(0.105, 0.05), xycoords='figure fraction',
+                     size=30, color='w', path_effects=[text_effect])
     plt.show()
     return
 
@@ -1048,15 +1059,15 @@ def print_LACBED(bloch, cbed, rc, image_type):
         else:  # just best thickness
             out_image = cbed.lacbed_sim[rc.best_t, :, :, :]
             print_montage(bloch, cbed, rc, out_image, image_type, rc.best_t)
-            if rc.plot >= 3:
-                out_image = cbed.diff_image
-                print_montage(bloch, cbed, rc, out_image, 2, rc.best_t)
+    elif image_type == 3:  # signature output
+        for j in range(rc.n_variables):
+            out_image = cbed.lacbed_sig[j, :, :, :]
+            print_montage(bloch, cbed, rc, out_image, image_type, j)
     else:
         # All other image types
         image_map = {
             1: (cbed.lacbed_expt, 0),
             2: (cbed.lacbed_diff, rc.best_t),
-            3: (cbed.lacbed_sig,  rc.best_t),
         }
     
         out_image, thickness = image_map[image_type]
@@ -1233,6 +1244,7 @@ def sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, i):
     sim_norm = (sim - mean) / std
     if i >= 0:  # get a signature image if it's a single variable refinement
         cbed.lacbed_sig[i] = sim_norm - cbed.lacbed_ref
+        print_LACBED(bloch, cbed, rc, 3)
 
     # figure of merit
     fom = figure_of_merit(bloch, cbed, rc)

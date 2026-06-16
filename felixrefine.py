@@ -677,10 +677,6 @@ if 'S' not in rc.refine_mode:
         fom = sim.figure_of_merit(bloch, cbed, rc)
         print(f"  Figure of merit {100*fom:.2f}%")
 
-        # normalised experimental images
-        mean = cbed.lacbed_expt.mean(axis=(0, 1), keepdims=True)
-        std  = cbed.lacbed_expt.std(axis=(0, 1), keepdims=True)
-        cbed.lacbed_expt_norm = (cbed.lacbed_expt - mean) / std
         # print experimental LACBED patterns
         # print_LACBED has options 0=sim, 1=expt, 2=difference
         sim.print_LACBED(bloch, cbed, rc, 1)
