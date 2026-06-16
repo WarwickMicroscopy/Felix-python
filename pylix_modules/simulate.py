@@ -13,7 +13,7 @@ import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 from scipy.constants import c, h, e, m_e, angstrom, epsilon_0
 from scipy.ndimage import gaussian_filter
-from skimage import transform, registration
+# from skimage import transform, registration
 from skimage.registration import phase_cross_correlation
 from skimage.transform import warp, AffineTransform
 from skimage.filters import sobel
@@ -231,10 +231,10 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     # Dot product of k with surface normal, [image diameter, image diameter]
     bloch.k_dot_n = np.tensordot(bloch.tilted_k, xtal.norm_dir_m,
                                  axes=([2], [0]))
-    # reset output container
-    cbed.lacbed_sim = np.zeros([rc.n_thickness, 2*rc.image_radius,
-                               2*rc.image_radius, len(bloch.hkl_output)],
-                               dtype=float)
+    # # reset output container
+    # cbed.lacbed_sim = np.zeros([rc.n_thickness, 2*rc.image_radius,
+    #                            2*rc.image_radius, len(bloch.hkl_output)],
+    #                            dtype=float)
     print("Bloch wave calculation...", end=' ')
     if rc.debug > 0:
         print("")
@@ -555,7 +555,8 @@ def optimise_pool(xtal, basis, cell, hkl, bloch, cbed, rc):
     times.append(time.time()-t0)
     print_LACBED(bloch, cbed, rc, 0)
     baseline = np.copy(cbed.lacbed_sim)
-    cbed.diff_image = np.copy(cbed.lacbed_sim)
+    # difference between baseline & simulations with different strong beams
+    # cbed.lacbed_diff = np.copy(cbed.lacbed_sim)
     # # subtract mean and divide by SD
     # for i in range(rc.n_thickness):
     #     for j in range(rc.n_out):
@@ -578,7 +579,7 @@ def optimise_pool(xtal, basis, cell, hkl, bloch, cbed, rc):
                 # a = (a0 - np.mean(a0))/np.std(a0)
                 b = baseline[i, :, :, j]
                 pcc = b-a
-                cbed.diff_image[i, :, :, j] = pcc
+                cbed.lacbed_diff[i, :, :, j] = pcc
                 diff_max[k, i, j] = np.max(abs(pcc))
                 diff_mean[k, i, j] = np.mean(abs(pcc))
             print_LACBED(bloch, cbed, rc, 2)
@@ -671,29 +672,6 @@ def plot_charge_density(xtal, basis, rc, i):
     plt.show()
 
 
-def take_5(F):
-    # takes the 5 points closest to a minimum, accounting for boundaries
-    npts = 5
-    i0 = np.argmin(F)   # index of minimum
-    n = len(F)
-    half = npts // 2
-    # initial bounds
-    i_start = i0 - half
-    i_end = i0 + half + 1
-    # shift window if it goes out of bounds
-    if i_start < 0:
-        i_end += -i_start
-        i_start = 0
-    if i_end > n:
-        i_start -= (i_end - n)
-        i_end = n
-    # final safety (in case n < npts)
-    i_start = max(i_start, 0)
-    i_end = min(i_end, n)
-
-    return i_start, i_end
-
-
 def variable_sigma(V, F):
     # the square root of (parabola uncertainty / curvature of fit)
     p = np.polyfit(V, F, 2)  # quadratic fit to the 3 points
@@ -722,7 +700,7 @@ def figure_of_merit(bloch, cbed, rc):
     fom_array = np.ones([rc.n_thickness, rc.n_out])
     rc.lacbed_fit_sigma = np.zeros(rc.n_thickness)
     # difference images
-    cbed.diff_image = np.copy(cbed.lacbed_expt)
+    # cbed.lacbed_diff = np.copy(cbed.lacbed_expt)
     # set up plot for blur optimisation
     if rc.plot >= 2 and rc.image_processing == 2:
         fig, ax = plt.subplots(1, 1)
@@ -753,12 +731,13 @@ def figure_of_merit(bloch, cbed, rc):
             if rc.plot > 1:
                 plt.plot(radii, b_fom)
             rc.blur_radius = radii[np.argmin(b_fom)]
+
         # apply the blur
         if rc.image_processing != 0:
             for j in range(rc.n_out):
                 cbed.lacbed_sim[i, :, :, j] = gaussian_filter(cbed.lacbed_sim[i, :, :, j],
                                                            sigma=rc.blur_radius)
-        rc.lacbed_expt = np.copy(cbed.lacbed_expt_raw)
+
         # sub-pixel shift for correlation if required
         c_time = time.time()
         if rc.correlation_type> 1:
@@ -812,14 +791,18 @@ def figure_of_merit(bloch, cbed, rc):
         rc.lacbed_fit_sigma[i] = np.std(fom_array[i,:])
 
         # difference images
-        if rc.plot >= 3:
-            for j in range(rc.n_out):
-                a0 = cbed.lacbed_sim[i, :, :, j]
-                b0 = cbed.lacbed_expt[:, :, j]
-                # zero mean normalise the images
-                a = (a0 - np.mean(a0))/np.std(a0)
-                b = (b0 - np.mean(b0))/np.std(b0)
-                cbed.diff_image[:, :, j] = a-b
+        sim = cbed.lacbed_sim[i, :, :, j]
+        mean = sim.mean(axis=(0, 1), keepdims=True)
+        std  = sim.std(axis=(0, 1), keepdims=True)
+        sim_norm = (sim - mean) / std
+        cbed.lacbed_diff[i] =  cbed.lacbed_expt_norm - sim_norm
+        # for j in range(rc.n_out):
+        #     a0 = cbed.lacbed_sim[i, :, :, j]
+        #     b0 = cbed.lacbed_expt[:, :, j]
+        #     # zero mean normalise the images
+        #     a = (a0 - np.mean(a0))/np.std(a0)
+        #     b = (b0 - np.mean(b0))/np.std(b0)
+        #     cbed.lacbed_diff[i, :, :, j] = a-b
 
     # print best values
     if rc.image_processing == 2:
@@ -1026,7 +1009,7 @@ def print_montage(bloch, cbed, rc, images, image_type, j):
     for i in range(n):
         img = images[:, :, i]
         # difference or LACBED pattern
-        if image_type == 2:
+        if image_type >= 2:
             cmap = LinearSegmentedColormap.from_list(
                 "two_color_black_center",
                 [(0.0, "c"), (0.5, "k"), (1.0, "orange")])
@@ -1054,7 +1037,7 @@ def print_montage(bloch, cbed, rc, images, image_type, j):
 def print_LACBED(bloch, cbed, rc, image_type):
     '''
     Plots all LACBED patterns in a montage
-    image_type options 0=sim, 1=expt, 2=difference
+    image_type options 0=sim, 1=expt, 2=difference, 3=signature
     '''
     if image_type == 0:  # simulation output
         # only print all thicknesses for the first simulation
@@ -1062,15 +1045,22 @@ def print_LACBED(bloch, cbed, rc, image_type):
             for j in range(rc.n_thickness):
                 out_image = cbed.lacbed_sim[j, :, :, :]
                 print_montage(bloch, cbed, rc, out_image, image_type, j)
-        else:
+        else:  # just best thickness
             out_image = cbed.lacbed_sim[rc.best_t, :, :, :]
             print_montage(bloch, cbed, rc, out_image, image_type, rc.best_t)
             if rc.plot >= 3:
                 out_image = cbed.diff_image
                 print_montage(bloch, cbed, rc, out_image, 2, rc.best_t)
-    elif image_type == 1:  # experiment output
-        out_image = cbed.lacbed_expt
-        print_montage(bloch, cbed, rc, out_image, image_type, 0)
+    else:
+        # All other image types
+        image_map = {
+            1: (cbed.lacbed_expt, 0),
+            2: (cbed.lacbed_diff, rc.best_t),
+            3: (cbed.lacbed_sig,  rc.best_t),
+        }
+    
+        out_image, thickness = image_map[image_type]
+        print_montage(bloch, cbed, rc, out_image, image_type, thickness)
 
     return
 
@@ -1219,10 +1209,31 @@ def sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, i):
     simulate and figure of merit
     input i = index of variable to be refined, for single variables
     i = -1 for multiple variables
+    
+    The 'signature' of variable i is the change it produces in each LACBED
+    pattern.  We give the zero-mean normalised difference here
     '''
     update_variables(xtal, basis, rc)
     print_current_var(xtal, basis, rc, i)
+
+    # update reference images
+    cbed.lacbed_ref = np.copy(cbed.lacbed_sim[rc.best_t, :, :, :])
+    # normalise each one
+    mean = cbed.lacbed_ref.mean(axis=(0, 1), keepdims=True)
+    std  = cbed.lacbed_ref.std(axis=(0, 1), keepdims=True)
+    cbed.lacbed_ref = (cbed.lacbed_ref - mean) / std
+
+    # simulate
     simulate(xtal, basis, cell, hkl, bloch, cbed, rc)
+
+    # calculate signature images
+    sim = np.copy(cbed.lacbed_sim[rc.best_t, :, :, :])
+    mean = sim.mean(axis=(0, 1), keepdims=True)
+    std  = sim.std(axis=(0, 1), keepdims=True)
+    sim_norm = (sim - mean) / std
+    if i >= 0:  # get a signature image if it's a single variable refinement
+        cbed.lacbed_sig[i] = sim_norm - cbed.lacbed_ref
+
     # figure of merit
     fom = figure_of_merit(bloch, cbed, rc)
     rc.fit_log.append(fom)
@@ -1664,4 +1675,5 @@ def plot_parameter(rc, i):
     x_lab = variable_message(rc.refined_variable_type[i])
     ax.set_xlabel(x_lab, size=24)
     ax.set_ylabel('Figure of merit', size=24)
+    plt.grid(True)
     plt.show()

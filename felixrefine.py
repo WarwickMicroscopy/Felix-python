@@ -612,6 +612,18 @@ else:
 #             variable_type.append(1)
 #         j += 1
 
+# set up image arrays
+cbed.lacbed_sim = np.zeros([rc.n_thickness, 2*rc.image_radius,
+                           2*rc.image_radius, rc.n_out], dtype=float)
+# difference images
+cbed.lacbed_diff = np.copy(cbed.lacbed_sim)
+# reference images
+cbed.lacbed_ref = np.zeros([2*rc.image_radius,
+                           2*rc.image_radius, rc.n_out], dtype=float)
+# signature images
+cbed.lacbed_sig = np.zeros([rc.n_variables, 2*rc.image_radius,
+                           2*rc.image_radius, rc.n_out], dtype=float)
+
 
 # %% baseline simulation & beam pool optimisation if required
 print("-------------------------------")
@@ -623,7 +635,8 @@ else:
     sim.simulate(xtal, basis, cell, hkl, bloch, cbed, rc)
     # print_LACBED has options 0=sim, 1=expt, 2=difference
     sim.print_LACBED(bloch, cbed, rc, 0)
-
+if rc.image_processing == 1:
+    print(f"  Blur radius {rc.blur_radius} pixels")
 
 # %% read in experimental images
 if 'S' not in rc.refine_mode:
@@ -658,8 +671,17 @@ if 'S' not in rc.refine_mode:
                 n_expt -= 1
                 print(f"{g_string} not found")
         print(f"  {n_expt} experimental patterns loaded")
+
+        # figure of merit - includes determining/applying shifts
+        cbed.lacbed_expt = np.copy(cbed.lacbed_expt_raw)  # with shifts
+        fom = sim.figure_of_merit(bloch, cbed, rc)
+        print(f"  Figure of merit {100*fom:.2f}%")
+
+        # normalised experimental images
+        mean = cbed.lacbed_expt.mean(axis=(0, 1), keepdims=True)
+        std  = cbed.lacbed_expt.std(axis=(0, 1), keepdims=True)
+        cbed.lacbed_expt_norm = (cbed.lacbed_expt - mean) / std
         # print experimental LACBED patterns
-        cbed.lacbed_expt = np.copy(cbed.lacbed_expt_raw)
         # print_LACBED has options 0=sim, 1=expt, 2=difference
         sim.print_LACBED(bloch, cbed, rc, 1)
         # initialise correlation
@@ -667,14 +689,7 @@ if 'S' not in rc.refine_mode:
     else:
         raise ValueError(f"Experimental images DM3_{x_str}x{x_str} not found")
 
-# output LACBED patterns and figure of merit
-if rc.image_processing == 1:
-    print(f"  Blur radius {rc.blur_radius} pixels")
-if 'S' not in rc.refine_mode:
-    # figure of merit
-    fom = sim.figure_of_merit(bloch, cbed, rc)
-    print(f"  Figure of merit {100*fom:.2f}%")
-    print("-------------------------------")
+print("-------------------------------")
 
 
 # %% start refinement loop *** needs work
@@ -777,8 +792,9 @@ if 'S' not in rc.refine_mode:
 rc.plot = 5
 if rc.scatter_factor_method > 3:
     px.electron_density(xtal, basis, rc)
-sim.print_LACBED(bloch, cbed, rc, 0)
-sim.print_LACBED(bloch, cbed, rc, 2)
+sim.print_LACBED(bloch, cbed, rc, 0)  # simulation
+sim.print_LACBED(bloch, cbed, rc, 2)  # difference sim-expt
+sim.print_LACBED(bloch, cbed, rc, 3)  # signature
 for i in range(rc.n_variables):
     sim.plot_parameter(rc, i)
 sim.save_LACBED(xtal, bloch, cbed, rc)
@@ -787,11 +803,3 @@ print("-----------------------------------------------------------------")
 print(f"Total time {total_time:.1f} s")
 print("-----------------------------------------------------------------")
 print("|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||")
-
-# plot of parameter vs fit
-x = np.array(rc.param_log).ravel()
-y = np.array(rc.fit_log).ravel()
-idx = np.argsort(x)
-xs = x[idx]
-ys = y[idx]
-plt.plot(xs,ys)
