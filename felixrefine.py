@@ -649,7 +649,7 @@ if 'X' in rc.refine_mode:
     sim.correlations(xtal, basis, cell, hkl, bloch, cbed, rc)
 
 # %% read in experimental images and start refinement
-if 'S' not in rc.refine_mode:
+elif 'S' not in rc.refine_mode:
     cbed.lacbed_expt_raw = np.zeros([2*rc.image_radius, 2*rc.image_radius,
                                      rc.n_out])
     # get the list of available images
@@ -692,8 +692,7 @@ if 'S' not in rc.refine_mode:
     print("-------------------------------")
 
     # start refinement
-    if 'X' not in rc.refine_mode and 'O' not in rc.refine_mode:
-        sim.refine(xtal, basis, cell, hkl, bloch, cbed, rc)
+    sim.refine(xtal, basis, cell, hkl, bloch, cbed, rc)
 
 
 # %% final print
@@ -701,10 +700,12 @@ rc.plot = 5
 if rc.scatter_factor_method > 3:
     px.electron_density(xtal, basis, rc)
 sim.print_LACBED(bloch, cbed, rc, 0)  # simulation
-sim.print_LACBED(bloch, cbed, rc, 2)  # difference sim-expt
-sim.print_LACBED(bloch, cbed, rc, 3)  # signature
-for i in range(rc.n_variables):
-    sim.plot_parameter(rc, i)
+if all(x not in rc.refine_mode for x in ('S', 'O', 'X')):
+    sim.print_LACBED(bloch, cbed, rc, 2)  # difference sim-expt
+    for i in range(rc.n_variables):
+        sim.plot_parameter(rc, i)
+if 'X' in rc.refine_mode:
+    sim.print_LACBED(bloch, cbed, rc, 3)  # signature
 sim.save_LACBED(xtal, bloch, cbed, rc)
 total_time = time.time() - start
 print("-----------------------------------------------------------------")

@@ -638,8 +638,7 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
     # simulation has size [n_thickness, imgX, imgY, n_out]
     mean = cbed.lacbed_sim.mean(axis=(1, 2), keepdims=True)
     std  = cbed.lacbed_sim.std(axis=(1, 2), keepdims=True)
-    cbed.lacbed_sim = (cbed.lacbed_ref - mean) / std
-    cbed.lacbed_ref = np.copy(cbed.lacbed_sim)
+    cbed.lacbed_ref = (cbed.lacbed_sim - mean) / std
 
     # now go through each variable and make signature images
     for i in range(rc.n_variables):
@@ -664,13 +663,11 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
         print_LACBED(bloch, cbed, rc, 0)
         mean = cbed.lacbed_sim.mean(axis=(1, 2), keepdims=True)
         std  = cbed.lacbed_sim.std(axis=(1, 2), keepdims=True)
-        cbed.lacbed_sim = (cbed.lacbed_ref - mean) / std
-        # singature images, size [n_variables, n_thickness, imgX, imgY, n_out]
-        cbed.lacbed_sig[i] = cbed.lacbed_sim - cbed.lacbed_ref
+        # signature images, size [n_variables, n_thickness, imgX, imgY, n_out]
+        cbed.lacbed_sig[i] = (cbed.lacbed_sim - mean) / std - cbed.lacbed_ref
         rc.refined_variable[i] -= delta
 
 
-    
 def figure_of_merit(bloch, cbed, rc):
     """
     takes as an input cbed.lacbed_sim, shape [n_thickness, pix_x, pix_y, n_out]
@@ -1046,8 +1043,9 @@ def print_LACBED(bloch, cbed, rc, image_type):
             print_montage(bloch, cbed, rc, out_image, image_type, rc.best_t)
     elif image_type == 3:  # signature output
         for j in range(rc.n_variables):
-            out_image = cbed.lacbed_sig[j, rc.best_t, :, :, :]
-            print_montage(bloch, cbed, rc, out_image, image_type, j)
+            for i in range(rc.n_thickness):
+                out_image = cbed.lacbed_sig[j, i, :, :, :]
+                print_montage(bloch, cbed, rc, out_image, image_type, j)
     else:
         # All other image types
         image_map = {
