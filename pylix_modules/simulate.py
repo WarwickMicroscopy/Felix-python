@@ -623,68 +623,54 @@ def optimise_pool(xtal, basis, cell, hkl, bloch, cbed, rc):
     return diff_max, diff_mean, times
 
 
-def plot_progress(rc):
-    fig, ax = plt.subplots(1, 1)
-    w_f = 10
-    fig.set_size_inches(1.5*w_f, w_f)
-    plt.plot(rc.fit_log)
-    plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1.0))
-    plt.xticks(fontsize=22)
-    plt.yticks(fontsize=22)
-    ax.set_xlabel('Iteration', size=24)
-    ax.set_ylabel('Figure of merit', size=24)
-    plt.show()
+def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
+    """
+    Runs simulations with changes in each variables and gives the correlation
+    in the changes in each LACBED pattern
+    We already have a baseline simulation
+    """
+    # first check we have enough variables to correlate
+    if rc.n_variables < 2:
+        raise ValueError(" ## Too few variables to correlate! ##")
+        return
+
+    # normalise each LACBED pattern
+    # simulation has size [n_thickness, imgX, imgY, n_out]
+    mean = cbed.lacbed_sim.mean(axis=(1, 2), keepdims=True)
+    std  = cbed.lacbed_sim.std(axis=(1, 2), keepdims=True)
+    cbed.lacbed_sim = (cbed.lacbed_ref - mean) / std
+    cbed.lacbed_ref = np.copy(cbed.lacbed_sim)
+
+    # now go through each variable and make signature images
+    for i in range(rc.n_variables):
+        t = rc.refined_variable_type[i]
+        print(f"  Changing {variable_message(t)}")
+        # set the refinement scale
+        delta = rc.refinement_scale
+        if rc.refined_variable_type[i] == 20:  # atom coordinates
+            # reduce scale by an order of magnitude to allow it to be refined
+            # alongside other parameters like Biso
+            # *** should probably do the same for Uij refinement ***
+            delta *= 0.1
+        rc.refined_variable[i] += delta
+        print_current_var(xtal, basis, rc, i)
+        # check for validity: Occupancy and ADPs must be >=0
+        var, cont = variable_check(rc.refined_variable[i], t)
+        if not cont:
+            raise ValueError(" ## Variable out of range ##")
+            return
+        # new simulation
+        simulate(xtal, basis, cell, hkl, bloch, cbed, rc)
+        print_LACBED(bloch, cbed, rc, 0)
+        mean = cbed.lacbed_sim.mean(axis=(1, 2), keepdims=True)
+        std  = cbed.lacbed_sim.std(axis=(1, 2), keepdims=True)
+        cbed.lacbed_sim = (cbed.lacbed_ref - mean) / std
+        # singature images, size [n_variables, n_thickness, imgX, imgY, n_out]
+        cbed.lacbed_sig[i] = cbed.lacbed_sim - cbed.lacbed_ref
+        rc.refined_variable[i] -= delta
 
 
-def plot_charge_density(xtal, basis, rc, i):
-    # plots radial charge density of atom i in the basis
-    r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
-    fig, ax = plt.subplots(1, 1)
-    w_f = 10
-    fig.set_size_inches(w_f, w_f)
-    # charge densities
-    cd_core = basis.core[i, :] * r**2
-    cd_valence = basis.valence[i, :] * r**2
-    cd_total = cd_core + cd_valence
-    plt.plot(r, cd_core, label='core')
-    plt.plot(r, cd_valence, label='valence')
-    plt.plot(r, cd_total, label='total')
-    ax.set_xlim(left=1e-02)
-    ax.set_ylim(bottom=1e-02)
-    ax.set_xlabel(r'$r$, Å', size=24)
-    ax.set_ylabel(r'Charge density, electrons/Å$^3$', size=24)
-    ax.legend(loc='best', fontsize=22)
-    plt.yscale('log')
-    plt.xscale('log')
-    plt.xticks(fontsize=22)
-    plt.yticks(fontsize=22)
-    if rc.scatter_factor_method == 4:
-        tit = f"Radial charge density for {basis.atom_label[i]} (Coppens)"
-    else:
-        tit = f"Radial charge density for {basis.atom_label[i]} (Bunge)"
-    plt.title(tit, fontsize=24)
-    annotation = f"Kappa = {basis.kappa[i]:.2f}"
-    plt.annotate(annotation, xy=(0.17, 0.5), xycoords='figure fraction',
-                 size=22)
-    # annotation = f"Pv = {basis.pv[i]:.2f}"
-    # plt.annotate(annotation, xy=(0.17, 0.45), xycoords='figure fraction',
-    #              size=22)
-    plt.show()
-
-
-def variable_sigma(V, F):
-    # the square root of (parabola uncertainty / curvature of fit)
-    p = np.polyfit(V, F, 2)  # quadratic fit to the 3 points
-    a, b, c = p
-    Ffit = np.polyval(p, V)  # fitted curve
-    sigma_F = np.std(F - Ffit)  # estimate noise in merit function
-    if abs(sigma_F) > 1e-6:
-        sigma = np.sqrt(sigma_F / a)
-    else:
-        sigma = 0.0
-    return sigma
-
-
+    
 def figure_of_merit(bloch, cbed, rc):
     """
     takes as an input cbed.lacbed_sim, shape [n_thickness, pix_x, pix_y, n_out]
@@ -1042,7 +1028,6 @@ def print_montage(bloch, cbed, rc, images, image_type, j):
         plt.annotate(annotation, xy=(0.105, 0.05), xycoords='figure fraction',
                      size=30, color='w', path_effects=[text_effect])
     plt.show()
-    return
 
 
 def print_LACBED(bloch, cbed, rc, image_type):
@@ -1061,19 +1046,17 @@ def print_LACBED(bloch, cbed, rc, image_type):
             print_montage(bloch, cbed, rc, out_image, image_type, rc.best_t)
     elif image_type == 3:  # signature output
         for j in range(rc.n_variables):
-            out_image = cbed.lacbed_sig[j, :, :, :]
+            out_image = cbed.lacbed_sig[j, rc.best_t, :, :, :]
             print_montage(bloch, cbed, rc, out_image, image_type, j)
     else:
         # All other image types
         image_map = {
             1: (cbed.lacbed_expt, 0),
-            2: (cbed.lacbed_diff, rc.best_t),
+            2: (cbed.lacbed_diff[rc.best_t], rc.best_t),
         }
     
         out_image, thickness = image_map[image_type]
         print_montage(bloch, cbed, rc, out_image, image_type, thickness)
-
-    return
 
 
 def print_LACBED_pattern(i, j, cbed, bloch):
@@ -1243,9 +1226,20 @@ def sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, i):
     std  = sim.std(axis=(0, 1), keepdims=True)
     sim_norm = (sim - mean) / std
     if i >= 0:  # get a signature image if it's a single variable refinement
-        cbed.lacbed_sig[i] = sim_norm - cbed.lacbed_ref
+        cbed.lacbed_sig[i, rc.best_t] = sim_norm - cbed.lacbed_ref
         print_LACBED(bloch, cbed, rc, 3)
 
+        # *** output for development ***
+        img= cbed.lacbed_sig[0, rc.best_t, :, :, 0]
+        cmap = LinearSegmentedColormap.from_list(
+            "two_color_black_center",
+            [(0.0, "c"), (0.5, "k"), (1.0, "orange")])
+        # two colour look up table
+        norm = TwoSlopeNorm(vmin=img.min(), vcenter=0.0, vmax=img.max())
+        plt.imshow(img, cmap=cmap, norm=norm)
+        plt.axis('off')
+        plt.show()
+        
     # figure of merit
     fom = figure_of_merit(bloch, cbed, rc)
     rc.fit_log.append(fom)
@@ -1373,6 +1367,103 @@ def variable_check(x, t):
             print("  ***Occupancy set to 1.0***")
         
     return x, continue_
+
+
+def refine(xtal, basis, cell, hkl, bloch, cbed, rc):
+    # figure of merit - includes determining/applying shifts
+    cbed.lacbed_expt = np.copy(cbed.lacbed_expt_raw)  # with shifts
+    fom = figure_of_merit(bloch, cbed, rc)
+    print(f"  Figure of merit {100*fom:.2f}%")
+
+    # Initialise variables for refinement
+    rc.best_fit = fom*1.0
+    rc.last_fit = fom*1.0
+
+    # for a plot
+    rc.fit_log = ([rc.last_fit*1.0])
+    rc.param_log = ([np.copy(rc.refined_variable)])
+
+    # Refinement loop
+    df = 1.0
+    rc.refinement_scale *= 2.0
+    while df >= rc.precision and rc.refinement_scale >= abs(rc.precision):
+        # rc.refined_variable is the working array of variables
+        # best_var is the best array of variables during this refinement cycle
+        rc.best_var = np.copy(rc.refined_variable)
+        # next_var is the predicted next (best) point
+        rc.next_var = np.copy(rc.refined_variable)
+        # reduce refinement scale for next round
+        # rc.refinement_scale *= (1 - 1 / (1 + rc.n_variables))
+        rc.refinement_scale *= 0.5
+        print(f"Step size {rc.refinement_scale:g}")
+
+        if rc.refine_method == 0:
+            print("Gradient descent, one parameter at a time")
+            # dydx is a vector along the gradient in n-dimensional space
+            dydx = np.zeros(rc.n_variables)
+            # random order for 3 or more variables
+            indices = np.arange(rc.n_variables)
+            if rc.n_variables > 2 or rc.iter_count == 0:
+                np.random.shuffle(indices)
+            for i in indices:
+                dydx[i] = 1.0
+                dydx = refine_multi_variable(xtal, basis, cell, hkl,
+                                                 bloch, cbed, rc, dydx)
+        elif rc.refine_method == 1:
+            print("Multiparameter refinement, finding parameter gradients")
+            # =========== step 1: individual variable minimisation
+            # if all variables have been refined, reset
+            if np.sum(np.abs(dydx)) < 1e-10:
+                dydx = np.ones(rc.n_variables)
+            # Go through the variables looking at three points in the hope
+            # of capturing a minimum - if there is one, we take it and remove
+            # that variable from multidimensional refinement, dydx[i] = 0.
+            # Otherwise dydx[i] is the gradient for that variable.
+            # We also get a predicted best starting point
+            # for gradient descent, rc.next_var
+            for i in range(rc.n_variables):
+                # Skip variables already optimized
+                if abs(dydx[i]) < 1e-10:
+                    dydx[i] = 0.0
+                    continue
+                dydx[i] = refine_single_variable(xtal, basis, cell, hkl,
+                                                     bloch, cbed, rc, i)
+
+            # all variables have updated/predicted so do a final simulation
+            # if it's better, update rc.best_fit and rc.best_var accordingly
+            if np.count_nonzero(dydx) == 0:
+                print("Closing simulation for this cycle")
+                rc.refined_variable = np.copy(rc.next_var)
+                fom = sim_fom(xtal, basis, hkl, bloch, cbed, rc, i)
+                if (fom < rc.best_fit):
+                    rc.best_fit = fom*1.0
+                    rc.best_var = np.copy(rc.refined_variable)
+            print("Vector gradient descent")
+            # ===========step 2: vector descent
+            # Downhill minimisation until we eliminate all variables
+            while np.sum(np.abs(dydx)) > 1e-10:
+                # the returned dydx will have an extra zero!
+                dydx = refine_multi_variable(xtal, basis, cell, hkl,
+                                                 bloch, cbed, rc, dydx, False)
+        else:
+            raise ValueError("No valid refine method (0,1) in felix.inp")
+        if rc.plot > 0:
+            plot_progress(rc)
+            print_LACBED(bloch, cbed, rc, 0)
+
+        # Update for next iteration
+        df = rc.last_fit - rc.best_fit
+
+        rc.last_fit = np.copy(rc.best_fit)
+        rc.refined_variable = np.copy(rc.best_var)
+        if rc.precision > 0:
+            print(f"Improvement in fit {100*df:.2f}%, will stop at {100*rc.precision:.2f}%")
+        else:
+            print(f"Improvement in fit {100*df:.2f}%, will stop after step size < {abs(rc.precision)}")
+        print("-------------------------------")
+    print(f"Refinement complete after {rc.iter_count} simulations.")
+    for i in range(rc.n_variables):
+        print_current_var(xtal, basis, rc, i)
 
 
 def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
@@ -1551,6 +1642,55 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         print_LACBED(bloch, cbed, rc, 2)
 
     return dydx
+
+
+def plot_progress(rc):
+    fig, ax = plt.subplots(1, 1)
+    w_f = 10
+    fig.set_size_inches(1.5*w_f, w_f)
+    plt.plot(rc.fit_log)
+    plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1.0))
+    plt.xticks(fontsize=22)
+    plt.yticks(fontsize=22)
+    ax.set_xlabel('Iteration', size=24)
+    ax.set_ylabel('Figure of merit', size=24)
+    plt.show()
+
+
+def plot_charge_density(xtal, basis, rc, i):
+    # plots radial charge density of atom i in the basis
+    r = np.linspace(1e-6, xtal.r_max, xtal.n_points)
+    fig, ax = plt.subplots(1, 1)
+    w_f = 10
+    fig.set_size_inches(w_f, w_f)
+    # charge densities
+    cd_core = basis.core[i, :] * r**2
+    cd_valence = basis.valence[i, :] * r**2
+    cd_total = cd_core + cd_valence
+    plt.plot(r, cd_core, label='core')
+    plt.plot(r, cd_valence, label='valence')
+    plt.plot(r, cd_total, label='total')
+    ax.set_xlim(left=1e-02)
+    ax.set_ylim(bottom=1e-02)
+    ax.set_xlabel(r'$r$, Å', size=24)
+    ax.set_ylabel(r'Charge density, electrons/Å$^3$', size=24)
+    ax.legend(loc='best', fontsize=22)
+    plt.yscale('log')
+    plt.xscale('log')
+    plt.xticks(fontsize=22)
+    plt.yticks(fontsize=22)
+    if rc.scatter_factor_method == 4:
+        tit = f"Radial charge density for {basis.atom_label[i]} (Coppens)"
+    else:
+        tit = f"Radial charge density for {basis.atom_label[i]} (Bunge)"
+    plt.title(tit, fontsize=24)
+    annotation = f"Kappa = {basis.kappa[i]:.2f}"
+    plt.annotate(annotation, xy=(0.17, 0.5), xycoords='figure fraction',
+                 size=22)
+    # annotation = f"Pv = {basis.pv[i]:.2f}"
+    # plt.annotate(annotation, xy=(0.17, 0.45), xycoords='figure fraction',
+    #              size=22)
+    plt.show()
 
 
 def plot_f_e(basis, rc, s, f_kappa, f_k, i):

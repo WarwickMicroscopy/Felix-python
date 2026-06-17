@@ -537,6 +537,12 @@ if 'S' not in rc.refine_mode:
             rc.atom_refine_flag.append(rc.atomic_sites[i])
             rc.atom_refine_vec.append(nullvec)  # no atom movement
 
+    if 'O' in rc.refine_mode:
+        print("*** Beam pool optimisation ***")
+
+    if 'X' in rc.refine_mode:
+        print("*** Correlation analysis ***")
+
     # Total number of independent variables
     rc.n_variables = len(rc.refined_variable)
     if rc.n_variables == 0 and rc.refine_mode != 'O':
@@ -555,6 +561,7 @@ if 'S' not in rc.refine_mode:
 else:
     # we still need a type for later code, set it to zero for sim only
     rc.refined_variable_type = np.array([0])
+
 # # %% set up Ug refinement
 # if 'A' in refine_mode:  # Ug refinement
 #     print("Refining Structure Factors, A")
@@ -621,7 +628,7 @@ cbed.lacbed_diff = np.copy(cbed.lacbed_sim)
 cbed.lacbed_ref = np.zeros([2*rc.image_radius,
                            2*rc.image_radius, rc.n_out], dtype=float)
 # signature images
-cbed.lacbed_sig = np.zeros([rc.n_variables, 2*rc.image_radius,
+cbed.lacbed_sig = np.zeros([rc.n_variables, rc.n_thickness, 2*rc.image_radius,
                            2*rc.image_radius, rc.n_out], dtype=float)
 
 
@@ -638,7 +645,10 @@ else:
 if rc.image_processing == 1:
     print(f"  Blur radius {rc.blur_radius} pixels")
 
-# %% read in experimental images
+if 'X' in rc.refine_mode:
+    sim.correlations(xtal, basis, cell, hkl, bloch, cbed, rc)
+
+# %% read in experimental images and start refinement
 if 'S' not in rc.refine_mode:
     cbed.lacbed_expt_raw = np.zeros([2*rc.image_radius, 2*rc.image_radius,
                                      rc.n_out])
@@ -672,11 +682,6 @@ if 'S' not in rc.refine_mode:
                 print(f"{g_string} not found")
         print(f"  {n_expt} experimental patterns loaded")
 
-        # figure of merit - includes determining/applying shifts
-        cbed.lacbed_expt = np.copy(cbed.lacbed_expt_raw)  # with shifts
-        fom = sim.figure_of_merit(bloch, cbed, rc)
-        print(f"  Figure of merit {100*fom:.2f}%")
-
         # print experimental LACBED patterns
         # print_LACBED has options 0=sim, 1=expt, 2=difference
         sim.print_LACBED(bloch, cbed, rc, 1)
@@ -684,104 +689,11 @@ if 'S' not in rc.refine_mode:
         best_corr = np.ones(rc.n_out)
     else:
         raise ValueError(f"Experimental images DM3_{x_str}x{x_str} not found")
+    print("-------------------------------")
 
-print("-------------------------------")
-
-
-# %% start refinement loop *** needs work
-if 'S' not in rc.refine_mode:
-    # Initialise variables for refinement
-    fit0 = fom*1.0
-    rc.best_fit = fom*1.0
-    rc.last_fit = fom*1.0
-    r3_var = np.zeros(3)  # for parabolic minimum
-    r3_fom = np.zeros(3)
-
-    # for a plot
-    rc.fit_log = ([rc.last_fit*1.0])
-    rc.param_log = ([np.copy(rc.refined_variable)])
-
-    # Refinement loop
-    df = 1.0
-    rc.refinement_scale *= 2.0
-    while df >= rc.precision and rc.refinement_scale >= abs(rc.precision):
-        # rc.refined_variable is the working array of variables
-        # best_var is the best array of variables during this refinement cycle
-        rc.best_var = np.copy(rc.refined_variable)
-        # next_var is the predicted next (best) point
-        rc.next_var = np.copy(rc.refined_variable)
-        # reduce refinement scale for next round
-        # rc.refinement_scale *= (1 - 1 / (1 + rc.n_variables))
-        rc.refinement_scale *= 0.5
-        print(f"Step size {rc.refinement_scale:g}")
-
-        if rc.refine_method == 0:
-            print("Gradient descent, one parameter at a time")
-            # dydx is a vector along the gradient in n-dimensional space
-            dydx = np.zeros(rc.n_variables)
-            # random order for 3 or more variables
-            indices = np.arange(rc.n_variables)
-            if rc.n_variables > 2 or rc.iter_count == 0:
-                np.random.shuffle(indices)
-            for i in indices:
-                dydx[i] = 1.0
-                dydx = sim.refine_multi_variable(xtal, basis, cell, hkl,
-                                                 bloch, cbed, rc, dydx)
-        elif rc.refine_method == 1:
-            print("Multiparameter refinement, finding parameter gradients")
-            # =========== step 1: individual variable minimisation
-            # if all variables have been refined, reset
-            if np.sum(np.abs(dydx)) < 1e-10:
-                dydx = np.ones(rc.n_variables)
-            # Go through the variables looking at three points in the hope
-            # of capturing a minimum - if there is one, we take it and remove
-            # that variable from multidimensional refinement, dydx[i] = 0.
-            # Otherwise dydx[i] is the gradient for that variable.
-            # We also get a predicted best starting point
-            # for gradient descent, rc.next_var
-            for i in range(rc.n_variables):
-                # Skip variables already optimized
-                if abs(dydx[i]) < 1e-10:
-                    dydx[i] = 0.0
-                    continue
-                dydx[i] = sim.refine_single_variable(xtal, basis, cell, hkl,
-                                                     bloch, cbed, rc, i)
-
-            # all variables have updated/predicted so do a final simulation
-            # if it's better, update rc.best_fit and rc.best_var accordingly
-            if np.count_nonzero(dydx) == 0:
-                print("Closing simulation for this cycle")
-                rc.refined_variable = np.copy(rc.next_var)
-                fom = sim.sim_fom(xtal, basis, hkl, bloch, cbed, rc, i)
-                if (fom < rc.best_fit):
-                    rc.best_fit = fom*1.0
-                    rc.best_var = np.copy(rc.refined_variable)
-            print("Vector gradient descent")
-            # ===========step 2: vector descent
-            # Downhill minimisation until we eliminate all variables
-            while np.sum(np.abs(dydx)) > 1e-10:
-                # the returned dydx will have an extra zero!
-                dydx = sim.refine_multi_variable(xtal, basis, cell, hkl,
-                                                 bloch, cbed, rc, dydx, False)
-        else:
-            raise ValueError("No valid refine method (0,1) in felix.inp")
-        if rc.plot > 0:
-            sim.plot_progress(rc)
-            sim.print_LACBED(bloch, cbed, rc, 0)
-
-        # Update for next iteration
-        df = rc.last_fit - rc.best_fit
-
-        rc.last_fit = np.copy(rc.best_fit)
-        rc.refined_variable = np.copy(rc.best_var)
-        if rc.precision > 0:
-            print(f"Improvement in fit {100*df:.2f}%, will stop at {100*rc.precision:.2f}%")
-        else:
-            print(f"Improvement in fit {100*df:.2f}%, will stop after step size < {abs(rc.precision)}")
-        print("-------------------------------")
-    print(f"Refinement complete after {rc.iter_count} simulations.")
-    for i in range(rc.n_variables):
-        sim.print_current_var(xtal, basis, rc, i)
+    # start refinement
+    if 'X' not in rc.refine_mode and 'O' not in rc.refine_mode:
+        sim.refine(xtal, basis, cell, hkl, bloch, cbed, rc)
 
 
 # %% final print
