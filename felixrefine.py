@@ -696,18 +696,25 @@ elif 'S' not in rc.refine_mode:
 
 
 # %% final print
+sim.print_LACBED(bloch, cbed, rc, 0)  # simulation
+sim.save_LACBED(xtal, bloch, cbed, rc)
+total_time = time.time() - start
+
+# kappa model outputs
 rc.plot = 5
 if rc.scatter_factor_method > 3:
     px.electron_density(xtal, basis, rc)
-sim.print_LACBED(bloch, cbed, rc, 0)  # simulation
+
+# comparisons with experiment
 if all(x not in rc.refine_mode for x in ('S', 'O', 'X')):
     sim.print_LACBED(bloch, cbed, rc, 2)  # difference sim-expt
     for i in range(rc.n_variables):
         sim.plot_parameter(rc, i)
+
+# correlations
 if 'X' in rc.refine_mode:
     sim.print_LACBED(bloch, cbed, rc, 3)  # signature
-sim.save_LACBED(xtal, bloch, cbed, rc)
-total_time = time.time() - start
+
 print("-----------------------------------------------------------------")
 print(f"Total time {total_time:.1f} s")
 print("-----------------------------------------------------------------")

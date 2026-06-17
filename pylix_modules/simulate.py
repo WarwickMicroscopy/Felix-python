@@ -652,6 +652,7 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
             # *** should probably do the same for Uij refinement ***
             delta *= 0.1
         rc.refined_variable[i] += delta
+        update_variables(xtal, basis, rc)
         print_current_var(xtal, basis, rc, i)
         # check for validity: Occupancy and ADPs must be >=0
         var, cont = variable_check(rc.refined_variable[i], t)
@@ -666,6 +667,7 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
         # signature images, size [n_variables, n_thickness, imgX, imgY, n_out]
         cbed.lacbed_sig[i] = (cbed.lacbed_sim - mean) / std - cbed.lacbed_ref
         rc.refined_variable[i] -= delta
+        update_variables(xtal, basis, rc)
 
 
 def figure_of_merit(bloch, cbed, rc):
