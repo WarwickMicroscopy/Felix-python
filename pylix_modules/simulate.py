@@ -711,8 +711,6 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
     cbed.correlation_matrix = np.einsum('api,bpi->abi',
                                         sig_flat, sig_flat) / n_pix
 
-    plot_correlation(rc, bloch, basis, cbed)
-
 
 def figure_of_merit(bloch, cbed, rc):
     """
@@ -1167,7 +1165,7 @@ def print_sig_pattern(i, j, cbed, bloch):
     # j index of the pattern to plot
     # i index of the variable to plot
     img = cbed.lacbed_sig[i, :, :, j]
-    
+
     cmap = LinearSegmentedColormap.from_list(
         "two_color_black_center",
         [(0.0, "c"), (0.5, "k"), (1.0, "orange")])

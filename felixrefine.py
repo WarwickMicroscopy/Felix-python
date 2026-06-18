@@ -442,17 +442,18 @@ if 'S' not in rc.refine_mode:
                 raise ValueError(f"Coordinate refinement of atom \
                                  {rc.atomic_sites[i]} not possible")
             else:
-                sim.print_current_var(xtal, basis, rc, rc.n_variables)
-            for j in range(degrees_of_freedom):
-                rc.atom_coord_vec = rc.moves[j, :]  # the vector of movement
-                # we refine the coordinate along the appropriate vector
-                r_dot_v = np.dot(basis.atom_position[rc.atomic_sites[i]],
-                                 rc.moves[j, :])
-                rc.refined_variable.append(r_dot_v)
-                rc.refined_variable_type.append(20)  # flag to say it's a coord
-                rc.atom_refine_flag.append(rc.atomic_sites[i])  # atom index
-                rc.atom_refine_vec.append(rc.moves[j, :])  # atom movement
-                rc.n_variables += 1
+                for j in range(degrees_of_freedom):
+                    # the vector of movement
+                    rc.atom_coord_vec = rc.moves[j, :]
+                    # we refine the coordinate along the appropriate vector
+                    r_dot_v = np.dot(basis.atom_position[rc.atomic_sites[i]],
+                                     rc.moves[j, :])
+                    rc.refined_variable.append(r_dot_v)
+                    rc.refined_variable_type.append(20)  # flag to say it's a coord
+                    rc.atom_refine_flag.append(rc.atomic_sites[i])  # atom index
+                    rc.atom_refine_vec.append(rc.moves[j, :])  # atom movement
+                    rc.n_variables += 1
+                sim.print_current_var(xtal, basis, rc, rc.n_variables-1)
 
     if 'C' in rc.refine_mode:  # Occupancy
         refined_sites = set()
@@ -734,6 +735,7 @@ if all(x not in rc.refine_mode for x in ('S', 'O', 'X')):
 # correlations
 if 'X' in rc.refine_mode:
     sim.print_LACBED(bloch, cbed, rc, 3)  # signature
+    sim.plot_correlation(rc, bloch, basis, cbed)
 
 print("-----------------------------------------------------------------")
 print(f"Total time {total_time:.1f} s")
