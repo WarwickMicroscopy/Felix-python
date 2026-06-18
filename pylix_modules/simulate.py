@@ -637,33 +637,54 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
     # normalise each LACBED pattern
     # simulation has size [n_thickness, imgX, imgY, n_out]
     mean = cbed.lacbed_sim.mean(axis=(1, 2), keepdims=True)
-    std  = cbed.lacbed_sim.std(axis=(1, 2), keepdims=True)
+    std = cbed.lacbed_sim.std(axis=(1, 2), keepdims=True)
     cbed.lacbed_ref = (cbed.lacbed_sim - mean) / std
+
+    detla = {
+        20: 0.0005,  # atom coordinate
+        21: 0.05,  # occupancy
+        22: 0.1,  # isotropic atomic displacement parameters (ADPs)
+        23: 0.001,  # anisotropic ADP U11
+        24: 0.001,  # anisotropic ADP U22
+        25: 0.001,  # anisotropic ADP U33
+        26: 0.001,  # anisotropic ADP U12
+        27: 0.001,  # anisotropic ADP U23
+        28: 0.001,  # anisotropic ADP U13
+        30: 0.01,  # lattice parmeter
+        31: 0.01,  # lattice parmeter
+        32: 0.01,  # lattice parmeter
+        33: 0.01,  # lattice parmeter
+        34: 0.01,  # lattice parmeter
+        35: 0.01,  # lattice parmeter
+        40: 0.05,  # convergence angle
+        50: 0.02,  # kappa
+        51: 0.05,  # valence electrons
+    }
 
     # now go through each variable and make signature images
     for i in range(rc.n_variables):
         t = rc.refined_variable_type[i]
-        print(f"  Changing {variable_message(t)}")
         # set the refinement scale
-        delta = rc.refinement_scale
-        if rc.refined_variable_type[i] == 20:  # atom coordinates
-            # reduce scale by an order of magnitude to allow it to be refined
-            # alongside other parameters like Biso
-            # *** should probably do the same for Uij refinement ***
-            delta *= 0.1
+        delta = detla[rc.refined_variable_type[i]]
+        print(f"  Changing {variable_message(t)} by {delta}")
         rc.refined_variable[i] += delta
-        update_variables(xtal, basis, rc)
-        print_current_var(xtal, basis, rc, i)
         # check for validity: Occupancy and ADPs must be >=0
         var, cont = variable_check(rc.refined_variable[i], t)
         if not cont:
-            raise ValueError(" ## Variable out of range ##")
-            return
+            # try going the other way
+            rc.refined_variable[i] -= 2*delta
+            delta = -delta
+            var, cont = variable_check(rc.refined_variable[i], t)
+            if not cont:
+                raise ValueError(" ## Variable out of range ##")
+                return
+        update_variables(xtal, basis, rc)
+        print_current_var(xtal, basis, rc, i)
         # new simulation
         simulate(xtal, basis, cell, hkl, bloch, cbed, rc)
         print_LACBED(bloch, cbed, rc, 0)
         mean = cbed.lacbed_sim.mean(axis=(1, 2), keepdims=True)
-        std  = cbed.lacbed_sim.std(axis=(1, 2), keepdims=True)
+        std = cbed.lacbed_sim.std(axis=(1, 2), keepdims=True)
         # signature images, size [n_variables, n_thickness, imgX, imgY, n_out]
         cbed.lacbed_sig[i] = (cbed.lacbed_sim - mean) / std - cbed.lacbed_ref
         rc.refined_variable[i] -= delta
@@ -849,6 +870,64 @@ def figure_of_merit(bloch, cbed, rc):
         plt.show()
 
     return fom
+
+
+def variable_message(vtype):
+    """Map variable type → message string."""
+    msg = {
+        10: "Ug amplitude",
+        11: "Ug phase",
+        20: "Atom coordinates",
+        21: "Occupancy",
+        22: "B_iso",
+        23: "U[1,1]",
+        24: "U[2,2]",
+        25: "U[3,3]",
+        26: "U[1,2]",
+        27: "U[1,3]",
+        28: "U[2,3]",
+        30: "Lattice parameter a",
+        31: "Lattice parameter b",
+        32: "Lattice parameter c",
+        33: "Lattice alpha",
+        34: "Lattice beta",
+        35: "Lattice gamma",
+        40: "Convergence angle",
+        41: "Accelerating voltage",
+        50: "Kappa",
+        51: "Pv",
+    }
+    return msg[vtype]
+
+
+def variable_check(x, t):
+    '''
+    x: float, variable being refined
+    t: integer, type of variable being refined
+    '''
+    continue_ = True
+
+    # error check - NaN, inf
+    if not np.all(np.isfinite(x)):
+        continue_ = False
+        x = 0.0
+        print("  ***NaN or inf: refined variable set to zero***")
+        
+    # Occupancy and Atomic displacement parameters
+    if int(t/10) == 2 and 0 < np.mod(t, 10) < 6:
+        if x < 0:
+            x = 0.0
+            continue_ = False
+            print("  ***Refined variable set to zero***")
+
+    # Occupancy upper limit
+    if t == 21:
+        if x > 1.0:
+            x = 1.0
+            continue_ = False
+            print("  ***Occupancy set to 1.0***")
+        
+    return x, continue_
 
 
 def update_variables(xtal, basis, rc):
@@ -1045,9 +1124,8 @@ def print_LACBED(bloch, cbed, rc, image_type):
             print_montage(bloch, cbed, rc, out_image, image_type, rc.best_t)
     elif image_type == 3:  # signature output
         for j in range(rc.n_variables):
-            for i in range(rc.n_thickness):
-                out_image = cbed.lacbed_sig[j, i, :, :, :]
-                print_montage(bloch, cbed, rc, out_image, image_type, j)
+            out_image = cbed.lacbed_sig[j, :, :, :]
+            print_montage(bloch, cbed, rc, out_image, image_type, j)
     else:
         # All other image types
         image_map = {
@@ -1102,8 +1180,11 @@ def save_LACBED(xtal, bloch, cbed, rc):
 def print_current_var(xtal, basis, rc, i):
     # prints the variable being refined
     typ = rc.refined_variable_type[i]  # variable type & subtype
-    var = rc.refined_variable[i]  # variable 
-    sigma = rc.refined_variable_sigma[i]  # error estimate
+    var = rc.refined_variable[i]  # variable
+    if rc.refined_variable_sigma is not None:
+        sigma = rc.refined_variable_sigma[i]  # error estimate
+    else:
+        sigma = 0.0
     atom_id = rc.atom_refine_flag[i]
     label = basis.atom_label[atom_id]
     # Z = basis.atomic_number[atom_id]
@@ -1169,41 +1250,13 @@ def print_current_var(xtal, basis, rc, i):
             print(f"  {label} {fmt.format(var)}")
 
 
-def variable_message(vtype):
-    """Map variable type → message string."""
-    msg = {
-        10: "Ug amplitude",
-        11: "Ug phase",
-        20: "Atom coordinates",
-        21: "Occupancy",
-        22: "B_iso",
-        23: "U[1,1]",
-        24: "U[2,2]",
-        25: "U[3,3]",
-        26: "U[1,2]",
-        27: "U[1,3]",
-        28: "U[2,3]",
-        30: "Lattice parameter a",
-        31: "Lattice parameter b",
-        32: "Lattice parameter c",
-        33: "Lattice alpha",
-        34: "Lattice beta",
-        35: "Lattice gamma",
-        40: "Convergence angle",
-        41: "Accelerating voltage",
-        50: "Kappa",
-        51: "Pv",
-    }
-    return msg[vtype]
-
-
 def sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, i):
     '''
     wraps multiple subroutine calls into a single line: update variables
     simulate and figure of merit
     input i = index of variable to be refined, for single variables
     i = -1 for multiple variables
-    
+
     The 'signature' of variable i is the change it produces in each LACBED
     pattern.  We give the zero-mean normalised difference here
     '''
@@ -1214,7 +1267,7 @@ def sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, i):
     cbed.lacbed_ref = np.copy(cbed.lacbed_sim[rc.best_t, :, :, :])
     # normalise each one
     mean = cbed.lacbed_ref.mean(axis=(0, 1), keepdims=True)
-    std  = cbed.lacbed_ref.std(axis=(0, 1), keepdims=True)
+    std = cbed.lacbed_ref.std(axis=(0, 1), keepdims=True)
     cbed.lacbed_ref = (cbed.lacbed_ref - mean) / std
 
     # simulate
@@ -1223,14 +1276,14 @@ def sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, i):
     # calculate signature images
     sim = np.copy(cbed.lacbed_sim[rc.best_t, :, :, :])
     mean = sim.mean(axis=(0, 1), keepdims=True)
-    std  = sim.std(axis=(0, 1), keepdims=True)
+    std = sim.std(axis=(0, 1), keepdims=True)
     sim_norm = (sim - mean) / std
     if i >= 0:  # get a signature image if it's a single variable refinement
         cbed.lacbed_sig[i, rc.best_t] = sim_norm - cbed.lacbed_ref
         print_LACBED(bloch, cbed, rc, 3)
 
         # *** output for development ***
-        img= cbed.lacbed_sig[0, rc.best_t, :, :, 0]
+        img = cbed.lacbed_sig[0, rc.best_t, :, :, 0]
         cmap = LinearSegmentedColormap.from_list(
             "two_color_black_center",
             [(0.0, "c"), (0.5, "k"), (1.0, "orange")])
@@ -1274,7 +1327,8 @@ def refine_single_variable(xtal, basis, cell, hkl, bloch, cbed, rc, i):
     r3_fom = np.zeros(3)
     # Check if ADP is negative, skip if so.
     # NB u12,u13,u23 can be -ve
-    if 21 < rc.refined_variable_type[i] < 26 and rc.refined_variable[i] < 1e-10:
+    if (21 < rc.refined_variable_type[i] < 26 and
+            rc.refined_variable[i] < 1e-10):
         dydx_i = 0.0
     else:
         # middle point is the previous best simulation
@@ -1337,36 +1391,6 @@ def refine_single_variable(xtal, basis, cell, hkl, bloch, cbed, rc, i):
         # uncert_brak(var_min, independent_delta[i])
 
     return dydx_i
-
-
-def variable_check(x, t):
-    '''
-    x: float, variable being refined
-    t: integer, type of variable being refined
-    '''
-    continue_ = True
-
-    # error check - NaN, inf
-    if not np.all(np.isfinite(x)):
-        continue_ = False
-        x = 0.0
-        print("  ***NaN or inf: refined variable set to zero***")
-        
-    # Occupancy and Atomic displacement parameters
-    if int(t/10) == 2 and 0 < np.mod(t, 10) < 6:
-        if x < 0:
-            x = 0.0
-            continue_ = False
-            print("  ***Refined variable set to zero***")
-
-    # Occupancy upper limit
-    if t == 21:
-        if x > 1.0:
-            x = 1.0
-            continue_ = False
-            print("  ***Occupancy set to 1.0***")
-        
-    return x, continue_
 
 
 def refine(xtal, basis, cell, hkl, bloch, cbed, rc):

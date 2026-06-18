@@ -275,10 +275,6 @@ for i in range(basis.n_atoms):
 
 # output
 print(f"Zone axis: {rc.incident_beam_direction.astype(int)}")
-if rc.n_thickness == 1:
-    print(f"Specimen thickness {rc.initial_thickness/10} nm")
-else:
-    print(f"{rc.n_thickness} thicknesses: {', '.join(map(str, rc.thickness/10))} nm")
 
 if rc.scatter_factor_method == 0:
     print("  Using Kirkland scattering factors")
@@ -419,6 +415,15 @@ rc.atom_refine_flag = []  # the index of the atom in the .cif, -1 if none
 rc.atom_refine_vec = []  # the direction of atom movement, [0,0,0] if none
 nullvec = np.array([0, 0, 0])  # null vector for above
 if 'S' not in rc.refine_mode:
+
+    if 'O' in rc.refine_mode:
+        print("*** Beam pool optimisation ***")
+
+    if 'X' in rc.refine_mode:
+        print("*** Correlation analysis ***")
+        rc.thickness = np.atleast_1d(rc.initial_thickness)
+        rc.n_thickness = 1
+
     n_sites = len(rc.atomic_sites)
     # count refinement variables
     if 'B' in rc.refine_mode:  # Atom coordinate refinement
@@ -434,6 +439,8 @@ if 'S' not in rc.refine_mode:
             if degrees_of_freedom == 0:
                 raise ValueError(f"Coordinate refinement of atom \
                                  {rc.atomic_sites[i]} not possible")
+            else:
+                sim.print_current_var(xtal, basis, rc, rc.n_variables)
             for j in range(degrees_of_freedom):
                 rc.atom_coord_vec = rc.moves[j, :]  # the vector of movement
                 # we refine the coordinate along the appropriate vector
@@ -443,13 +450,14 @@ if 'S' not in rc.refine_mode:
                 rc.refined_variable_type.append(20)  # flag to say it's a coord
                 rc.atom_refine_flag.append(rc.atomic_sites[i])  # atom index
                 rc.atom_refine_vec.append(rc.moves[j, :])  # atom movement
+                rc.n_variables += 1
 
     if 'C' in rc.refine_mode:  # Occupancy
         refined_sites = set()
         for i in range(n_sites):
             site = basis.mult_occ[rc.atomic_sites[i]]
             # check if we already have this site
-            if site in refined_sites:
+            if site in refined_sites and 'X' not in rc.refine_mode:
                 print(f"  Shared site: not refining occupancy of atom {rc.atomic_sites[i]}")
                 continue
             refined_sites.add(site)
@@ -457,6 +465,8 @@ if 'S' not in rc.refine_mode:
             rc.refined_variable_type.append(21)
             rc.atom_refine_flag.append(rc.atomic_sites[i])
             rc.atom_refine_vec.append(nullvec)  # no atom movement
+            sim.print_current_var(xtal, basis, rc, rc.n_variables)
+            rc.n_variables += 1
 
     if 'D' in rc.refine_mode:  # Isotropic ADPs
         for i in range(n_sites):
@@ -464,6 +474,8 @@ if 'S' not in rc.refine_mode:
             rc.refined_variable_type.append(22)
             rc.atom_refine_flag.append(rc.atomic_sites[i])
             rc.atom_refine_vec.append(nullvec)  # no atom movement
+            sim.print_current_var(xtal, basis, rc, rc.n_variables)
+            rc.n_variables += 1
 
     if 'E' in rc.refine_mode:  # Anisotropic ADPs, only refine non-zero
         for i in range(n_sites):
@@ -478,6 +490,7 @@ if 'S' not in rc.refine_mode:
                     rc.refined_variable_type.append(t)
                     rc.atom_refine_flag.append(rc.atomic_sites[i])
                     rc.atom_refine_vec.append(nullvec)  # no atom movement
+                    rc.n_variables += 1
 
     if 'F' in rc.refine_mode:  # Lattice parameters
         # variable_type first digit=6 indicates lattice parameter
@@ -492,9 +505,11 @@ if 'S' not in rc.refine_mode:
             rc.refined_variable.append(xtal.cell_b)
             rc.refined_variable_type.append(31)
             rc.atom_refine_flag.append(-1)
+            rc.n_variables += 1
             rc.refined_variable.append(xtal.cell_c)
             rc.refined_variable_type.append(32)
             rc.atom_refine_flag.append(-1)
+            rc.n_variables += 1
             rc.atom_refine_vec.append(nullvec)  # no atom movement
         elif 142 < xtal.space_group_number < 160:  # Rhombohedral 168
             # Need to work out R- vs H- settings!!!
@@ -504,6 +519,7 @@ if 'S' not in rc.refine_mode:
             rc.refined_variable.append(xtal.cell_c)
             rc.refined_variable_type.append(32)
             rc.atom_refine_flag.append(-1)
+            rc.n_variables += 1
             rc.atom_refine_vec.append(nullvec)  # no atom movement
 
     if 'G' in rc.refine_mode:  # Unit cell angles
@@ -516,12 +532,15 @@ if 'S' not in rc.refine_mode:
         rc.atom_refine_flag.append(-1)
         rc.atom_refine_vec.append(nullvec)  # no atom movement
         print(f"Starting convergence angle {rc.convergence_angle} Å^-1")
+        rc.n_variables += 1
 
     if 'I' in rc.refine_mode:  # accelerating_voltage_kv
         rc.refined_variable.append(rc.accelerating_voltage_kv)
         rc.refined_variable_type.append(41)
         rc.atom_refine_flag.append(-1)
         rc.atom_refine_vec.append(nullvec)  # no atom movement
+        print(f"Starting kV {rc.accelerating_voltage_kv} kV")
+        rc.n_variables += 1
 
     if 'J' in rc.refine_mode:
         for i in range(n_sites):
@@ -529,6 +548,7 @@ if 'S' not in rc.refine_mode:
             rc.refined_variable_type.append(51)
             rc.atom_refine_flag.append(rc.atomic_sites[i])
             rc.atom_refine_vec.append(nullvec)  # no atom movement
+            rc.n_variables += 1
 
     if 'K' in rc.refine_mode:
         for i in range(n_sites):
@@ -536,15 +556,9 @@ if 'S' not in rc.refine_mode:
             rc.refined_variable_type.append(50)
             rc.atom_refine_flag.append(rc.atomic_sites[i])
             rc.atom_refine_vec.append(nullvec)  # no atom movement
-
-    if 'O' in rc.refine_mode:
-        print("*** Beam pool optimisation ***")
-
-    if 'X' in rc.refine_mode:
-        print("*** Correlation analysis ***")
+            rc.n_variables += 1
 
     # Total number of independent variables
-    rc.n_variables = len(rc.refined_variable)
     if rc.n_variables == 0 and rc.refine_mode != 'O':
         raise ValueError("No refinement variables! \
         Check refine_mode flag in felix.inp. \
@@ -627,9 +641,13 @@ cbed.lacbed_diff = np.copy(cbed.lacbed_sim)
 # reference images
 cbed.lacbed_ref = np.zeros([2*rc.image_radius,
                            2*rc.image_radius, rc.n_out], dtype=float)
-# signature images
-cbed.lacbed_sig = np.zeros([rc.n_variables, rc.n_thickness, 2*rc.image_radius,
+# signature images - NB only initial thickness
+cbed.lacbed_sig = np.zeros([rc.n_variables, 2*rc.image_radius,
                            2*rc.image_radius, rc.n_out], dtype=float)
+if rc.n_thickness == 1:
+    print(f"Specimen thickness {rc.initial_thickness/10} nm")
+else:
+    print(f"{rc.n_thickness} thicknesses: {', '.join(map(str, rc.thickness/10))} nm")
 
 
 # %% baseline simulation & beam pool optimisation if required
