@@ -417,9 +417,11 @@ nullvec = np.array([0, 0, 0])  # null vector for above
 if 'S' not in rc.refine_mode:
 
     if 'O' in rc.refine_mode:
+        print("-------------------------------")
         print("*** Beam pool optimisation ***")
 
     if 'X' in rc.refine_mode:
+        print("-------------------------------")
         print("*** Correlation analysis ***")
         rc.thickness = np.atleast_1d(rc.initial_thickness)
         rc.n_thickness = 1

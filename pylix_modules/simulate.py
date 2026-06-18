@@ -279,14 +279,20 @@ def zncc(img1, img2):
     output is a numpy array of length n, giving zncc for each pair of images
     zncc is -1 = perfect anticorrelation, +1 = perfect correlation
     """
-    n_pix = img1.shape[0]**2
-    img1_normalised = (img1 - np.mean(img1, axis=(0, 1), keepdims=True)) / (
-        np.std(img1, axis=(0, 1), keepdims=True))
-    img2_normalised = (img2 - np.mean(img2, axis=(0, 1), keepdims=True)) / (
-        np.std(img2, axis=(0, 1), keepdims=True))
+    n_pix = img1.shape[0] * img1.shape[1]
 
-    # zero-mean normalised 2D cross-correlation
-    cc = np.sum(img1_normalised * img2_normalised, axis=(0, 1))/n_pix
+    img1_mean = img1.mean(axis=(0, 1), keepdims=True)
+    img2_mean = img2.mean(axis=(0, 1), keepdims=True)
+
+    img1_zero = img1 - img1_mean
+    img2_zero = img2 - img2_mean
+
+    cov = np.sum(img1_zero * img2_zero, axis=(0, 1))
+
+    img1_std = np.sqrt(np.sum(img1_zero**2, axis=(0, 1)) / n_pix)
+    img2_std = np.sqrt(np.sum(img2_zero**2, axis=(0, 1)) / n_pix)
+
+    cc = cov / (n_pix * img1_std * img2_std)
     return cc
 
 
@@ -635,11 +641,11 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
         return
 
     # normalise each LACBED pattern
-    # simulation has size [n_thickness, imgX, imgY, n_out]
+    # simulation has size [1, imgX, imgY, n_out]
     mean = cbed.lacbed_sim.mean(axis=(1, 2), keepdims=True)
     std = cbed.lacbed_sim.std(axis=(1, 2), keepdims=True)
     cbed.lacbed_ref = (cbed.lacbed_sim - mean) / std
-
+    # magnitude of small changes for signature images
     detla = {
         20: 0.0005,  # atom coordinate
         21: 0.05,  # occupancy
@@ -661,7 +667,8 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
         51: 0.05,  # valence electrons
     }
 
-    # now go through each variable and make signature images
+    # make signature images for each variable,
+    # cbed.lacbed_sig, size [n_variables, imgX, imgY, n_out]
     for i in range(rc.n_variables):
         t = rc.refined_variable_type[i]
         # set the refinement scale
@@ -689,6 +696,16 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
         cbed.lacbed_sig[i] = (cbed.lacbed_sim - mean) / std - cbed.lacbed_ref
         rc.refined_variable[i] -= delta
         update_variables(xtal, basis, rc)
+
+    # make correlation matrix
+    n_pix = (2*rc.image_radius) ** 2
+    sig_flat = cbed.lacbed_sig.reshape(rc.n_variables, n_pix, rc.n_out)
+    # n_correlations = rc.n_variables * (rc.n_variables - 1) // 2
+    # corr[i, j, k] is the ZNCC between variable i and variable j for image k
+    cbed.correlation_matrix = np.einsum('api,bpi->abi',
+                                        sig_flat, sig_flat) / n_pix
+
+    plot_correlation(rc, bloch, cbed)
 
 
 def figure_of_merit(bloch, cbed, rc):
@@ -1064,6 +1081,7 @@ def update_variables(xtal, basis, rc):
 def print_montage(bloch, cbed, rc, images, image_type, j):
     '''
     images[wid, wid, n] = array of n images each of size [wid, wid]
+    image_type options 0=sim, 1=expt, 2=difference, 3=signature
     j = thickness index in simulated pattern array
     j = variable index in signature array
     '''
@@ -1097,13 +1115,14 @@ def print_montage(bloch, cbed, rc, images, image_type, j):
     for i in range(n, len(axes)):
         axes[i].axis('off')
     plt.tight_layout()
-    if image_type !=1:  # don't put a thickness on experimental images
+    # don't put a thickness on experimental images
+    if image_type ==0:
         annotation = f"{rc.thickness[j]/10:.0f} nm"
         plt.annotate(annotation, xy=(0.105, 0.96), xycoords='figure fraction',
                      size=30, color='c', path_effects=[text_effect])
     if image_type ==3:  # signature image
         annotation = variable_message(rc.refined_variable_type[j])
-        plt.annotate(annotation, xy=(0.105, 0.05), xycoords='figure fraction',
+        plt.annotate(annotation, xy=(0.05, 0.98), xycoords='figure fraction',
                      size=30, color='w', path_effects=[text_effect])
     plt.show()
 
@@ -1853,3 +1872,56 @@ def plot_parameter(rc, i):
     ax.set_ylabel('Figure of merit', size=24)
     plt.grid(True)
     plt.show()
+
+
+def plot_correlation(rc, bloch, basis, cbed):
+    # extract rows from full correlation matrix
+    i, j = np.triu_indices(rc.n_variables, k=1)
+    corr = cbed.correlation_matrix[i, j]
+    n_corr = corr.shape[0]
+
+    # get the labels for the variables
+    label = []
+    for k in range(rc.n_variables):
+        atom_id = rc.atom_refine_flag[k]
+        if atom_id >= 0:
+            label.append(f"{basis.atom_label[atom_id]} : "
+                         f"{variable_message(rc.refined_variable_type[k])}")
+        else:
+            label.append(f"{variable_message(rc.refined_variable_type[k])}")
+
+    # labels for correlations
+    row_labels = [f"{label[a]}\n{label[b]}" for a, b in zip(i, j)]
+
+    # labels for reflections
+    col_labels = [
+        f"{bloch.hkl_indices[bloch.hkl_output[i],0]}"
+        f"{bloch.hkl_indices[bloch.hkl_output[i],1]}"
+        f"{bloch.hkl_indices[bloch.hkl_output[i],2]}"
+        for i in range(rc.n_out)]
+    
+    fig, ax = plt.subplots(figsize=(0.8*rc.n_out + 4,0.4*rc.n_variables + 2))
+
+    # colour by |correlation|
+    im = ax.imshow(
+        np.abs(corr),
+        vmin=0, vmax=1,cmap='RdYlGn_r',   # green=0, red=1
+        aspect='auto')
+
+    # ticks
+    ax.set_xticks(np.arange(rc.n_out))
+    ax.set_xticklabels(col_labels, rotation=90)
+    ax.set_yticks(np.arange(n_corr))
+    ax.set_yticklabels(row_labels)
+
+    # values in cells
+    for i in range(n_corr):
+        for j in range(rc.n_out):
+            ax.text(j, i, f"{corr[i,j]:.2f}", ha='center',
+                    va='center', fontsize=8)
+    cbar = plt.colorbar(im, ax=ax)
+    cbar.set_label('|ZNCC|')
+    plt.tight_layout()
+    plt.show()
+    
+    
