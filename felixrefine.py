@@ -564,7 +564,7 @@ if 'S' not in rc.refine_mode:
     if rc.n_variables == 0 and rc.refine_mode != 'O':
         raise ValueError("No refinement variables! \
         Check refine_mode flag in felix.inp. \
-            Valid refine modes are A,B,C,D,F,H,S")
+            Valid refine modes are A,B,C,D,F,H,S,O,X")
     if rc.n_variables == 1:
         print("Only one independent variable")
     else:

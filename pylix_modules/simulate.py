@@ -672,8 +672,8 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
     for i in range(rc.n_variables):
         t = rc.refined_variable_type[i]
         # set the refinement scale
-        delta = detla[rc.refined_variable_type[i]]
-        print(f"  Changing {variable_message(t)} by {delta}")
+        delta = detla[t]
+        print(f"{i}:  Changing {variable_message(t)} by {delta}")
         rc.refined_variable[i] += delta
         # check for validity: Occupancy and ADPs must be >=0
         var, cont = variable_check(rc.refined_variable[i], t)
@@ -689,13 +689,14 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
         print_current_var(xtal, basis, rc, i)
         # new simulation
         simulate(xtal, basis, cell, hkl, bloch, cbed, rc)
-        print_LACBED(bloch, cbed, rc, 0)
+        # print_LACBED(bloch, cbed, rc, 0)
         mean = cbed.lacbed_sim.mean(axis=(1, 2), keepdims=True)
         std = cbed.lacbed_sim.std(axis=(1, 2), keepdims=True)
         # signature images, size [n_variables, n_thickness, imgX, imgY, n_out]
         cbed.lacbed_sig[i] = (cbed.lacbed_sim - mean) / std - cbed.lacbed_ref
         rc.refined_variable[i] -= delta
         update_variables(xtal, basis, rc)
+        print_sig_pattern(i, 0, cbed, bloch)
 
     # make correlation matrix
     n_pix = (2*rc.image_radius) ** 2
@@ -705,7 +706,7 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
     cbed.correlation_matrix = np.einsum('api,bpi->abi',
                                         sig_flat, sig_flat) / n_pix
 
-    plot_correlation(rc, bloch, cbed)
+    plot_correlation(rc, bloch, basis, cbed)
 
 
 def figure_of_merit(bloch, cbed, rc):
@@ -1008,7 +1009,7 @@ def update_variables(xtal, basis, rc):
             elif sub[i] == 1:  # Occupancy
                 basis.occupancy[j] = var
                 # shared occupancy is held in basis.mult_occ
-                if basis.mult_occ[j] != 0:
+                if basis.mult_occ[j] != 0 and 'X' not in rc.refine_mode:
                     # get the indices of atoms on the same site
                     mask = basis.mult_occ == basis.mult_occ[j]
                     mask[j] = False
@@ -1155,6 +1156,26 @@ def print_LACBED(bloch, cbed, rc, image_type):
         out_image, thickness = image_map[image_type]
         print_montage(bloch, cbed, rc, out_image, image_type, thickness)
 
+
+def print_sig_pattern(i, j, cbed, bloch):
+    # Prints an individual signature pattern
+    # i index of the pattern to plot
+    # j index of the variable to plot
+    img = cbed.lacbed_sig[j, :, :, i]
+    
+    cmap = LinearSegmentedColormap.from_list(
+        "two_color_black_center",
+        [(0.0, "c"), (0.5, "k"), (1.0, "orange")])
+    # two colour look up table
+    norm = TwoSlopeNorm(vmin=img.min(), vcenter=0.0, vmax=img.max())
+
+    fig, ax = plt.subplots(1, 1)
+    text_effect = withStroke(linewidth=3, foreground='black')
+    ax.imshow(img, cmap=cmap, norm=norm)
+    ax.axis('off')
+    annotation = f"{bloch.hkl_indices[bloch.hkl_output[i], 0]}{bloch.hkl_indices[bloch.hkl_output[i], 1]}{bloch.hkl_indices[bloch.hkl_output[i], 2]}"
+    ax.annotate(annotation, xy=(5, 5), xycoords='axes pixels',
+                     size=30, color='w', path_effects=[text_effect])
 
 def print_LACBED_pattern(i, j, cbed, bloch):
     # Prints an individual LACBED pattern
@@ -1875,10 +1896,15 @@ def plot_parameter(rc, i):
 
 
 def plot_correlation(rc, bloch, basis, cbed):
+    """
+    Plots correlations between variables as a heatmap table
+    column = correlation
+    row = reflection
+    """
     # extract rows from full correlation matrix
     i, j = np.triu_indices(rc.n_variables, k=1)
-    corr = cbed.correlation_matrix[i, j]
-    n_corr = corr.shape[0]
+    corr = cbed.correlation_matrix[i, j].T
+    n_corr = corr.shape[1]
 
     # get the labels for the variables
     label = []
@@ -1891,16 +1917,16 @@ def plot_correlation(rc, bloch, basis, cbed):
             label.append(f"{variable_message(rc.refined_variable_type[k])}")
 
     # labels for correlations
-    row_labels = [f"{label[a]}\n{label[b]}" for a, b in zip(i, j)]
+    col_labels = [f"{label[a]}\n{label[b]}" for a, b in zip(i, j)]
 
     # labels for reflections
-    col_labels = [
+    row_labels = [
         f"{bloch.hkl_indices[bloch.hkl_output[i],0]}"
         f"{bloch.hkl_indices[bloch.hkl_output[i],1]}"
         f"{bloch.hkl_indices[bloch.hkl_output[i],2]}"
         for i in range(rc.n_out)]
     
-    fig, ax = plt.subplots(figsize=(0.8*rc.n_out + 4,0.4*rc.n_variables + 2))
+    fig, ax = plt.subplots(figsize=(rc.n_variables+2, 0.2*rc.n_out+4))
 
     # colour by |correlation|
     im = ax.imshow(
@@ -1909,19 +1935,17 @@ def plot_correlation(rc, bloch, basis, cbed):
         aspect='auto')
 
     # ticks
-    ax.set_xticks(np.arange(rc.n_out))
+    ax.set_xticks(np.arange(n_corr))
     ax.set_xticklabels(col_labels, rotation=90)
-    ax.set_yticks(np.arange(n_corr))
+    ax.set_yticks(np.arange(rc.n_out))
     ax.set_yticklabels(row_labels)
 
     # values in cells
     for i in range(n_corr):
         for j in range(rc.n_out):
-            ax.text(j, i, f"{corr[i,j]:.2f}", ha='center',
+            ax.text(i, j, f"{100*corr[j,i]:.0f}%", ha='center',
                     va='center', fontsize=8)
-    cbar = plt.colorbar(im, ax=ax)
-    cbar.set_label('|ZNCC|')
+    # cbar = plt.colorbar(im, ax=ax)
+    # cbar.set_label('|ZNCC|')
     plt.tight_layout()
     plt.show()
-    
-    
