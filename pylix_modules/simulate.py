@@ -690,10 +690,15 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
         # new simulation
         simulate(xtal, basis, cell, hkl, bloch, cbed, rc)
         # print_LACBED(bloch, cbed, rc, 0)
+        # normalise and subtrac reference image
         mean = cbed.lacbed_sim.mean(axis=(1, 2), keepdims=True)
         std = cbed.lacbed_sim.std(axis=(1, 2), keepdims=True)
+        sig = (cbed.lacbed_sim - mean) / std - cbed.lacbed_ref
+        # normalise the result
+        mean = sig.mean(axis=(1, 2), keepdims=True)
+        std = sig.std(axis=(1, 2), keepdims=True)
         # signature images, size [n_variables, n_thickness, imgX, imgY, n_out]
-        cbed.lacbed_sig[i] = (cbed.lacbed_sim - mean) / std - cbed.lacbed_ref
+        cbed.lacbed_sig[i] = (sig - mean) / std
         rc.refined_variable[i] -= delta
         update_variables(xtal, basis, rc)
         print_sig_pattern(i, 0, cbed, bloch)
@@ -1159,9 +1164,9 @@ def print_LACBED(bloch, cbed, rc, image_type):
 
 def print_sig_pattern(i, j, cbed, bloch):
     # Prints an individual signature pattern
-    # i index of the pattern to plot
-    # j index of the variable to plot
-    img = cbed.lacbed_sig[j, :, :, i]
+    # j index of the pattern to plot
+    # i index of the variable to plot
+    img = cbed.lacbed_sig[i, :, :, j]
     
     cmap = LinearSegmentedColormap.from_list(
         "two_color_black_center",
@@ -1177,6 +1182,7 @@ def print_sig_pattern(i, j, cbed, bloch):
     ax.annotate(annotation, xy=(5, 5), xycoords='axes pixels',
                      size=30, color='w', path_effects=[text_effect])
     plt.show()
+
 
 def print_LACBED_pattern(i, j, cbed, bloch):
     # Prints an individual LACBED pattern
@@ -1926,14 +1932,12 @@ def plot_correlation(rc, bloch, basis, cbed):
         f"{bloch.hkl_indices[bloch.hkl_output[i],1]}"
         f"{bloch.hkl_indices[bloch.hkl_output[i],2]}"
         for i in range(rc.n_out)]
-    
-    fig, ax = plt.subplots(figsize=(rc.n_variables+2, 0.2*rc.n_out+4))
 
-    # colour by |correlation|
-    im = ax.imshow(
-        np.abs(corr),
-        vmin=0, vmax=1,cmap='RdYlGn_r',   # green=0, red=1
-        aspect='auto')
+    fig, ax = plt.subplots(figsize=(rc.n_variables+2, 0.2*rc.n_out+4))
+    text_effect = withStroke(linewidth=1, foreground='black')
+    # colour by |correlation|, green=0, red=1
+    # im =
+    ax.imshow(np.abs(corr), vmin=0, vmax=1, cmap='RdYlGn_r', aspect='auto')
 
     # ticks
     ax.set_xticks(np.arange(n_corr))
@@ -1944,8 +1948,8 @@ def plot_correlation(rc, bloch, basis, cbed):
     # values in cells
     for i in range(n_corr):
         for j in range(rc.n_out):
-            ax.text(i, j, f"{100*corr[j,i]:.0f}%", ha='center',
-                    va='center', fontsize=8)
+            ax.text(i, j, f"{100*corr[j,i]:.0f}%", ha='center', va='center',
+                    color='w', path_effects=[text_effect], fontsize=14)
     # cbar = plt.colorbar(im, ax=ax)
     # cbar.set_label('|ZNCC|')
     plt.tight_layout()
