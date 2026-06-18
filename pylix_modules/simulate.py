@@ -707,7 +707,7 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
     n_pix = (2*rc.image_radius) ** 2
     sig_flat = cbed.lacbed_sig.reshape(rc.n_variables, n_pix, rc.n_out)
     # n_correlations = rc.n_variables * (rc.n_variables - 1) // 2
-    # corr[i, j, k] is the ZNCC between variable i and variable j for image k
+    # [i, j, k] is the ZNCC between variable i and variable j for image k
     cbed.correlation_matrix = np.einsum('api,bpi->abi',
                                         sig_flat, sig_flat) / n_pix
 
@@ -1176,9 +1176,9 @@ def print_sig_pattern(i, j, cbed, bloch):
     text_effect = withStroke(linewidth=3, foreground='black')
     ax.imshow(img, cmap=cmap, norm=norm)
     ax.axis('off')
-    annotation = f"{bloch.hkl_indices[bloch.hkl_output[i], 0]}{bloch.hkl_indices[bloch.hkl_output[i], 1]}{bloch.hkl_indices[bloch.hkl_output[i], 2]}"
+    annotation = f"{bloch.hkl_indices[bloch.hkl_output[j], 0]}{bloch.hkl_indices[bloch.hkl_output[j], 1]}{bloch.hkl_indices[bloch.hkl_output[j], 2]}"
     ax.annotate(annotation, xy=(5, 5), xycoords='axes pixels',
-                     size=30, color='w', path_effects=[text_effect])
+                size=30, color='w', path_effects=[text_effect])
     plt.show()
 
 
