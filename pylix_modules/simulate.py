@@ -1123,7 +1123,7 @@ def print_montage(bloch, cbed, rc, images, image_type, j):
                      size=30, color='c', path_effects=[text_effect])
     if image_type ==3:  # signature image
         annotation = variable_message(rc.refined_variable_type[j])
-        plt.annotate(annotation, xy=(0.05, 0.98), xycoords='figure fraction',
+        plt.annotate(annotation, xy=(0.02, 0.96), xycoords='figure fraction',
                      size=30, color='w', path_effects=[text_effect])
     plt.show()
 
@@ -1176,6 +1176,7 @@ def print_sig_pattern(i, j, cbed, bloch):
     annotation = f"{bloch.hkl_indices[bloch.hkl_output[i], 0]}{bloch.hkl_indices[bloch.hkl_output[i], 1]}{bloch.hkl_indices[bloch.hkl_output[i], 2]}"
     ax.annotate(annotation, xy=(5, 5), xycoords='axes pixels',
                      size=30, color='w', path_effects=[text_effect])
+    plt.show()
 
 def print_LACBED_pattern(i, j, cbed, bloch):
     # Prints an individual LACBED pattern
