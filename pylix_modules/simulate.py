@@ -701,7 +701,7 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
         cbed.lacbed_sig[i] = (sig - mean) / std
         rc.refined_variable[i] -= delta
         update_variables(xtal, basis, rc)
-        print_sig_pattern(i, 0, cbed, bloch)
+        print_sig_pattern(i, 0, cbed, bloch)  # i=variable, j=pattern
 
     # make correlation matrix
     n_pix = (2*rc.image_radius) ** 2

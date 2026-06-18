@@ -736,8 +736,8 @@ if all(x not in rc.refine_mode for x in ('S', 'O', 'X')):
 if 'X' in rc.refine_mode:
     sim.print_LACBED(bloch, cbed, rc, 3)  # signature
     sim.plot_correlation(rc, bloch, basis, cbed)
-    # sim.print_sig_pattern(0, 10, cbed, bloch)
-    # sim.print_sig_pattern(0, 10, cbed, bloch)
+    # sim.print_sig_pattern(0, 18, cbed, bloch)  # i=variable, j=pattern
+    # sim.print_sig_pattern(1, 18, cbed, bloch)  # i=variable, j=pattern
 
 print("-----------------------------------------------------------------")
 print(f"Total time {total_time:.1f} s")
