@@ -157,7 +157,7 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     # set up beam pool
     # NB g_pool are in reciprocal Angstroms in the microscope reference frame
     # only if necessary, i.e. for cell dimensions F, G and kV I
-    strt = time.time()
+    # strt = time.time()
     if rc.iter_count == 0 or np.any(typ == 3) or np.any(typ == 4):
         px.hkl_make(xtal, hkl, bloch, rc)
         # output redefined to match what we can actually do
@@ -262,7 +262,7 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     # = = = = = = = = = = = = = = = = = = = = = = = =
 
     # timings
-    setup = mid-strt
+    # setup = mid-strt
     bwc = time.time()-mid
     print(f"\rBloch wave calculation... done in {bwc:.1f}s")  # " (beam pool setup {setup:.1f} s)")
     if rc.iter_count == 0: 
@@ -1113,9 +1113,9 @@ def print_montage(bloch, cbed, rc, images, image_type, j):
             axes[i].imshow(img, cmap=lut)
 
         axes[i].axis('off')
-        h = bloch.hkl_indices[bloch.hkl_output[j], 0]
-        k = bloch.hkl_indices[bloch.hkl_output[j], 1]
-        l = bloch.hkl_indices[bloch.hkl_output[j], 2]
+        h = bloch.hkl_indices[bloch.hkl_output[i], 0]
+        k = bloch.hkl_indices[bloch.hkl_output[i], 1]
+        l = bloch.hkl_indices[bloch.hkl_output[i], 2]
         annotation = f"{h}{k}{l}"
         axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
                          size=30, color='w', path_effects=[text_effect])
@@ -1196,9 +1196,9 @@ def print_LACBED_pattern(i, j, cbed, bloch):
     text_effect = withStroke(linewidth=3, foreground='black')
     ax.imshow(cbed.lacbed_sim[j, :, :, i], cmap='pink')
     ax.axis('off')
-    h = bloch.hkl_indices[bloch.hkl_output[j], 0]
-    k = bloch.hkl_indices[bloch.hkl_output[j], 1]
-    l = bloch.hkl_indices[bloch.hkl_output[j], 2]
+    h = bloch.hkl_indices[bloch.hkl_output[i], 0]
+    k = bloch.hkl_indices[bloch.hkl_output[i], 1]
+    l = bloch.hkl_indices[bloch.hkl_output[i], 2]
     annotation = f"{h}{k}{l}"
     ax.annotate(annotation, xy=(5, 5), xycoords='axes pixels',
                      size=30, color='w', path_effects=[text_effect])
