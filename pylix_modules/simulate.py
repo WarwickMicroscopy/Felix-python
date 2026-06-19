@@ -274,6 +274,25 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     return
 
 
+def remove_outliers(img):
+    # work with a 1 pixel exclusion
+    n = img.shape[0]-2
+    while True:
+        a = img[1:-1,1:-1]
+        xy = np.copy(a)
+        xy[0:n-1, 0:n-1] = a[1:n ,1:n]
+        dxy = a - xy
+        i, j = np.unravel_index(np.argmax(dxy), dxy.shape)
+        i += 1
+        j += 1
+        nex = img[i-1:i+2, j-1:j+2].ravel()
+        av = (np.sum(nex)-nex[4])/8
+        if nex[4] <= 2*av:
+            break
+        img[i, j] = av
+    return img
+    
+
 def zncc(img1, img2):
     """ input: img1, img2 sets of n images, both of size [pix_x, pix_x, n]
     output is a numpy array of length n, giving zncc for each pair of images
@@ -633,18 +652,21 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
     """
     Runs simulations with changes in each variables and gives the correlation
     in the changes in each LACBED pattern
-    We already have a baseline simulation
+    We already have a baseline simulation in cbed.lacbed_sim
     """
-    # first check we have enough variables to correlate
-    if rc.n_variables < 2:
-        raise ValueError(" ## Too few variables to correlate! ##")
-        return
+    nv = rc.n_variables
 
-    # normalise each LACBED pattern
-    # simulation has size [1, imgX, imgY, n_out]
-    mean = cbed.lacbed_sim.mean(axis=(1, 2), keepdims=True)
-    std = cbed.lacbed_sim.std(axis=(1, 2), keepdims=True)
-    cbed.lacbed_ref = (cbed.lacbed_sim - mean) / std
+    # # normalise each LACBED pattern
+    # # simulation has size [1, imgX, imgY, n_out]
+    # mean = cbed.lacbed_sim.mean(axis=(1, 2), keepdims=True)
+    # std = cbed.lacbed_sim.std(axis=(1, 2), keepdims=True)
+    # cbed.lacbed_ref = (cbed.lacbed_sim - mean) / std
+    # remove rogue pixels
+    for i in range(cbed.lacbed_sim.shape[3]):
+        img = cbed.lacbed_sim[0, :, :, i]
+        cbed.lacbed_sim[0, :, :, i] = remove_outliers(img)
+    cbed.lacbed_ref = np.copy(cbed.lacbed_sim)
+
     # magnitude of small changes for signature images
     detla = {
         20: 0.0005,  # atom coordinate
@@ -667,9 +689,9 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
         51: 0.05,  # valence electrons
     }
 
-    # make signature images for each variable,
+    # make difference images for each variable,
     # cbed.lacbed_sig, size [n_variables, imgX, imgY, n_out]
-    for i in range(rc.n_variables):
+    for i in range(nv):
         t = rc.refined_variable_type[i]
         # set the refinement scale
         delta = detla[t]
@@ -687,29 +709,58 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
                 return
         update_variables(xtal, basis, rc)
         print_current_var(xtal, basis, rc, i)
+        
         # new simulation
         simulate(xtal, basis, cell, hkl, bloch, cbed, rc)
-        # print_LACBED(bloch, cbed, rc, 0)
-        # normalise and subtrac reference image
-        mean = cbed.lacbed_sim.mean(axis=(1, 2), keepdims=True)
-        std = cbed.lacbed_sim.std(axis=(1, 2), keepdims=True)
-        sig = (cbed.lacbed_sim - mean) / std - cbed.lacbed_ref
-        # normalise the result
-        mean = sig.mean(axis=(1, 2), keepdims=True)
-        std = sig.std(axis=(1, 2), keepdims=True)
-        # signature images, size [n_variables, n_thickness, imgX, imgY, n_out]
-        cbed.lacbed_sig[i] = (sig - mean) / std
+
+        # # normalise and subtract reference image
+        # mean = cbed.lacbed_sim.mean(axis=(1, 2), keepdims=True)
+        # std = cbed.lacbed_sim.std(axis=(1, 2), keepdims=True)
+        # sig = (cbed.lacbed_sim - mean) / std - cbed.lacbed_ref
+        # # normalise the result
+        # mean = sig.mean(axis=(1, 2), keepdims=True)
+        # std = sig.std(axis=(1, 2), keepdims=True)
+        # # signature images, size [n_variables, n_thickness, imgX, imgY, n_out]
+        # cbed.lacbed_sig[i] = (sig - mean) / std
+        cbed.lacbed_sig[i] = cbed.lacbed_sim - cbed.lacbed_ref
+
+        # reset variables for next round
         rc.refined_variable[i] -= delta
         update_variables(xtal, basis, rc)
+
+        # single signature output to show we're making progress
         print_sig_pattern(i, 0, cbed, bloch)  # i=variable, j=pattern
 
-    # make correlation matrix
-    n_pix = (2*rc.image_radius) ** 2
-    sig_flat = cbed.lacbed_sig.reshape(rc.n_variables, n_pix, rc.n_out)
-    # n_correlations = rc.n_variables * (rc.n_variables - 1) // 2
-    # [i, j, k] is the ZNCC between variable i and variable j for image k
-    cbed.correlation_matrix = np.einsum('api,bpi->abi',
-                                        sig_flat, sig_flat) / n_pix
+    # # make correlation matrix
+    # n_pix = (2*rc.image_radius) ** 2
+    # sig_flat = cbed.lacbed_sig.reshape(nv, n_pix, rc.n_out)
+    # # n_correlations = nv * (nv - 1) // 2
+    # # [i, j, k] is the ZNCC between variable i and variable j for image k
+    # cbed.correlation_matrix = np.einsum('api,bpi->abi',
+    #                                     sig_flat, sig_flat) / n_pix
+    # Fisher matrix approach
+    lacbed_abs = np.abs(cbed.lacbed_sig)
+    # # rms normalisation, each image
+    rms = np.sqrt(np.mean(lacbed_abs**2, axis=(1, 2), keepdims=True))
+    # rms normalisation, keeping relative weighting between images
+    # rms = np.sqrt(np.mean(lacbed_abs**2, axis=(1, 2, 3), keepdims=True))
+    sig_norm = lacbed_abs / rms
+    # matrix D = (sig_norm[a] - sig_norm[b])**2
+    # shape [n_param, n_param, imgX, imgY, n_images]
+    # D = (sig_norm[:, None] - sig_norm[None, :])**2
+    # scores for correlation, shape [n_param, n_param, n_images]
+    # score = D.sum(axis=(2, 3))
+    n_correlations = nv * (nv - 1) // 2
+    score_matrix = np.empty((rc.n_out, n_correlations))
+    k = 0
+    for i in range(nv):
+        for j in range(i+1, nv):
+            D = (sig_norm[i] - sig_norm[j])**2
+            score_matrix[:, k] = D.sum(axis=(0,1))
+            k += 1
+    # score = np.empty((nv, nv, rc.n_out))
+    # for a in range(nv):
+    # score[a] = ((sig_norm[a:a+1] - sig_norm)**2).sum(axis=(1,2))
 
 
 def figure_of_merit(bloch, cbed, rc):
@@ -1883,8 +1934,6 @@ def plot_f_g(xtal, basis, rc, bloch, j=0):
     plt.show()
 
     print(f"kappa/kirkland = {f0/f0_k}")
-
-    return
 
 
 def plot_parameter(rc, i):

@@ -114,11 +114,11 @@ print_flag                = 0
 debug                     = 0
 
 # Refinement specific flags
-refine_mode               = 'B,D'
+refine_mode               = 'X,B'
 refine_method             = 0
 refinement_scale          = 0.005
 correlation_type          = 2
-atomic_sites              = [0,3]
+atomic_sites              = [0,1]
 precision                 = -0.0025
 weighting_flag            = 0
 no_of_ugs                 = 40

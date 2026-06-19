@@ -667,6 +667,9 @@ if rc.image_processing == 1:
     print(f"  Blur radius {rc.blur_radius} pixels")
 
 if 'X' in rc.refine_mode:
+    # check we have enough variables to correlate
+    if rc.n_variables < 2:
+        raise ValueError(" ## Too few variables to correlate! ##")
     sim.correlations(xtal, basis, cell, hkl, bloch, cbed, rc)
 
 # %% read in experimental images and start refinement
@@ -735,7 +738,7 @@ if all(x not in rc.refine_mode for x in ('S', 'O', 'X')):
 # correlations
 if 'X' in rc.refine_mode:
     sim.print_LACBED(bloch, cbed, rc, 3)  # signature
-    sim.plot_correlation(rc, bloch, basis, cbed)
+    # sim.plot_correlation(rc, bloch, basis, cbed)
     # sim.print_sig_pattern(0, 18, cbed, bloch)  # i=variable, j=pattern
     # sim.print_sig_pattern(1, 18, cbed, bloch)  # i=variable, j=pattern
 
