@@ -1388,7 +1388,7 @@ def sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, i):
         print_LACBED(bloch, cbed, rc, 3)
 
         # *** output for development ***
-        img = cbed.lacbed_sig[0, rc.best_t, :, :, 0]
+        img = cbed.lacbed_sig[i, :, :, 0]
         cmap = LinearSegmentedColormap.from_list(
             "two_color_black_center",
             [(0.0, "c"), (0.5, "k"), (1.0, "orange")])
@@ -1941,8 +1941,8 @@ def plot_parameter(rc, i):
     fig, ax = plt.subplots(1, 1)
     w_f = 10
     fig.set_size_inches(w_f, w_f)
-    x = np.array(rc.param_log).ravel()
-    y = np.array(rc.fit_log).ravel()
+    x = np.array(rc.param_log)[:, i]
+    y = np.array(rc.fit_log)
     idx = np.argsort(x)
     xs = x[idx]
     ys = y[idx]
