@@ -702,7 +702,7 @@ elif 'S' not in rc.refine_mode:
                 n_expt -= 1
                 print(f"{g_string} not found")
         print(f"  {n_expt} experimental patterns loaded")
-
+        cbed.lacbed_expt = np.copy(cbed.lacbed_expt_raw)
         # print experimental LACBED patterns
         # print_LACBED has options 0=sim, 1=expt, 2=difference
         sim.print_LACBED(bloch, cbed, rc, 1)

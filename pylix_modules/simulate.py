@@ -1089,10 +1089,10 @@ def print_montage(bloch, cbed, rc, images, image_type, j):
     j = thickness index in simulated pattern array
     j = variable index in signature array
     '''
-    if image_type == 0:
-        lut = 'pink'
-    elif image_type == 1:
+    if image_type == 1:
         lut = 'grey'
+    else:
+        lut = 'pink'
     n = images.shape[2]
     w = int(np.ceil(np.sqrt(n)))
     h = int(np.ceil(n/w))
@@ -1113,7 +1113,10 @@ def print_montage(bloch, cbed, rc, images, image_type, j):
             axes[i].imshow(img, cmap=lut)
 
         axes[i].axis('off')
-        annotation = f"{bloch.hkl_indices[bloch.hkl_output[i], 0]}{bloch.hkl_indices[bloch.hkl_output[i], 1]}{bloch.hkl_indices[bloch.hkl_output[i], 2]}"
+        h = bloch.hkl_indices[bloch.hkl_output[j], 0]
+        k = bloch.hkl_indices[bloch.hkl_output[j], 1]
+        l = bloch.hkl_indices[bloch.hkl_output[j], 2]
+        annotation = f"{h}{k}{l}"
         axes[i].annotate(annotation, xy=(5, 5), xycoords='axes pixels',
                          size=30, color='w', path_effects=[text_effect])
     for i in range(n, len(axes)):
@@ -1176,7 +1179,10 @@ def print_sig_pattern(i, j, cbed, bloch):
     text_effect = withStroke(linewidth=3, foreground='black')
     ax.imshow(img, cmap=cmap, norm=norm)
     ax.axis('off')
-    annotation = f"{bloch.hkl_indices[bloch.hkl_output[j], 0]}{bloch.hkl_indices[bloch.hkl_output[j], 1]}{bloch.hkl_indices[bloch.hkl_output[j], 2]}"
+    h = bloch.hkl_indices[bloch.hkl_output[j], 0]
+    k = bloch.hkl_indices[bloch.hkl_output[j], 1]
+    l = bloch.hkl_indices[bloch.hkl_output[j], 2]
+    annotation = f"{h}{k}{l}"
     ax.annotate(annotation, xy=(5, 5), xycoords='axes pixels',
                 size=30, color='w', path_effects=[text_effect])
     plt.show()
@@ -1190,7 +1196,10 @@ def print_LACBED_pattern(i, j, cbed, bloch):
     text_effect = withStroke(linewidth=3, foreground='black')
     ax.imshow(cbed.lacbed_sim[j, :, :, i], cmap='pink')
     ax.axis('off')
-    annotation = f"{bloch.hkl_indices[bloch.hkl_output[i], 0]}{bloch.hkl_indices[bloch.hkl_output[i], 1]}{bloch.hkl_indices[bloch.hkl_output[i], 2]}"
+    h = bloch.hkl_indices[bloch.hkl_output[j], 0]
+    k = bloch.hkl_indices[bloch.hkl_output[j], 1]
+    l = bloch.hkl_indices[bloch.hkl_output[j], 2]
+    annotation = f"{h}{k}{l}"
     ax.annotate(annotation, xy=(5, 5), xycoords='axes pixels',
                      size=30, color='w', path_effects=[text_effect])
 
@@ -1324,7 +1333,7 @@ def sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, i):
     std = sim.std(axis=(0, 1), keepdims=True)
     sim_norm = (sim - mean) / std
     if i >= 0:  # get a signature image if it's a single variable refinement
-        cbed.lacbed_sig[i, rc.best_t] = sim_norm - cbed.lacbed_ref
+        cbed.lacbed_sig[i] = sim_norm - cbed.lacbed_ref
         print_LACBED(bloch, cbed, rc, 3)
 
         # *** output for development ***
