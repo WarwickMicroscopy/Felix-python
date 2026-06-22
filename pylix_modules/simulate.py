@@ -16,7 +16,7 @@ from scipy.ndimage import gaussian_filter
 # from skimage import transform, registration
 from skimage.registration import phase_cross_correlation
 from skimage.transform import warp, AffineTransform
-from skimage.filters import sobel
+from skimage.filters import sobel, median
 from scipy.ndimage import fourier_shift
 from scipy.ndimage import shift
 from scipy.fft import fftn, ifftn
@@ -275,21 +275,13 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
 
 
 def remove_outliers(img):
-    # work with a 1 pixel exclusion
-    n = img.shape[0]-2
-    while True:
-        a = img[1:-1,1:-1]
-        xy = np.copy(a)
-        xy[0:n-1, 0:n-1] = a[1:n ,1:n]
-        dxy = a - xy
-        i, j = np.unravel_index(np.argmax(dxy), dxy.shape)
-        i += 1
-        j += 1
-        nex = img[i-1:i+2, j-1:j+2].ravel()
-        av = (np.sum(nex)-nex[4])/8
-        if nex[4] <= 2*av:
-            break
-        img[i, j] = av
+    # compare image with one after applying a median filter 
+    m = median(img)
+    diff = np.abs(img - m)
+    # replace pixels with values that deviate by 100 times from the median of
+    # the difference image
+    mask = diff > 100 * np.median(diff)
+    img[mask] = m[mask]
     return img
     
 
@@ -652,7 +644,7 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
     """
     Runs simulations with changes in each variables and gives the correlation
     in the changes in each LACBED pattern
-    We already have a baseline simulation in cbed.lacbed_sim
+    Takes the baseline simulation as a reference
     """
     nv = rc.n_variables
 
@@ -723,7 +715,9 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
         # # signature images, size [n_variables, n_thickness, imgX, imgY, n_out]
         # cbed.lacbed_sig[i] = (sig - mean) / std
         cbed.lacbed_sig[i] = cbed.lacbed_sim - cbed.lacbed_ref
-
+        # remove outliers
+        for j in range(rc.n_out):
+            cbed.lacbed_sig[i, :, :, j] = remove_outliers(cbed.lacbed_sig[i, :, :, j])
         # reset variables for next round
         rc.refined_variable[i] -= delta
         update_variables(xtal, basis, rc)
