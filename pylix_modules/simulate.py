@@ -282,7 +282,7 @@ def remove_outliers(img):
     # the difference image
     mask = diff > 100 * np.median(diff)
     img[mask] = m[mask]
-    return img
+    # return img
     
 
 def zncc(img1, img2):
@@ -717,13 +717,29 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
         cbed.lacbed_sig[i] = cbed.lacbed_sim - cbed.lacbed_ref
         # remove outliers
         for j in range(rc.n_out):
-            cbed.lacbed_sig[i, :, :, j] = remove_outliers(cbed.lacbed_sig[i, :, :, j])
+            remove_outliers(cbed.lacbed_sig[i, :, :, j])
         # reset variables for next round
         rc.refined_variable[i] -= delta
         update_variables(xtal, basis, rc)
 
         # single signature output to show we're making progress
         print_sig_pattern(i, 0, cbed, bloch)  # i=variable, j=pattern
+
+    # Fisher matrix approach.  We normalise each difference image to
+    # compare the effect of different variables
+    mag = np.sqrt(np.sum(cbed.lacbed_sig**2, axis=(1, 2), keepdims=True))
+    #  and we take these to be S = dI/dp
+    S = cbed.lacbed_sig / mag
+    n_correlations = nv * (nv - 1) // 2
+    # correlation between parameters x and y is rho = (dI/dp)[x] . (dI/dp)[y]
+    cbed.correlation_matrix = np.zeros([n_correlations, rc.n_out])
+    k = 0
+    for i in range(nv):
+        for j in range(i+1, nv):
+            # correlation images
+            D = S[i] * S[j]
+            cbed.correlation_matrix[k] = np.sum(D, axis=(0, 1))
+            k += 1
 
     # # make correlation matrix
     # n_pix = (2*rc.image_radius) ** 2
@@ -732,26 +748,13 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
     # # [i, j, k] is the ZNCC between variable i and variable j for image k
     # cbed.correlation_matrix = np.einsum('api,bpi->abi',
     #                                     sig_flat, sig_flat) / n_pix
-    # Fisher matrix approach
-    lacbed_abs = np.abs(cbed.lacbed_sig)
-    # # rms normalisation, each image
-    rms = np.sqrt(np.mean(lacbed_abs**2, axis=(1, 2), keepdims=True))
     # rms normalisation, keeping relative weighting between images
     # rms = np.sqrt(np.mean(lacbed_abs**2, axis=(1, 2, 3), keepdims=True))
-    sig_norm = lacbed_abs / rms
     # matrix D = (sig_norm[a] - sig_norm[b])**2
     # shape [n_param, n_param, imgX, imgY, n_images]
     # D = (sig_norm[:, None] - sig_norm[None, :])**2
     # scores for correlation, shape [n_param, n_param, n_images]
     # score = D.sum(axis=(2, 3))
-    n_correlations = nv * (nv - 1) // 2
-    score_matrix = np.empty((rc.n_out, n_correlations))
-    k = 0
-    for i in range(nv):
-        for j in range(i+1, nv):
-            D = (sig_norm[i] - sig_norm[j])**2
-            score_matrix[:, k] = D.sum(axis=(0,1))
-            k += 1
     # score = np.empty((nv, nv, rc.n_out))
     # for a in range(nv):
     # score[a] = ((sig_norm[a:a+1] - sig_norm)**2).sum(axis=(1,2))
