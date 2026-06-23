@@ -217,6 +217,12 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
 
     if rc.iter_count == 0:
         print("    Ug matrix constructed")
+        # masks to weight the refinement
+        if rc.image_processing == 3 and 'X' not in rc.refine_mode:
+            cbed.lacbed_mask = np.zeros([2*rc.image_radius, 2*rc.image_radius,
+                                         rc.n_out], dtype=np.float64)
+            px.read_mask(cbed, bloch, xtal, rc)
+            print("  Weighting masks loaded")
     if rc.debug > 0:
         np.set_printoptions(precision=5, suppress=True)
         print(100*bloch.ug_matrix[:5, :5])
@@ -718,10 +724,12 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
     # mag = np.sqrt(np.sum(cbed.lacbed_ref**2, axis=(1, 2), keepdims=True))
     # W = cbed.lacbed_ref / mag
     # or maybe weight the intensities according to the correlations!!!
-    cbed.lacbed_mask = np.zeros([n_correlations, d, d, rc.n_out])
+    cbed.lacbed_mask = np.zeros([n_correlations, d, d, rc.n_out],
+                                dtype=np.float64)
 
     # correlation between parameters x and y is rho = (dI/dp)[x] . (dI/dp)[y]
-    cbed.correlation_matrix = np.zeros([n_correlations, rc.n_out])
+    cbed.correlation_matrix = np.zeros([n_correlations, rc.n_out],
+                                       dtype=np.float32)
     k = 0
     for i in range(nv):
         for j in range(i+1, nv):
@@ -732,7 +740,7 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
             k += 1
     # we will load these masks to weight subsequent refinement
     if nv == 2:
-        save_masks(cbed)
+        save_masks(cbed, xtal, bloch, rc)
 
 
 def figure_of_merit(bloch, cbed, rc):
@@ -793,31 +801,36 @@ def figure_of_merit(bloch, cbed, rc):
         if rc.correlation_type> 1:
             for j in range(rc.n_out):
                 # we only do this for zncc images that exist
-                if np.sum(cbed.lacbed_expt_raw[j]) != 0:
-                    a0 = cbed.lacbed_sim[i, :, :, j]
-                    b0 = cbed.lacbed_expt_raw[:, :, j]
-                    # zero mean normalise the images
-                    a = (a0 - np.mean(a0))/np.std(a0)
-                    b = (b0 - np.mean(b0))/np.std(b0)
-                    # the shift
-                    # shift_ = phase_d_xy(a, b)
-                    # plt.imshow(a)
-                    # plt.show()
-                    # plt.imshow(b)
-                    # plt.show()
-                    shift_ = cc_d_xy(b, a)
-                    if rc.write_flag > 0:
-                        np.set_printoptions(precision=1, suppress=True)
-                        g_string = px.hkl_string(bloch.hkl_indices[bloch.hkl_output[j]])
-                        print(f"Pattern {g_string} translated by {shift_} pixels")
-                    c = shift(b, shift=shift_, order=3,
-                              mode="constant", cval=0)
-                    # replace empty experimental pixels with simulation
-                    # (which )prevents them from contribution to the zncc)
-                    c[c == 0] = a[c == 0]
-                    # plt.imshow(c)
-                    # plt.show()
-                    cbed.lacbed_expt[:, :, j] = c
+                # if np.sum(cbed.lacbed_expt_raw[j]) != 0:
+                a0 = cbed.lacbed_sim[i, :, :, j]
+                b0 = cbed.lacbed_expt_raw[:, :, j]
+                # zero mean normalise the images
+                a = (a0 - np.mean(a0))/np.std(a0)
+                b = (b0 - np.mean(b0))/np.std(b0)
+                # the shift
+                # shift_ = phase_d_xy(a, b)
+                # plt.imshow(a)
+                # plt.show()
+                # plt.imshow(b)
+                # plt.show()
+                shift_ = cc_d_xy(b, a)
+                if rc.write_flag > 0:
+                    np.set_printoptions(precision=1, suppress=True)
+                    g_string = px.hkl_string(bloch.hkl_indices[bloch.hkl_output[j]])
+                    print(f"Pattern {g_string} translated by {shift_} pixels")
+                c = shift(b, shift=shift_, order=3,
+                          mode="constant", cval=0)
+                # replace empty experimental pixels with simulation
+                # (which )prevents them from contribution to the zncc)
+                c[c == 0] = a[c == 0]
+                # plt.imshow(c)
+                # plt.show()
+                # multiply by weighting mask if required
+                if rc.image_processing == 3:
+                    c *= cbed.lacbed_mask[:, :, j]
+                    cbed.lacbed_sim[i, :, :, j] *= cbed.lacbed_mask[:, :, j]
+                    # print("  Masks applied")
+                cbed.lacbed_expt[:, :, j] = c
         d_time = time.time()
         if rc.debug > 0:
             print(f"    Correlation took {d_time-c_time} s")
@@ -1240,7 +1253,7 @@ def save_masks(cbed, xtal, bloch, rc):
     '''
     Saves weighting masks in .npy format
     '''
-    print(os.getcwd())
+    # print(os.getcwd())
     if not os.path.isdir('Masks'):
         os.mkdir('Masks')
     os.chdir('Masks')
@@ -1249,6 +1262,7 @@ def save_masks(cbed, xtal, bloch, rc):
             fname = f"{xtal.chemical_formula}_{signed_str}.bin"
             cbed.lacbed_mask[0, :, :, i].tofile(fname)
     os.chdir("..")
+    # os.chdir("..")
 
 
 def save_LACBED(xtal, bloch, cbed, rc):
@@ -1495,7 +1509,7 @@ def refine_single_variable(xtal, basis, cell, hkl, bloch, cbed, rc, i):
 
 def refine(xtal, basis, cell, hkl, bloch, cbed, rc):
     # figure of merit - includes determining/applying shifts
-    cbed.lacbed_expt = np.copy(cbed.lacbed_expt_raw)  # with shifts
+    cbed.lacbed_expt = np.copy(cbed.lacbed_expt_raw)
     fom = figure_of_merit(bloch, cbed, rc)
     print(f"  Figure of merit {100*fom:.2f}%")
 

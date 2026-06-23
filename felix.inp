@@ -47,6 +47,7 @@ Image processing:
     None, 0
     Gaussian blur, 1, given by blur radius
     Fitted gaussian blur 2, that which gives the best figure of merit
+	Masked, 3, created from a correlation analysis and loaded from a folder 'Mask', plus blur (1)
 
 Plot:
     None, 0
@@ -108,17 +109,17 @@ acceptance_angle          = 0.0
 # Output options
 image_radius              = 84
 plot                      = 2
-image_processing          = 1
+image_processing          = 3
 blur_radius               = 1.0
 print_flag                = 0
 debug                     = 0
 
 # Refinement specific flags
-refine_mode               = 'X,B'
+refine_mode               = 'C'
 refine_method             = 0
-refinement_scale          = 0.005
+refinement_scale          = 0.05
 correlation_type          = 2
-atomic_sites              = [0,1]
-precision                 = -0.0025
+atomic_sites              = [0,3]
+precision                 = -0.0002
 weighting_flag            = 0
 no_of_ugs                 = 40

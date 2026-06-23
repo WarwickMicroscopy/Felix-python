@@ -10,8 +10,9 @@ from CifFile import CifFile
 import struct
 from pylix_modules import simulate as sim  # simulation control and output
 from pylix_modules import pylix_dicts as fu
-# import matplotlib.pyplot as plt
+import os
 import math
+import matplotlib.pyplot as plt
 
 
 def read_inp_file(filename):
@@ -2119,6 +2120,26 @@ def f_thomas(g, B, Z, v):
     f_prime = np.where(f_p > 0, f_p, 0)*c/v
 
     return f_prime
+
+
+def read_mask(cbed, bloch, xtal, rc):
+    """
+    loads images in the Masks folder into cbed.lacbed_mask
+    """
+    # print(os.getcwd())
+    if not os.path.isdir('Masks'):
+        raise ValueError ('No Masks folder found!')
+    os.chdir('Masks')
+    d = 2*rc.image_radius
+    for i in range(rc.n_out):
+        signed_str = "".join(f"{x:+d}" for x in
+                             bloch.hkl_indices[bloch.hkl_output[i], :])
+        fname = f"{xtal.chemical_formula}_{signed_str}.bin"
+        cbed.lacbed_mask[:, :, i] = np.fromfile(fname,
+                                                dtype=np.float64).reshape(d, d)
+        plt.imshow(cbed.lacbed_mask[:, :, i])
+        plt.show()
+    os.chdir("..")
 
 
 def read_dm3(file_path, x, debug):

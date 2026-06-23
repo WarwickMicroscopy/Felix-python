@@ -210,6 +210,12 @@ if "atom_type_symbol" in cif_dict:
 basis.atom_delta = np.zeros([basis.n_atoms, 3])  # direction of movement
 basis.n_electrons = np.zeros(basis.n_atoms, dtype=float)  # for kappa refinement
 
+
+# %% read felix.hkl
+px.read_hkl_file(hkl, "felix.hkl")
+rc.n_out = len(hkl.input_hkls)+1  # we expect 000 NOT to be in the hkl list
+
+
 # %% read felix.inp
 inp_dict = px.read_inp_file('felix.inp')
 rc.update_from_dict(inp_dict)
@@ -219,7 +225,7 @@ if rc.debug:
     for i in range(basis.n_atoms):
         print(f"{basis.atom_label[i]}:  u_ij =\n {basis.u_aniso[i, :, :]}")
 
-# thickness array
+# thickness
 if rc.final_thickness > rc.initial_thickness + rc.delta_thickness:
     rc.thickness = np.arange(rc.initial_thickness, rc.final_thickness,
                              rc.delta_thickness)
@@ -233,26 +239,26 @@ rc.best_t = 0
 
 # convert arrays to numpy
 rc.incident_beam_direction = np.array(rc.incident_beam_direction,
-                                      dtype='float')
-rc.normal = np.array(rc.normal, dtype='float')
-rc.x_direction = np.array(rc.x_direction, dtype='float')
+                                      dtype=np.float32)
+rc.normal = np.array(rc.normal, dtype=np.float32)
+rc.x_direction = np.array(rc.x_direction, dtype=np.float32)
 rc.atomic_sites = np.array(rc.atomic_sites, dtype='int')
 
 # crystallography exp(2*pi*i*g.r) to physics convention exp(i*g.r)
 rc.g_limit = rc.g_limit * 2 * np.pi
 
-# reference frames
+# set up reference frames
 px.reference_frames(xtal, cell, rc)
+print(f"Zone axis: {rc.incident_beam_direction.astype(int)}")
 
-# check for multiple occupancy on the same site
+#  multiple occupancy check
 tol = 0.05  # tolerance for saying atoms are the same, in Angstroms
 coords = basis.atom_position - np.round(basis.atom_position)  # periodic boundary fix
 coords = coords @ xtal.t_mat_c2o  # atom coords in Angstroms
 diff = coords[:, None, :] - coords[None, :, :]
 dist = np.sqrt(np.sum(diff**2, axis=2))
 close = (dist <= tol) & (~np.eye(basis.n_atoms, dtype=bool))
-
-# mult_occ has 0 if no shared occupancy, increasing numbers otherwise
+# mult_occ has same number for shared occupancy, different numbers otherwise
 basis.mult_occ = np.arange(basis.n_atoms, dtype=int)
 visited = np.zeros(basis.n_atoms, dtype=bool)
 group_id = 0
@@ -273,9 +279,7 @@ for i in range(basis.n_atoms):
         group_id += 1
         basis.mult_occ[cluster] = group_id
 
-# output
-print(f"Zone axis: {rc.incident_beam_direction.astype(int)}")
-
+# scatter factor method
 if rc.scatter_factor_method == 0:
     print("  Using Kirkland scattering factors")
 elif rc.scatter_factor_method == 1:
@@ -306,6 +310,7 @@ elif rc.scatter_factor_method > 3:
 else:
     raise ValueError("No scattering factors chosen in felix.inp")
 
+# absorption
 if rc.absorption_method == 0:
     print("  No absorption")
 elif rc.absorption_method == 1:
@@ -315,6 +320,7 @@ elif rc.absorption_method == 2:
 else:
     raise ValueError("Invalid absorption method !(0,1,2) chosen in felix.inp")
 
+# refinement
 if 'S' in rc.refine_mode:
     print("Simulation only, S")
 elif 'A' in rc.refine_mode:
@@ -381,11 +387,6 @@ else:  # atom-specific refinements can be done simultaneously
         print("  Using Pearson correlation with Sobel filter")
     else:
         raise ValueError("Correlation type invalid in felix.inp")
-
-
-# %% read felix.hkl
-px.read_hkl_file(hkl, "felix.hkl")
-rc.n_out = len(hkl.input_hkls)+1  # we expect 000 NOT to be in the hkl list
 
 
 # %% set up refinement
@@ -638,15 +639,16 @@ else:
 
 # set up image arrays
 cbed.lacbed_sim = np.zeros([rc.n_thickness, 2*rc.image_radius,
-                           2*rc.image_radius, rc.n_out], dtype=float)
+                           2*rc.image_radius, rc.n_out], dtype=np.float64)
 # difference images
 cbed.lacbed_diff = np.copy(cbed.lacbed_sim)
 # reference images
 cbed.lacbed_ref = np.zeros([2*rc.image_radius,
-                           2*rc.image_radius, rc.n_out], dtype=float)
+                           2*rc.image_radius, rc.n_out], dtype=np.float64)
 # signature images - NB only initial thickness
 cbed.lacbed_sig = np.zeros([rc.n_variables, 2*rc.image_radius,
-                           2*rc.image_radius, rc.n_out], dtype=float)
+                           2*rc.image_radius, rc.n_out], dtype=np.float64)
+
 if rc.n_thickness == 1:
     print(f"Specimen thickness {rc.initial_thickness/10} nm")
 else:
@@ -666,14 +668,19 @@ else:
 if rc.image_processing == 1:
     print(f"  Blur radius {rc.blur_radius} pixels")
 
+
 if 'X' in rc.refine_mode:
     # check we have enough variables to correlate
     if rc.n_variables < 2:
         raise ValueError(" ## Too few variables to correlate! ##")
     sim.correlations(xtal, basis, cell, hkl, bloch, cbed, rc)
-
+# elif rc.image_processing == 3:
+#         cbed.lacbed_sim *= cbed.lacbed_mask[None, :, :, :]
+#         print("  Masks applied")
+        
+        
 # %% read in experimental images and start refinement
-elif 'S' not in rc.refine_mode:
+if 'S' not in rc.refine_mode and 'X' not in rc.refine_mode:
     cbed.lacbed_expt_raw = np.zeros([2*rc.image_radius, 2*rc.image_radius,
                                      rc.n_out])
     # get the list of available images
