@@ -647,18 +647,10 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
     Takes the baseline simulation as a reference
     """
     nv = rc.n_variables
+    n_correlations = nv * (nv - 1) // 2
+    d = 2*rc.image_radius
 
-    # # normalise each LACBED pattern
-    # # simulation has size [1, imgX, imgY, n_out]
-    # mean = cbed.lacbed_sim.mean(axis=(1, 2), keepdims=True)
-    # std = cbed.lacbed_sim.std(axis=(1, 2), keepdims=True)
-    # cbed.lacbed_ref = (cbed.lacbed_sim - mean) / std
-    # remove rogue pixels
-    for i in range(cbed.lacbed_sim.shape[3]):
-        img = cbed.lacbed_sim[0, :, :, i]
-        cbed.lacbed_sim[0, :, :, i] = remove_outliers(img)
     cbed.lacbed_ref = np.copy(cbed.lacbed_sim)
-
     # magnitude of small changes for signature images
     detla = {
         20: 0.0005,  # atom coordinate
@@ -705,15 +697,7 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
         # new simulation
         simulate(xtal, basis, cell, hkl, bloch, cbed, rc)
 
-        # # normalise and subtract reference image
-        # mean = cbed.lacbed_sim.mean(axis=(1, 2), keepdims=True)
-        # std = cbed.lacbed_sim.std(axis=(1, 2), keepdims=True)
-        # sig = (cbed.lacbed_sim - mean) / std - cbed.lacbed_ref
-        # # normalise the result
-        # mean = sig.mean(axis=(1, 2), keepdims=True)
-        # std = sig.std(axis=(1, 2), keepdims=True)
-        # # signature images, size [n_variables, n_thickness, imgX, imgY, n_out]
-        # cbed.lacbed_sig[i] = (sig - mean) / std
+        # subtract reference image
         cbed.lacbed_sig[i] = cbed.lacbed_sim - cbed.lacbed_ref
         # remove outliers
         for j in range(rc.n_out):
@@ -723,41 +707,32 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
         update_variables(xtal, basis, rc)
 
         # single signature output to show we're making progress
-        print_sig_pattern(i, 0, cbed, bloch)  # i=variable, j=pattern
+        print_sig_pattern(i, 0, cbed, bloch, basis, rc)  # i=variable, j=pattern
 
     # Fisher matrix approach.  We normalise each difference image to
-    # compare the effect of different variables
+    # be a unit vector
     mag = np.sqrt(np.sum(cbed.lacbed_sig**2, axis=(1, 2), keepdims=True))
     #  and we take these to be S = dI/dp
     S = cbed.lacbed_sig / mag
-    n_correlations = nv * (nv - 1) // 2
+    # weight the correlations according to the intensities
+    # mag = np.sqrt(np.sum(cbed.lacbed_ref**2, axis=(1, 2), keepdims=True))
+    # W = cbed.lacbed_ref / mag
+    # or maybe weight the intensities according to the correlations!!!
+    cbed.lacbed_mask = np.zeros([n_correlations, d, d, rc.n_out])
+
     # correlation between parameters x and y is rho = (dI/dp)[x] . (dI/dp)[y]
     cbed.correlation_matrix = np.zeros([n_correlations, rc.n_out])
     k = 0
     for i in range(nv):
         for j in range(i+1, nv):
             # correlation images
-            D = S[i] * S[j]
-            cbed.correlation_matrix[k] = np.sum(D, axis=(0, 1))
+            cbed.lacbed_mask[k] = S[i] * S[j]  # * W[0]
+            cbed.correlation_matrix[k] = np.sum(cbed.lacbed_mask[k],
+                                                axis=(0, 1))
             k += 1
-
-    # # make correlation matrix
-    # n_pix = (2*rc.image_radius) ** 2
-    # sig_flat = cbed.lacbed_sig.reshape(nv, n_pix, rc.n_out)
-    # # n_correlations = nv * (nv - 1) // 2
-    # # [i, j, k] is the ZNCC between variable i and variable j for image k
-    # cbed.correlation_matrix = np.einsum('api,bpi->abi',
-    #                                     sig_flat, sig_flat) / n_pix
-    # rms normalisation, keeping relative weighting between images
-    # rms = np.sqrt(np.mean(lacbed_abs**2, axis=(1, 2, 3), keepdims=True))
-    # matrix D = (sig_norm[a] - sig_norm[b])**2
-    # shape [n_param, n_param, imgX, imgY, n_images]
-    # D = (sig_norm[:, None] - sig_norm[None, :])**2
-    # scores for correlation, shape [n_param, n_param, n_images]
-    # score = D.sum(axis=(2, 3))
-    # score = np.empty((nv, nv, rc.n_out))
-    # for a in range(nv):
-    # score[a] = ((sig_norm[a:a+1] - sig_norm)**2).sum(axis=(1,2))
+    # we will load these masks to weight subsequent refinement
+    if nv == 2:
+        save_masks(cbed)
 
 
 def figure_of_merit(bloch, cbed, rc):
@@ -850,7 +825,7 @@ def figure_of_merit(bloch, cbed, rc):
         # normalised experimental images
         mean = cbed.lacbed_expt.mean(axis=(0, 1), keepdims=True)
         std  = cbed.lacbed_expt.std(axis=(0, 1), keepdims=True)
-        cbed.lacbed_expt_norm = (cbed.lacbed_expt - mean) / std
+        lacbed_expt_norm = (cbed.lacbed_expt - mean) / std
 
         # affine transformation option without a best thickness
         if rc.correlation_type == 3 and rc.iter_count == 0:
@@ -876,7 +851,7 @@ def figure_of_merit(bloch, cbed, rc):
         mean = sim.mean(axis=(0, 1), keepdims=True)
         std  = sim.std(axis=(0, 1), keepdims=True)
         sim_norm = (sim - mean) / std
-        cbed.lacbed_diff[i] =  cbed.lacbed_expt_norm - sim_norm
+        cbed.lacbed_diff[i] =  lacbed_expt_norm - sim_norm
         # for j in range(rc.n_out):
         #     a0 = cbed.lacbed_sim[i, :, :, j]
         #     b0 = cbed.lacbed_expt[:, :, j]
@@ -1211,7 +1186,7 @@ def print_LACBED(bloch, cbed, rc, image_type):
         print_montage(bloch, cbed, rc, out_image, image_type, thickness)
 
 
-def print_sig_pattern(i, j, cbed, bloch):
+def print_sig_pattern(i, j, cbed, bloch, basis, rc):
     # Prints an individual signature pattern
     # j index of the pattern to plot
     # i index of the variable to plot
@@ -1227,12 +1202,21 @@ def print_sig_pattern(i, j, cbed, bloch):
     text_effect = withStroke(linewidth=3, foreground='black')
     ax.imshow(img, cmap=cmap, norm=norm)
     ax.axis('off')
-    h = bloch.hkl_indices[bloch.hkl_output[j], 0]
-    k = bloch.hkl_indices[bloch.hkl_output[j], 1]
-    l = bloch.hkl_indices[bloch.hkl_output[j], 2]
-    annotation = f"{h}{k}{l}"
-    ax.annotate(annotation, xy=(5, 5), xycoords='axes pixels',
-                size=30, color='w', path_effects=[text_effect])
+    # h = bloch.hkl_indices[bloch.hkl_output[j], 0]
+    # k = bloch.hkl_indices[bloch.hkl_output[j], 1]
+    # l = bloch.hkl_indices[bloch.hkl_output[j], 2]
+    # annotation = f"{h}{k}{l}"
+    # ax.annotate(annotation, xy=(5, 5), xycoords='axes pixels',
+    #             size=14, color='w', path_effects=[text_effect])
+
+    atom_id = rc.atom_refine_flag[i]
+    if atom_id >= 0:
+        label = (f"{basis.atom_label[atom_id]}: "
+                 f"{variable_message(rc.refined_variable_type[i])}")
+    else:
+        label = (f"{variable_message(rc.refined_variable_type[i])}")
+    ax.annotate(label, xy=(5, 5), xycoords='axes pixels',
+                size=14, color='w', path_effects=[text_effect])
     plt.show()
 
 
@@ -1250,6 +1234,21 @@ def print_LACBED_pattern(i, j, cbed, bloch):
     annotation = f"{h}{k}{l}"
     ax.annotate(annotation, xy=(5, 5), xycoords='axes pixels',
                      size=30, color='w', path_effects=[text_effect])
+
+
+def save_masks(cbed, xtal, bloch, rc):
+    '''
+    Saves weighting masks in .npy format
+    '''
+    print(os.getcwd())
+    if not os.path.isdir('Masks'):
+        os.mkdir('Masks')
+    os.chdir('Masks')
+    for i in range(rc.n_out):
+            signed_str = "".join(f"{x:+d}" for x in bloch.hkl_indices[bloch.hkl_output[i], :])
+            fname = f"{xtal.chemical_formula}_{signed_str}.bin"
+            cbed.lacbed_mask[0, :, :, i].tofile(fname)
+    os.chdir("..")
 
 
 def save_LACBED(xtal, bloch, cbed, rc):
@@ -1272,7 +1271,6 @@ def save_LACBED(xtal, bloch, cbed, rc):
             signed_str = "".join(f"{x:+d}" for x in bloch.hkl_indices[bloch.hkl_output[i], :])
             fname = f"{xtal.chemical_formula}_{signed_str}_{t}nm.bin"
             cbed.lacbed_sim[j, :, :, i].tofile(fname)
-            # out_image[:, :, i].tofile(fname)
             fname = f"{xtal.chemical_formula}_{signed_str}_{t}nm.png"
             plt.imsave(fname, cbed.lacbed_sim[j, :, :, i], cmap='gray')
         os.chdir("..")
@@ -1961,10 +1959,10 @@ def plot_correlation(rc, bloch, basis, cbed):
     column = correlation
     row = reflection
     """
-    # extract rows from full correlation matrix
-    i, j = np.triu_indices(rc.n_variables, k=1)
-    corr = cbed.correlation_matrix[i, j].T
-    n_corr = corr.shape[1]
+    # cbed.correlation_matrix has shape [n_correlations, n_images]
+    j, i = np.triu_indices(rc.n_variables, k=1)
+    corr = abs(cbed.correlation_matrix).T
+    n_corr = cbed.correlation_matrix.shape[0]
 
     # get the labels for the variables
     label = []
@@ -1986,6 +1984,12 @@ def plot_correlation(rc, bloch, basis, cbed):
         f"{bloch.hkl_indices[bloch.hkl_output[i],2]}"
         for i in range(rc.n_out)]
 
+    # sort
+    if rc.n_variables == 2:
+        order = np.argsort(corr[:, 0])
+        corr = corr[order]
+        row_labels = [row_labels[i] for i in order]
+
     fig, ax = plt.subplots(figsize=(rc.n_variables+2, 0.2*rc.n_out+4))
     text_effect = withStroke(linewidth=1, foreground='black')
     # colour by |correlation|, green=0, red=1
@@ -2004,6 +2008,8 @@ def plot_correlation(rc, bloch, basis, cbed):
             ax.text(i, j, f"{100*corr[j,i]:.0f}%", ha='center', va='center',
                     color='w', path_effects=[text_effect], fontsize=14)
     # cbar = plt.colorbar(im, ax=ax)
-    # cbar.set_label('|ZNCC|')
+    tit = "Correlations"
+    plt.title(tit, fontsize=24)
+    
     plt.tight_layout()
     plt.show()

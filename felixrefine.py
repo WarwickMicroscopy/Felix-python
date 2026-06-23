@@ -245,7 +245,7 @@ rc.g_limit = rc.g_limit * 2 * np.pi
 px.reference_frames(xtal, cell, rc)
 
 # check for multiple occupancy on the same site
-tol = 0.5  # tolerance for saying atoms are the same, in Angstroms
+tol = 0.05  # tolerance for saying atoms are the same, in Angstroms
 coords = basis.atom_position - np.round(basis.atom_position)  # periodic boundary fix
 coords = coords @ xtal.t_mat_c2o  # atom coords in Angstroms
 diff = coords[:, None, :] - coords[None, :, :]
@@ -253,7 +253,7 @@ dist = np.sqrt(np.sum(diff**2, axis=2))
 close = (dist <= tol) & (~np.eye(basis.n_atoms, dtype=bool))
 
 # mult_occ has 0 if no shared occupancy, increasing numbers otherwise
-basis.mult_occ = np.zeros(basis.n_atoms, dtype=int)
+basis.mult_occ = np.arange(basis.n_atoms, dtype=int)
 visited = np.zeros(basis.n_atoms, dtype=bool)
 group_id = 0
 for i in range(basis.n_atoms):
@@ -738,7 +738,7 @@ if all(x not in rc.refine_mode for x in ('S', 'O', 'X')):
 # correlations
 if 'X' in rc.refine_mode:
     sim.print_LACBED(bloch, cbed, rc, 3)  # signature
-    # sim.plot_correlation(rc, bloch, basis, cbed)
+    sim.plot_correlation(rc, bloch, basis, cbed)
     # sim.print_sig_pattern(0, 18, cbed, bloch)  # i=variable, j=pattern
     # sim.print_sig_pattern(1, 18, cbed, bloch)  # i=variable, j=pattern
 

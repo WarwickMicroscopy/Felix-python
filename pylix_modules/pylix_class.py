@@ -139,10 +139,11 @@ class Cbed:
     lacbed_sim: NDArray[np.floating] | None = None  # simulation
     lacbed_expt_raw: NDArray[np.floating] | None = None  # experiment
     lacbed_expt: NDArray[np.floating] | None = None  # experiment, processed
-    lacbed_expt_norm: NDArray[np.floating] | None = None  # normalised
+    # lacbed_expt_norm: NDArray[np.floating] | None = None  # normalised
     lacbed_diff: NDArray[np.floating] | None = None  # difference sim:expt
     lacbed_ref: NDArray[np.floating] | None = None  # reference used for sig
     lacbed_sig: NDArray[np.floating] | None = None  # signature 
+    lacbed_mask: NDArray[np.floating] | None = None  # signature 
     correlation_matrix: NDArray[np.floating] | None = None  # correlations 
     # figures of merit, one per image
     diff_max: NDArray[np.floating] | None = None  # max difference ()
