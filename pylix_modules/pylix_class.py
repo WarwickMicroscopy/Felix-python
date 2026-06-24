@@ -143,7 +143,8 @@ class Cbed:
     lacbed_diff: NDArray[np.floating] | None = None  # difference sim:expt
     lacbed_ref: NDArray[np.floating] | None = None  # reference used for sig
     lacbed_sig: NDArray[np.floating] | None = None  # signature 
-    lacbed_mask: NDArray[np.floating] | None = None  # signature 
+    lacbed_mask_i: NDArray[np.floating] | None = None  # masks for i
+    lacbed_mask_j: NDArray[np.floating] | None = None  # masks for j
     correlation_matrix: NDArray[np.floating] | None = None  # correlations 
     # figures of merit, one per image
     diff_max: NDArray[np.floating] | None = None  # max difference ()

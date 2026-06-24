@@ -382,8 +382,10 @@ else:  # atom-specific refinements can be done simultaneously
     elif rc.correlation_type == 2:
         print("  Using Pearson correlation with sub-pixel alignment")
     elif rc.correlation_type == 3:
-        print("  Using Pearson correlation with affine transform and sub-pixel alignment")
+        print("  Using dot product correlation with sub-pixel alignment")
     elif rc.correlation_type == 4:
+        print("  Using Pearson correlation with affine transform and sub-pixel alignment")
+    elif rc.correlation_type == 5:
         print("  Using Pearson correlation with Sobel filter")
     else:
         raise ValueError("Correlation type invalid in felix.inp")
@@ -580,6 +582,11 @@ else:
     # we still need a type for later code, set it to zero for sim only
     rc.refined_variable_type = np.array([0])
 
+if 'X' in rc.refine_mode:
+    # check we have enough variables to correlate
+    if rc.n_variables < 2:
+        raise ValueError(" ## Too few variables to correlate! ##")
+
 # # %% set up Ug refinement
 # if 'A' in refine_mode:  # Ug refinement
 #     print("Refining Structure Factors, A")
@@ -667,16 +674,10 @@ else:
     sim.print_LACBED(bloch, cbed, rc, 0)
 if rc.image_processing == 1:
     print(f"  Blur radius {rc.blur_radius} pixels")
-
+print("-------------------------------")
 
 if 'X' in rc.refine_mode:
-    # check we have enough variables to correlate
-    if rc.n_variables < 2:
-        raise ValueError(" ## Too few variables to correlate! ##")
     sim.correlations(xtal, basis, cell, hkl, bloch, cbed, rc)
-# elif rc.image_processing == 3:
-#         cbed.lacbed_sim *= cbed.lacbed_mask[None, :, :, :]
-#         print("  Masks applied")
         
         
 # %% read in experimental images and start refinement

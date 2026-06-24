@@ -219,8 +219,12 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
         print("    Ug matrix constructed")
         # masks to weight the refinement
         if rc.image_processing == 3 and 'X' not in rc.refine_mode:
-            cbed.lacbed_mask = np.zeros([2*rc.image_radius, 2*rc.image_radius,
-                                         rc.n_out], dtype=np.float64)
+            cbed.lacbed_mask_i = np.zeros([2*rc.image_radius,
+                                           2*rc.image_radius,
+                                           rc.n_out], dtype=np.float64)
+            cbed.lacbed_mask_j = np.zeros([2*rc.image_radius,
+                                           2*rc.image_radius,
+                                           rc.n_out], dtype=np.float64)
             px.read_mask(cbed, bloch, xtal, rc)
             print("  Weighting masks loaded")
     if rc.debug > 0:
@@ -288,9 +292,19 @@ def remove_outliers(img):
     # the difference image
     mask = diff > 100 * np.median(diff)
     img[mask] = m[mask]
-    # return img
-    
 
+
+def dotc(img1, img2):
+    """ input: img1, img2 sets of n images, both of size [pix_x, pix_x, n]
+    output is a numpy array of length n, giving dot product for each pair of images
+    zncc is -1 = perfect anticorrelation, +1 = perfect correlation
+    """
+    img1_norm = img1/np.sqrt(np.sum(img1**2, axis=(0, 1), keepdims=True))
+    img2_norm = img2/np.sqrt(np.sum(img2**2, axis=(0, 1), keepdims=True))
+    dot = np.sum(img1_norm * img2_norm, axis=(0, 1))
+    return dot
+
+    
 def zncc(img1, img2):
     """ input: img1, img2 sets of n images, both of size [pix_x, pix_x, n]
     output is a numpy array of length n, giving zncc for each pair of images
@@ -648,13 +662,14 @@ def optimise_pool(xtal, basis, cell, hkl, bloch, cbed, rc):
 
 def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
     """
-    Runs simulations with changes in each variables and gives the correlation
-    in the changes in each LACBED pattern
+    Runs simulations with changes to each variable and gives the correlation
+    of the changes in each LACBED pattern
     Takes the baseline simulation as a reference
     """
     nv = rc.n_variables
     n_correlations = nv * (nv - 1) // 2
     d = 2*rc.image_radius
+    n_pix = d*d
 
     cbed.lacbed_ref = np.copy(cbed.lacbed_sim)
     # magnitude of small changes for signature images
@@ -702,6 +717,7 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
         
         # new simulation
         simulate(xtal, basis, cell, hkl, bloch, cbed, rc)
+        print("-------------------------------")
 
         # subtract reference image
         cbed.lacbed_sig[i] = cbed.lacbed_sim - cbed.lacbed_ref
@@ -716,15 +732,18 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
         print_sig_pattern(i, 0, cbed, bloch, basis, rc)  # i=variable, j=pattern
 
     # Fisher matrix approach.  We normalise each difference image to
-    # be a unit vector
+    # be a unit vector and we take these to be S = dI/dp
+    # To improve refinement of variable i we want to find regions
+    # that have high values of dI/dp for variable i and low values
+    # for other variables.  So for variable i vs j we want a mask where
+    # we emphasise large positive values of di_dj = abs(S[i])-abs(S[j]).
     mag = np.sqrt(np.sum(cbed.lacbed_sig**2, axis=(1, 2), keepdims=True))
-    #  and we take these to be S = dI/dp
     S = cbed.lacbed_sig / mag
-    # weight the correlations according to the intensities
-    # mag = np.sqrt(np.sum(cbed.lacbed_ref**2, axis=(1, 2), keepdims=True))
-    # W = cbed.lacbed_ref / mag
-    # or maybe weight the intensities according to the correlations!!!
-    cbed.lacbed_mask = np.zeros([n_correlations, d, d, rc.n_out],
+    # std = np.std(cbed.lacbed_sig, axis=(1, 2), keepdims=True)
+    # S = cbed.lacbed_sig / std
+    cbed.lacbed_mask_i = np.zeros([n_correlations, d, d, rc.n_out],
+                                dtype=np.float64)
+    cbed.lacbed_mask_j = np.zeros([n_correlations, d, d, rc.n_out],
                                 dtype=np.float64)
 
     # correlation between parameters x and y is rho = (dI/dp)[x] . (dI/dp)[y]
@@ -733,10 +752,14 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
     k = 0
     for i in range(nv):
         for j in range(i+1, nv):
-            # correlation images
-            cbed.lacbed_mask[k] = S[i] * S[j]  # * W[0]
-            cbed.correlation_matrix[k] = np.sum(cbed.lacbed_mask[k],
-                                                axis=(0, 1))
+            # correlation mask
+            abs_S = np.abs(S)
+            di_dj = abs_S[i] - abs_S[j]
+            cbed.lacbed_mask_i[k] = di_dj * (di_dj > 0)  # take only +ve values
+            cbed.lacbed_mask_j[k] = -di_dj * (di_dj < 0)  # take only -ve values
+            # dot product correlation
+            dot = S[i] * S[j]
+            cbed.correlation_matrix[k] = np.sum(dot, axis=(0, 1))
             k += 1
     # we will load these masks to weight subsequent refinement
     if nv == 2:
@@ -770,7 +793,7 @@ def figure_of_merit(bloch, cbed, rc):
         plt.xticks(fontsize=22)
         plt.yticks(fontsize=22)
     # affine transformation option, once we have a best thickness
-    if rc.correlation_type > 2 and rc.iter_count > 1:
+    if rc.correlation_type > 3 and rc.iter_count > 1:
         affine(cbed, rc)
     # loop over thicknesses
     lacbed_sobel = np.empty_like(cbed.lacbed_sim)
@@ -841,21 +864,31 @@ def figure_of_merit(bloch, cbed, rc):
         lacbed_expt_norm = (cbed.lacbed_expt - mean) / std
 
         # affine transformation option without a best thickness
-        if rc.correlation_type == 3 and rc.iter_count == 0:
+        if rc.correlation_type == 4 and rc.iter_count == 0:
             affine(cbed, rc)
 
         # figure of merit
         if rc.correlation_type == 0:
             fom_array[i, :] = 1.0 - pcc(cbed.lacbed_expt,
                                         cbed.lacbed_sim[i, :, :, :])
-        elif rc.correlation_type < 4:
+        elif rc.correlation_type == 1:
             fom_array[i, :] = 1.0 - zncc(cbed.lacbed_expt,
                                          cbed.lacbed_sim[i, :, :, :])
-        else:  # correlation_type = 4
+        elif rc.correlation_type == 2:
+            fom_array[i, :] = 1.0 - zncc(cbed.lacbed_expt,
+                                         cbed.lacbed_sim[i, :, :, :])
+        elif rc.correlation_type == 3:
+            fom_array[i, :] = 1.0 - dotc(cbed.lacbed_expt,
+                                           cbed.lacbed_sim[i, :, :, :])  
+        elif rc.correlation_type == 4:
+            fom_array[i, :] = 1.0 - zncc(cbed.lacbed_expt,
+                                         cbed.lacbed_sim[i, :, :, :])
+        else:  # rc.correlation_type == 5:
             for j in range(rc.n_out):
                 lacbed_sobel[i, :, :, j] = sobel(cbed.lacbed_sim[i, :, :, j])
             fom_array[i, :] = 1.0 - zncc(sobel(cbed.lacbed_expt),
                                          lacbed_sobel[i, :, :, :])
+
         # standard deviation of fits for this thickness
         rc.lacbed_fit_sigma[i] = np.std(fom_array[i,:])
 
@@ -1259,10 +1292,11 @@ def save_masks(cbed, xtal, bloch, rc):
     os.chdir('Masks')
     for i in range(rc.n_out):
             signed_str = "".join(f"{x:+d}" for x in bloch.hkl_indices[bloch.hkl_output[i], :])
-            fname = f"{xtal.chemical_formula}_{signed_str}.bin"
-            cbed.lacbed_mask[0, :, :, i].tofile(fname)
+            fname = f"0_{signed_str}.bin"
+            cbed.lacbed_mask_i[0, :, :, i].tofile(fname)
+            fname = f"1_{signed_str}.bin"
+            cbed.lacbed_mask_j[0, :, :, i].tofile(fname)
     os.chdir("..")
-    # os.chdir("..")
 
 
 def save_LACBED(xtal, bloch, cbed, rc):
@@ -1372,7 +1406,7 @@ def sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, i):
     i = -1 for multiple variables
 
     The 'signature' of variable i is the change it produces in each LACBED
-    pattern.  We give the zero-mean normalised difference here
+    pattern, dI/dp_i.  We give the zero-mean normalised difference here
     '''
     update_variables(xtal, basis, rc)
     print_current_var(xtal, basis, rc, i)
@@ -1388,24 +1422,23 @@ def sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, i):
     simulate(xtal, basis, cell, hkl, bloch, cbed, rc)
 
     # calculate signature images
-    sim = np.copy(cbed.lacbed_sim[rc.best_t, :, :, :])
-    mean = sim.mean(axis=(0, 1), keepdims=True)
-    std = sim.std(axis=(0, 1), keepdims=True)
-    sim_norm = (sim - mean) / std
-    if i >= 0:  # get a signature image if it's a single variable refinement
+    if i >= 0 and rc.plot > 2:  # get a signature image
+        sim = np.copy(cbed.lacbed_sim[rc.best_t, :, :, :])
+        mean = sim.mean(axis=(0, 1), keepdims=True)
+        std = sim.std(axis=(0, 1), keepdims=True)
+        sim_norm = (sim - mean) / std
         cbed.lacbed_sig[i] = sim_norm - cbed.lacbed_ref
         print_LACBED(bloch, cbed, rc, 3)
 
-        # *** output for development ***
-        img = cbed.lacbed_sig[i, :, :, 0]
-        cmap = LinearSegmentedColormap.from_list(
-            "two_color_black_center",
-            [(0.0, "c"), (0.5, "k"), (1.0, "orange")])
-        # two colour look up table
-        norm = TwoSlopeNorm(vmin=img.min(), vcenter=0.0, vmax=img.max())
-        plt.imshow(img, cmap=cmap, norm=norm)
-        plt.axis('off')
-        plt.show()
+        # img = cbed.lacbed_sig[i, :, :, 0]
+        # cmap = LinearSegmentedColormap.from_list(
+        #     "two_color_black_center",
+        #     [(0.0, "c"), (0.5, "k"), (1.0, "orange")])
+        # # two colour look up table
+        # norm = TwoSlopeNorm(vmin=img.min(), vcenter=0.0, vmax=img.max())
+        # plt.imshow(img, cmap=cmap, norm=norm)
+        # plt.axis('off')
+        # plt.show()
         
     # figure of merit
     fom = figure_of_merit(bloch, cbed, rc)

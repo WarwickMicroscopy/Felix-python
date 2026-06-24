@@ -40,8 +40,9 @@ Correlation type:
     Phase (Fourier), 0
     Pearson (zncc), 1
     Pearson (zncc) with sub-pixel alignment, 2
-    Pearson (zncc) with affine transform, 3
-    Pearson (zncc) with Sobel filter, 4
+	Dot (a.b) with sub-pixel alignment, 3
+    Pearson (zncc) with affine transform, 4
+    Pearson (zncc) with Sobel filter, 5
 
 Image processing:
     None, 0
@@ -109,16 +110,16 @@ acceptance_angle          = 0.0
 # Output options
 image_radius              = 84
 plot                      = 2
-image_processing          = 3
+image_processing          = 1
 blur_radius               = 1.0
 print_flag                = 0
 debug                     = 0
 
 # Refinement specific flags
-refine_mode               = 'C'
+refine_mode               = 'X,C'
 refine_method             = 0
 refinement_scale          = 0.05
-correlation_type          = 2
+correlation_type          = 3
 atomic_sites              = [0,3]
 precision                 = -0.0002
 weighting_flag            = 0

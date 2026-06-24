@@ -2134,11 +2134,14 @@ def read_mask(cbed, bloch, xtal, rc):
     for i in range(rc.n_out):
         signed_str = "".join(f"{x:+d}" for x in
                              bloch.hkl_indices[bloch.hkl_output[i], :])
-        fname = f"{xtal.chemical_formula}_{signed_str}.bin"
-        cbed.lacbed_mask[:, :, i] = np.fromfile(fname,
+        fname = f"0_{signed_str}.bin"
+        cbed.lacbed_mask_i[:, :, i] = np.fromfile(fname,
                                                 dtype=np.float64).reshape(d, d)
-        plt.imshow(cbed.lacbed_mask[:, :, i])
-        plt.show()
+        fname = f"1_{signed_str}.bin"
+        cbed.lacbed_mask_j[:, :, i] = np.fromfile(fname,
+                                                dtype=np.float64).reshape(d, d)
+        # plt.imshow(cbed.lacbed_mask[:, :, i])
+        # plt.show()
     os.chdir("..")
 
 
