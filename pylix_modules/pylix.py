@@ -12,7 +12,7 @@ from pylix_modules import simulate as sim  # simulation control and output
 from pylix_modules import pylix_dicts as fu
 import os
 import math
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 
 def read_inp_file(filename):
@@ -2131,14 +2131,17 @@ def read_mask(cbed, bloch, xtal, rc):
         raise ValueError ('No Masks folder found!')
     os.chdir('Masks')
     d = 2*rc.image_radius
+    nv = rc.n_variables
+    n_correlations = nv * (nv - 1) // 2
     for i in range(rc.n_out):
-        signed_str = "".join(f"{x:+d}" for x in
-                             bloch.hkl_indices[bloch.hkl_output[i], :])
-        fname = f"0_{signed_str}.bin"
-        cbed.lacbed_mask_i[:, :, i] = np.fromfile(fname,
+        for j in range(n_correlations):
+            signed_str = "".join(f"{x:+d}" for x in
+                                 bloch.hkl_indices[bloch.hkl_output[i], :])
+            fname = f"0_{j}_{signed_str}.bin"
+            cbed.lacbed_mask_i[j, :, :, i] = np.fromfile(fname,
                                                 dtype=np.float64).reshape(d, d)
-        fname = f"1_{signed_str}.bin"
-        cbed.lacbed_mask_j[:, :, i] = np.fromfile(fname,
+            fname = f"1_{j}_{signed_str}.bin"
+            cbed.lacbed_mask_j[j, :, :, i] = np.fromfile(fname,
                                                 dtype=np.float64).reshape(d, d)
         # plt.imshow(cbed.lacbed_mask[:, :, i])
         # plt.show()

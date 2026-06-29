@@ -43,6 +43,7 @@ Correlation type:
 	Dot (a.b) with sub-pixel alignment, 3
     Pearson (zncc) with affine transform, 4
     Pearson (zncc) with Sobel filter, 5
+	Masked (zncc), 6
 
 Image processing:
     None, 0
@@ -110,17 +111,17 @@ acceptance_angle          = 0.0
 # Output options
 image_radius              = 84
 plot                      = 2
-image_processing          = 1
+image_processing          = 3
 blur_radius               = 1.0
 print_flag                = 0
 debug                     = 0
 
 # Refinement specific flags
-refine_mode               = 'X,C'
+refine_mode               = 'B'
 refine_method             = 0
-refinement_scale          = 0.05
-correlation_type          = 3
-atomic_sites              = [0,3]
-precision                 = -0.0002
+refinement_scale          = 0.15
+correlation_type          = 6
+atomic_sites              = [0,1]
+precision                 = -0.00002
 weighting_flag            = 0
 no_of_ugs                 = 40

@@ -218,15 +218,10 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     if rc.iter_count == 0:
         print("    Ug matrix constructed")
         # masks to weight the refinement
+        d = 2 * rc.image_radius
         if rc.image_processing == 3 and 'X' not in rc.refine_mode:
-            cbed.lacbed_mask_i = np.zeros([2*rc.image_radius,
-                                           2*rc.image_radius,
-                                           rc.n_out], dtype=np.float64)
-            cbed.lacbed_mask_j = np.zeros([2*rc.image_radius,
-                                           2*rc.image_radius,
-                                           rc.n_out], dtype=np.float64)
             px.read_mask(cbed, bloch, xtal, rc)
-            print("  Weighting masks loaded")
+            print("    Weighting masks loaded")
     if rc.debug > 0:
         np.set_printoptions(precision=5, suppress=True)
         print(100*bloch.ug_matrix[:5, :5])
@@ -666,10 +661,7 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
     of the changes in each LACBED pattern
     Takes the baseline simulation as a reference
     """
-    nv = rc.n_variables
-    n_correlations = nv * (nv - 1) // 2
     d = 2*rc.image_radius
-    n_pix = d*d
 
     cbed.lacbed_ref = np.copy(cbed.lacbed_sim)
     # magnitude of small changes for signature images
@@ -741,13 +733,9 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
     S = cbed.lacbed_sig / mag
     # std = np.std(cbed.lacbed_sig, axis=(1, 2), keepdims=True)
     # S = cbed.lacbed_sig / std
-    cbed.lacbed_mask_i = np.zeros([n_correlations, d, d, rc.n_out],
-                                dtype=np.float64)
-    cbed.lacbed_mask_j = np.zeros([n_correlations, d, d, rc.n_out],
-                                dtype=np.float64)
 
     # correlation between parameters x and y is rho = (dI/dp)[x] . (dI/dp)[y]
-    cbed.correlation_matrix = np.zeros([n_correlations, rc.n_out],
+    cbed.correlation_matrix = np.zeros([rc.n_correlations, rc.n_out],
                                        dtype=np.float32)
     k = 0
     for i in range(nv):
@@ -766,7 +754,7 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
         save_masks(cbed, xtal, bloch, rc)
 
 
-def figure_of_merit(bloch, cbed, rc):
+def figure_of_merit(bloch, cbed, rc, k):
     """
     takes as an input cbed.lacbed_sim, shape [n_thickness, pix_x, pix_y, n_out]
     applies image processing if required
@@ -776,12 +764,12 @@ def figure_of_merit(bloch, cbed, rc):
     uses zncc/pcc, which work on sets of images both of size [pix_x, pix_y, n]
     currently returns a single figure of merit fom that is mean of zncc's for
     the best thickness.  Could give a more sophisticated analysis..
+    k = the current variable being refined, negative means no variable
     """
     # figure of merit - might need a NaN check? size [n_thick, n_out]
     fom_array = np.ones([rc.n_thickness, rc.n_out])
     rc.lacbed_fit_sigma = np.zeros(rc.n_thickness)
-    # difference images
-    # cbed.lacbed_diff = np.copy(cbed.lacbed_expt)
+
     # set up plot for blur optimisation
     if rc.plot >= 2 and rc.image_processing == 2:
         fig, ax = plt.subplots(1, 1)
@@ -844,15 +832,19 @@ def figure_of_merit(bloch, cbed, rc):
                 c = shift(b, shift=shift_, order=3,
                           mode="constant", cval=0)
                 # replace empty experimental pixels with simulation
-                # (which )prevents them from contribution to the zncc)
+                # (which prevents them from contribution to the zncc)
                 c[c == 0] = a[c == 0]
                 # plt.imshow(c)
                 # plt.show()
                 # multiply by weighting mask if required
-                if rc.image_processing == 3:
-                    c *= cbed.lacbed_mask[:, :, j]
-                    cbed.lacbed_sim[i, :, :, j] *= cbed.lacbed_mask[:, :, j]
-                    # print("  Masks applied")
+                # if rc.image_processing == 3:
+                #     if k == 0:
+                #         c *= cbed.lacbed_mask_i[:, :, j]
+                #         cbed.lacbed_sim[i, :, :, j] *= cbed.lacbed_mask_i[:, :, j]
+                #     if k == 1:
+                #         c *= cbed.lacbed_mask_j[:, :, j]
+                #         cbed.lacbed_sim[i, :, :, j] *= cbed.lacbed_mask_j[:, :, j]
+                #     print(f"  Mask applied, variable {k}, t {i}, image {j}")
                 cbed.lacbed_expt[:, :, j] = c
         d_time = time.time()
         if rc.debug > 0:
@@ -883,12 +875,20 @@ def figure_of_merit(bloch, cbed, rc):
         elif rc.correlation_type == 4:
             fom_array[i, :] = 1.0 - zncc(cbed.lacbed_expt,
                                          cbed.lacbed_sim[i, :, :, :])
-        else:  # rc.correlation_type == 5:
+        elif rc.correlation_type == 5:
             for j in range(rc.n_out):
                 lacbed_sobel[i, :, :, j] = sobel(cbed.lacbed_sim[i, :, :, j])
             fom_array[i, :] = 1.0 - zncc(sobel(cbed.lacbed_expt),
                                          lacbed_sobel[i, :, :, :])
-
+        else:
+            for ind in range(rc.n_correlations):
+                e0 = cbed.lacbed_expt[:, :, 0]
+                s0 = cbed.lacbed_sim[i, :, :, 0]
+                m0 = cbed.lacbed_mask_i[0, :, :, 0]
+                masked_expt_0 = e0[m0 > np.max(m0)/2]
+                masked_sim_0 = s0[m0 > np.max(m0)/2]
+                #*** normalisation? ***
+                fom_array[i, 0] = np.sum(masked_expt_0*masked_sim_0)
         # standard deviation of fits for this thickness
         rc.lacbed_fit_sigma[i] = np.std(fom_array[i,:])
 
@@ -1154,7 +1154,7 @@ def update_variables(xtal, basis, rc):
 def print_montage(bloch, cbed, rc, images, image_type, j):
     '''
     images[wid, wid, n] = array of n images each of size [wid, wid]
-    image_type options 0=sim, 1=expt, 2=difference, 3=signature
+    image_type options 0=sim, 1=expt, 2=difference, 3=signature, 4=mask
     j = thickness index in simulated pattern array
     j = variable index in signature array
     '''
@@ -1196,7 +1196,7 @@ def print_montage(bloch, cbed, rc, images, image_type, j):
         annotation = f"{rc.thickness[j]/10:.0f} nm"
         plt.annotate(annotation, xy=(0.105, 0.96), xycoords='figure fraction',
                      size=30, color='c', path_effects=[text_effect])
-    if image_type ==3:  # signature image
+    if image_type >=3:  # signature image or mask
         annotation = variable_message(rc.refined_variable_type[j])
         plt.annotate(annotation, xy=(0.02, 0.96), xycoords='figure fraction',
                      size=30, color='w', path_effects=[text_effect])
@@ -1291,10 +1291,11 @@ def save_masks(cbed, xtal, bloch, rc):
         os.mkdir('Masks')
     os.chdir('Masks')
     for i in range(rc.n_out):
+        for j in range(cbed.lacbed_mask_i.shape[0]):
             signed_str = "".join(f"{x:+d}" for x in bloch.hkl_indices[bloch.hkl_output[i], :])
-            fname = f"0_{signed_str}.bin"
+            fname = f"0_{j}_{signed_str}.bin"
             cbed.lacbed_mask_i[0, :, :, i].tofile(fname)
-            fname = f"1_{signed_str}.bin"
+            fname = f"1_{j}_{signed_str}.bin"
             cbed.lacbed_mask_j[0, :, :, i].tofile(fname)
     os.chdir("..")
 
@@ -1441,7 +1442,7 @@ def sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, i):
         # plt.show()
         
     # figure of merit
-    fom = figure_of_merit(bloch, cbed, rc)
+    fom = figure_of_merit(bloch, cbed, rc, i)
     rc.fit_log.append(fom)
     rc.param_log.append(np.copy(rc.refined_variable))
     print(f"  Figure of merit {100*fom:.3f}% (previous best {100*rc.best_fit:.3f}%)")
@@ -1543,7 +1544,8 @@ def refine_single_variable(xtal, basis, cell, hkl, bloch, cbed, rc, i):
 def refine(xtal, basis, cell, hkl, bloch, cbed, rc):
     # figure of merit - includes determining/applying shifts
     cbed.lacbed_expt = np.copy(cbed.lacbed_expt_raw)
-    fom = figure_of_merit(bloch, cbed, rc)
+    i = -1  # the current variable being refined, negaive means no variable
+    fom = figure_of_merit(bloch, cbed, rc, i)
     print(f"  Figure of merit {100*fom:.2f}%")
 
     # Initialise variables for refinement

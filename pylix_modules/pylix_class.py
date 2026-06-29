@@ -85,6 +85,7 @@ class RunControl:
     atom_coord_vec: NDArray[np.floating] | None = None
     moves: NDArray[np.floating] | None = None
     n_variables: int = 0
+    n_correlations: int = 0
     best_fit: float = 0.0
     last_fit: float = 0.0
     best_var: NDArray[np.floating] | None = None

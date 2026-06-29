@@ -78,8 +78,8 @@ _atom_site_fract_y
 _atom_site_fract_z
 _atom_site_B_iso_or_equiv
 _atom_site_occupancy
-Li1 Li1+ 6 a 0 0 0.2910(7) 0.3 0.9
-Nb1 Nb5+ 6 a 0 0 0.9991(2) 0.28 1.
-O1 O2- 18 b 0.3976(5) 0.3743(11) 0.2289(2) 0.55(2) 1.
-Mg1 Mg 6 a 0 0 0.2867(3) 0.3 0.1
+Li1 Li1+ 6 a 0 0 0.2916(7) 0.1 1.0
+Mg1 Mg 6 a 0 0 0.2862(3) 0.1 0.05
+O1 O2- 18 b 0.3976(5) 0.3744(11) 0.2297(2) 0.555(2) 1.
+Nb1 Nb5+ 6 a 0 0 0 0.278(1) 1.
 #End of TTdata_35953-ICSD

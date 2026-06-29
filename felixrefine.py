@@ -387,6 +387,8 @@ else:  # atom-specific refinements can be done simultaneously
         print("  Using Pearson correlation with affine transform and sub-pixel alignment")
     elif rc.correlation_type == 5:
         print("  Using Pearson correlation with Sobel filter")
+    elif rc.correlation_type == 6:
+        print("  Using Pearson correlation with mask")
     else:
         raise ValueError("Correlation type invalid in felix.inp")
 
@@ -578,6 +580,13 @@ if 'S' not in rc.refine_mode:
     rc.refined_variable_sigma = np.zeros(rc.n_variables)
     rc.refined_variable_type = np.array(rc.refined_variable_type)
     rc.refined_variable_atom = np.array(rc.atom_refine_flag[:rc.n_variables])
+
+    rc.n_correlations = rc.n_variables * (rc.n_variables - 1) // 2
+    d = 2*rc.image_radius
+    cbed.lacbed_mask_i = np.zeros([rc.n_correlations, d, d, rc.n_out],
+                                dtype=np.float64)
+    cbed.lacbed_mask_j = np.zeros([rc.n_correlations, d, d, rc.n_out],
+                                dtype=np.float64)
 else:
     # we still need a type for later code, set it to zero for sim only
     rc.refined_variable_type = np.array([0])
