@@ -661,7 +661,7 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
     of the changes in each LACBED pattern
     Takes the baseline simulation as a reference
     """
-    d = 2*rc.image_radius
+    nv = rc.n_variables
 
     cbed.lacbed_ref = np.copy(cbed.lacbed_sim)
     # magnitude of small changes for signature images
@@ -781,7 +781,7 @@ def figure_of_merit(bloch, cbed, rc, k):
         plt.xticks(fontsize=22)
         plt.yticks(fontsize=22)
     # affine transformation option, once we have a best thickness
-    if rc.correlation_type > 3 and rc.iter_count > 1:
+    if rc.correlation_type == 4 and rc.iter_count > 1:
         affine(cbed, rc)
     # loop over thicknesses
     lacbed_sobel = np.empty_like(cbed.lacbed_sim)
@@ -880,15 +880,22 @@ def figure_of_merit(bloch, cbed, rc, k):
                 lacbed_sobel[i, :, :, j] = sobel(cbed.lacbed_sim[i, :, :, j])
             fom_array[i, :] = 1.0 - zncc(sobel(cbed.lacbed_expt),
                                          lacbed_sobel[i, :, :, :])
-        else:
-            for ind in range(rc.n_correlations):
-                e0 = cbed.lacbed_expt[:, :, 0]
-                s0 = cbed.lacbed_sim[i, :, :, 0]
-                m0 = cbed.lacbed_mask_i[0, :, :, 0]
+        else:  # rc.correlation_type == 6:
+            for ind in range(rc.n_out):
+                e0 = cbed.lacbed_expt[:, :, ind]
+                s0 = cbed.lacbed_sim[i, :, :, ind]
+                m0 = cbed.lacbed_mask_i[0, :, :, ind]
                 masked_expt_0 = e0[m0 > np.max(m0)/2]
                 masked_sim_0 = s0[m0 > np.max(m0)/2]
-                #*** normalisation? ***
-                fom_array[i, 0] = np.sum(masked_expt_0*masked_sim_0)
+                # *** normalisation? ***
+                n = len(masked_expt_0)
+                mean_expt = np.mean(masked_expt_0)
+                std_expt = np.std(masked_expt_0)
+                mean_sim = np.mean(masked_sim_0)
+                std_sim = np.std(masked_sim_0)
+                masked_expt_0 = (masked_expt_0 - mean_expt) / std_expt
+                masked_sim_0 = (masked_sim_0 - mean_sim) / std_sim
+                fom_array[i, ind] = 1 - np.sum(masked_expt_0*masked_sim_0 / n)
         # standard deviation of fits for this thickness
         rc.lacbed_fit_sigma[i] = np.std(fom_array[i,:])
 

@@ -30,15 +30,6 @@ from pylix_modules import simulate as sim  # simulation control and output
 from pylix_modules import pylix_dicts as fu  # dictionaries
 from pylix_modules import pylix_class as pc  # classes
 
-path = os.getcwd()
-start = time.time()
-latest_commit_id = px.get_git()
-# outputs
-print("-----------------------------------------------------------------")
-print(f"felixrefine:  version {latest_commit_id[:8]}")
-print("felixrefine:  https://github.com/WarwickMicroscopy/Felix-python")
-print("-----------------------------------------------------------------")
-
 # initialise class objects
 rc = pc.RunControl()  # felix.inp and derived variables for run control
 cif = pc.Cif()  # cif variables
@@ -49,10 +40,18 @@ cell = pc.Cell()  # filled cell variables, from px.unique_atom_positions
 bloch = pc.Bloch()  # variables in Bloch wave calculation
 cbed = pc.Cbed()  # images
 
-# initialise iteration count
-rc.iter_count = 0
+rc.path = os.getcwd()
+start = time.time()
+latest_commit_id = px.get_git()
+rc.iter_count = 0  # initialise iteration count
 # a small number
 eps = 1e-10
+
+# outputs
+print("-----------------------------------------------------------------")
+print(f"felixrefine:  version {latest_commit_id[:8]}")
+print("felixrefine:  https://github.com/WarwickMicroscopy/Felix-python")
+print("-----------------------------------------------------------------")
 
 
 # %% read felix.cif
@@ -690,13 +689,14 @@ if 'X' in rc.refine_mode:
         
         
 # %% read in experimental images and start refinement
+os.chdir(rc.path)
 if 'S' not in rc.refine_mode and 'X' not in rc.refine_mode:
     cbed.lacbed_expt_raw = np.zeros([2*rc.image_radius, 2*rc.image_radius,
                                      rc.n_out])
     # get the list of available images
     x_str = str(2*rc.image_radius)
     dm3_folder = None
-    for dirpath, dirnames, filenames in os.walk(path):
+    for dirpath, dirnames, filenames in os.walk(rc.path):
         for dirname in dirnames:
             # Check if 'dm3' and the number x are in the folder name
             if 'dm3' in dirname.lower() and x_str in dirname:

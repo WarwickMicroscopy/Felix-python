@@ -95,11 +95,7 @@ class RunControl:
     fom: float = 1.0
     iter_count: int = 0
     plot: int = 0
-#     p: np.ndarray = field(default_factory=lambda: np.array([]))
-#     last_p: np.ndarray = field(default_factory=lambda: np.array([]))
-#     var_pl: list = field(default_factory=list)
-#     fit_pl: list = field(default_factory=list)
-
+    path = None
 
 # ----------------------------------------------------------------------------
 # variables used in the Bloch wave calculation

@@ -2133,6 +2133,7 @@ def read_mask(cbed, bloch, xtal, rc):
     d = 2*rc.image_radius
     nv = rc.n_variables
     n_correlations = nv * (nv - 1) // 2
+    # lacbed_mask_i [n_correlations, d, d, n_out]
     for i in range(rc.n_out):
         for j in range(n_correlations):
             signed_str = "".join(f"{x:+d}" for x in
