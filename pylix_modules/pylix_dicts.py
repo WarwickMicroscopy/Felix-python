@@ -8,6 +8,28 @@ contains scattering factors kirkland, peng, doyle_turner, lobato, turner
 """
 import numpy as np
 
+# magnitude of small changes for difference (signature) images
+delta = {
+    20: 0.0005,  # atom coordinate
+    21: 0.05,  # occupancy
+    22: 0.1,  # isotropic atomic displacement parameters (ADPs) Biso
+    23: 0.001,  # anisotropic ADP U11
+    24: 0.001,  # anisotropic ADP U22
+    25: 0.001,  # anisotropic ADP U33
+    26: 0.001,  # anisotropic ADP U12
+    27: 0.001,  # anisotropic ADP U23
+    28: 0.001,  # anisotropic ADP U13
+    30: 0.01,  # lattice parmeter
+    31: 0.01,  # lattice parmeter
+    32: 0.01,  # lattice parmeter
+    33: 0.01,  # lattice parmeter
+    34: 0.01,  # lattice parmeter
+    35: 0.01,  # lattice parmeter
+    40: 0.05,  # convergence angle
+    50: 0.02,  # kappa
+    51: 0.05,  # valence electrons
+}
+    
 atomic_number_map = {
     'H': 1, 'He': 2, 'Li': 3, 'Be': 4, 'B': 5, 'C': 6, 'N': 7,
     'O': 8, 'F': 9, 'Ne': 1, 'Na': 11, 'Mg': 12, 'Al': 13,

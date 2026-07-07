@@ -415,6 +415,7 @@ else:  # atom-specific refinements can be done simultaneously
 rc.n_variables = 0
 rc.refined_variable = []  # array of floats, values to be refined
 rc.refined_variable_type = []  # array of integers corresponding to above
+rc.refined_variable_scale = []  # array of initial step sizes for differentials
 rc.atom_refine_flag = []  # the index of the atom in the .cif, -1 if none
 rc.atom_refine_vec = []  # the direction of atom movement, [0,0,0] if none
 nullvec = np.array([0, 0, 0])  # null vector for above
@@ -454,6 +455,7 @@ if 'S' not in rc.refine_mode:
                                      rc.moves[j, :])
                     rc.refined_variable.append(r_dot_v)
                     rc.refined_variable_type.append(20)  # flag to say it's a coord
+                    rc.refined_variable_scale.append(fu.delta[20])  # step size
                     rc.atom_refine_flag.append(rc.atomic_sites[i])  # atom index
                     rc.atom_refine_vec.append(rc.moves[j, :])  # atom movement
                     rc.n_variables += 1
@@ -470,6 +472,7 @@ if 'S' not in rc.refine_mode:
             refined_sites.add(site)
             rc.refined_variable.append(basis.occupancy[rc.atomic_sites[i]])
             rc.refined_variable_type.append(21)
+            rc.refined_variable_scale.append(fu.delta[21])
             rc.atom_refine_flag.append(rc.atomic_sites[i])
             rc.atom_refine_vec.append(nullvec)  # no atom movement
             sim.print_current_var(xtal, basis, rc, rc.n_variables)
@@ -479,6 +482,7 @@ if 'S' not in rc.refine_mode:
         for i in range(n_sites):
             rc.refined_variable.append(basis.B_iso[rc.atomic_sites[i]])
             rc.refined_variable_type.append(22)
+            rc.refined_variable_scale.append(fu.delta[22])
             rc.atom_refine_flag.append(rc.atomic_sites[i])
             rc.atom_refine_vec.append(nullvec)  # no atom movement
             sim.print_current_var(xtal, basis, rc, rc.n_variables)
@@ -495,6 +499,7 @@ if 'S' not in rc.refine_mode:
                 if abs(param) > eps:
                     rc.refined_variable.append(param)
                     rc.refined_variable_type.append(t)
+                    rc.refined_variable_scale.append(fu.delta[t])
                     rc.atom_refine_flag.append(rc.atomic_sites[i])
                     rc.atom_refine_vec.append(nullvec)  # no atom movement
                     rc.n_variables += 1
@@ -506,15 +511,18 @@ if 'S' not in rc.refine_mode:
         # non-standard settings!!!
         rc.refined_variable.append(xtal.cell_a)  # is in all lattice types
         rc.refined_variable_type.append(30)
+        rc.refined_variable_scale.append(fu.delta[30])
         rc.atom_refine_flag.append(-1)  # -1 indicates not an atom
         rc.atom_refine_vec.append(nullvec)  # no atom movement
         if xtal.space_group_number < 75:  # Triclinic, monoclinic, orthorhombic
             rc.refined_variable.append(xtal.cell_b)
             rc.refined_variable_type.append(31)
+            rc.refined_variable_scale.append(fu.delta[31])
             rc.atom_refine_flag.append(-1)
             rc.n_variables += 1
             rc.refined_variable.append(xtal.cell_c)
             rc.refined_variable_type.append(32)
+            rc.refined_variable_scale.append(fu.delta[32])
             rc.atom_refine_flag.append(-1)
             rc.n_variables += 1
             rc.atom_refine_vec.append(nullvec)  # no atom movement
@@ -525,6 +533,7 @@ if 'S' not in rc.refine_mode:
              (74 < xtal.space_group_number < 143):  # Hexagonal or Tetragonal 167
             rc.refined_variable.append(xtal.cell_c)
             rc.refined_variable_type.append(32)
+            rc.refined_variable_scale.append(fu.delta[32])
             rc.atom_refine_flag.append(-1)
             rc.n_variables += 1
             rc.atom_refine_vec.append(nullvec)  # no atom movement
@@ -536,6 +545,7 @@ if 'S' not in rc.refine_mode:
     if 'H' in rc.refine_mode:  # Convergence angle
         rc.refined_variable.append(rc.convergence_angle)
         rc.refined_variable_type.append(40)
+        rc.refined_variable_scale.append(fu.delta[40])
         rc.atom_refine_flag.append(-1)
         rc.atom_refine_vec.append(nullvec)  # no atom movement
         print(f"Starting convergence angle {rc.convergence_angle} Å^-1")
@@ -544,6 +554,7 @@ if 'S' not in rc.refine_mode:
     if 'I' in rc.refine_mode:  # accelerating_voltage_kv
         rc.refined_variable.append(rc.accelerating_voltage_kv)
         rc.refined_variable_type.append(41)
+        rc.refined_variable_scale.append(fu.delta[41])
         rc.atom_refine_flag.append(-1)
         rc.atom_refine_vec.append(nullvec)  # no atom movement
         print(f"Starting kV {rc.accelerating_voltage_kv} kV")
@@ -553,6 +564,7 @@ if 'S' not in rc.refine_mode:
         for i in range(n_sites):
             rc.refined_variable.append(basis.pv[rc.atomic_sites[i]])
             rc.refined_variable_type.append(51)
+            rc.refined_variable_scale.append(fu.delta[51])
             rc.atom_refine_flag.append(rc.atomic_sites[i])
             rc.atom_refine_vec.append(nullvec)  # no atom movement
             rc.n_variables += 1
@@ -561,6 +573,7 @@ if 'S' not in rc.refine_mode:
         for i in range(n_sites):
             rc.refined_variable.append(basis.kappa[rc.atomic_sites[i]])
             rc.refined_variable_type.append(50)
+            rc.refined_variable_scale.append(fu.delta[50])
             rc.atom_refine_flag.append(rc.atomic_sites[i])
             rc.atom_refine_vec.append(nullvec)  # no atom movement
             rc.n_variables += 1
@@ -578,9 +591,10 @@ if 'S' not in rc.refine_mode:
     rc.refined_variable = np.array(rc.refined_variable)
     rc.refined_variable_sigma = np.zeros(rc.n_variables)
     rc.refined_variable_type = np.array(rc.refined_variable_type)
+    rc.refined_variable_scale = np.array(rc.refined_variable_scale)
     rc.refined_variable_atom = np.array(rc.atom_refine_flag[:rc.n_variables])
 
-    rc.n_correlations = rc.n_variables * (rc.n_variables - 1) // 2
+    rc.n_correlations = 1 + rc.n_variables * (rc.n_variables - 1) // 2
     d = 2*rc.image_radius
     cbed.lacbed_mask_i = np.zeros([rc.n_correlations, d, d, rc.n_out],
                                 dtype=np.float64)
@@ -670,7 +684,7 @@ else:
     print(f"{rc.n_thickness} thicknesses: {', '.join(map(str, rc.thickness/10))} nm")
 
 
-# %% baseline simulation & beam pool optimisation if required
+# %% baseline simulation
 print("-------------------------------")
 if 'O' in rc.refine_mode:
     diff_max, diff_mean, times = \

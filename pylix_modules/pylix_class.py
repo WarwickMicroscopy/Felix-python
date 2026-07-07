@@ -79,6 +79,7 @@ class RunControl:
     refined_variable: NDArray[np.floating] | None = None
     refined_variable_type: NDArray[np.integer] | None = None
     refined_variable_sigma: NDArray[np.integer] | None = None
+    refined_variable_scale: NDArray[np.integer] | None = None
     lacbed_fit_sigma: NDArray[np.integer] | None = None
     atom_refine_flag: NDArray[np.integer] | None = None
     atom_refine_vec: NDArray[np.floating] | None = None

@@ -28,6 +28,7 @@ from matplotlib.ticker import PercentFormatter
 import time
 import os
 from pylix_modules import pylix as px
+from pylix_modules import pylix_dicts as fu
 
 
 def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
@@ -218,8 +219,7 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     if rc.iter_count == 0:
         print("    Ug matrix constructed")
         # masks to weight the refinement
-        d = 2 * rc.image_radius
-        if rc.image_processing == 3 and 'X' not in rc.refine_mode:
+        if rc.correlation_type == 6 and 'X' not in rc.refine_mode:
             px.read_mask(cbed, bloch, xtal, rc)
             print("    Weighting masks loaded")
     if rc.debug > 0:
@@ -664,34 +664,14 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
     nv = rc.n_variables
 
     cbed.lacbed_ref = np.copy(cbed.lacbed_sim)
-    # magnitude of small changes for signature images
-    detla = {
-        20: 0.0005,  # atom coordinate
-        21: 0.05,  # occupancy
-        22: 0.1,  # isotropic atomic displacement parameters (ADPs)
-        23: 0.001,  # anisotropic ADP U11
-        24: 0.001,  # anisotropic ADP U22
-        25: 0.001,  # anisotropic ADP U33
-        26: 0.001,  # anisotropic ADP U12
-        27: 0.001,  # anisotropic ADP U23
-        28: 0.001,  # anisotropic ADP U13
-        30: 0.01,  # lattice parmeter
-        31: 0.01,  # lattice parmeter
-        32: 0.01,  # lattice parmeter
-        33: 0.01,  # lattice parmeter
-        34: 0.01,  # lattice parmeter
-        35: 0.01,  # lattice parmeter
-        40: 0.05,  # convergence angle
-        50: 0.02,  # kappa
-        51: 0.05,  # valence electrons
-    }
+
 
     # make difference images for each variable,
     # cbed.lacbed_sig, size [n_variables, imgX, imgY, n_out]
     for i in range(nv):
         t = rc.refined_variable_type[i]
         # set the refinement scale
-        delta = detla[t]
+        delta = fu.delta[t]
         print(f"{i}:  Changing {variable_message(t)} by {delta}")
         rc.refined_variable[i] += delta
         # check for validity: Occupancy and ADPs must be >=0
@@ -809,7 +789,7 @@ def figure_of_merit(bloch, cbed, rc, k):
 
         # sub-pixel shift for correlation if required
         c_time = time.time()
-        if rc.correlation_type> 1:
+        if rc.correlation_type > 1:
             for j in range(rc.n_out):
                 # we only do this for zncc images that exist
                 # if np.sum(cbed.lacbed_expt_raw[j]) != 0:
@@ -884,18 +864,32 @@ def figure_of_merit(bloch, cbed, rc, k):
             for ind in range(rc.n_out):
                 e0 = cbed.lacbed_expt[:, :, ind]
                 s0 = cbed.lacbed_sim[i, :, :, ind]
-                m0 = cbed.lacbed_mask_i[0, :, :, ind]
-                masked_expt_0 = e0[m0 > np.max(m0)/2]
-                masked_sim_0 = s0[m0 > np.max(m0)/2]
-                # *** normalisation? ***
-                n = len(masked_expt_0)
-                mean_expt = np.mean(masked_expt_0)
-                std_expt = np.std(masked_expt_0)
-                mean_sim = np.mean(masked_sim_0)
-                std_sim = np.std(masked_sim_0)
-                masked_expt_0 = (masked_expt_0 - mean_expt) / std_expt
-                masked_sim_0 = (masked_sim_0 - mean_sim) / std_sim
-                fom_array[i, ind] = 1 - np.sum(masked_expt_0*masked_sim_0 / n)
+                m_i = cbed.lacbed_mask_i[0, :, :, ind]
+                masked_expt_i = e0[m_i > np.max(m_i)/2]
+                masked_sim_i = s0[m_i > np.max(m_i)/2]
+                # normalisation
+                n = len(masked_expt_i)
+                mean_expt_i = np.mean(masked_expt_i)
+                std_expt_i = np.std(masked_expt_i)
+                mean_sim_i = np.mean(masked_sim_i)
+                std_sim_i = np.std(masked_sim_i)
+                masked_expt_i = (masked_expt_i - mean_expt_i) / std_expt_i
+                masked_sim_i = (masked_sim_i - mean_sim_i) / std_sim_i
+                z_i = np.sum(masked_expt_i*masked_sim_i / n)
+
+                # m_j = cbed.lacbed_mask_j[0, :, :, ind]
+                # masked_expt_j = e0[m_j > np.max(m_j)/2]
+                # masked_sim_j = s0[m_j > np.max(m_j)/2]
+                # n = len(masked_expt_j)
+                # mean_expt_j = np.mean(masked_expt_j)
+                # std_expt_j = np.std(masked_expt_j)
+                # mean_sim_j = np.mean(masked_sim_j)
+                # std_sim_j = np.std(masked_sim_j)
+                # masked_expt_j = (masked_expt_j - mean_expt_j) / std_expt_j
+                # masked_sim_j = (masked_sim_j - mean_sim_j) / std_sim_j
+                # z_j = np.sum(masked_expt_j*masked_sim_j / n)
+                
+                fom_array[i, ind] = 1 - z_i  # +z_j)/2
         # standard deviation of fits for this thickness
         rc.lacbed_fit_sigma[i] = np.std(fom_array[i,:])
 
@@ -1551,7 +1545,7 @@ def refine_single_variable(xtal, basis, cell, hkl, bloch, cbed, rc, i):
 def refine(xtal, basis, cell, hkl, bloch, cbed, rc):
     # figure of merit - includes determining/applying shifts
     cbed.lacbed_expt = np.copy(cbed.lacbed_expt_raw)
-    i = -1  # the current variable being refined, negaive means no variable
+    i = -1  # the current variable being refined, negative means no variable
     fom = figure_of_merit(bloch, cbed, rc, i)
     print(f"  Figure of merit {100*fom:.2f}%")
 
@@ -1565,66 +1559,79 @@ def refine(xtal, basis, cell, hkl, bloch, cbed, rc):
 
     # Refinement loop
     df = 1.0
-    rc.refinement_scale *= 2.0
-    while df >= rc.precision and rc.refinement_scale >= abs(rc.precision):
+    # set up end point
+    if rc.precision < 0:
+        rc.refinement_scale = -np.max(rc.refined_variable_scale)  # stays -ve
+    while df >= rc.precision and 2*abs(rc.refinement_scale) >= abs(rc.precision):
         # rc.refined_variable is the working array of variables
         # best_var is the best array of variables during this refinement cycle
         rc.best_var = np.copy(rc.refined_variable)
         # next_var is the predicted next (best) point
         rc.next_var = np.copy(rc.refined_variable)
-        # reduce refinement scale for next round
-        # rc.refinement_scale *= (1 - 1 / (1 + rc.n_variables))
-        rc.refinement_scale *= 0.5
-        print(f"Step size {rc.refinement_scale:g}")
+        print(f"Step size {abs(rc.refinement_scale):g}")
 
         if rc.refine_method == 0:
             print("Gradient descent, one parameter at a time")
-            # dydx is a vector along the gradient in n-dimensional space
-            dydx = np.zeros(rc.n_variables)
             # random order for 3 or more variables
             indices = np.arange(rc.n_variables)
             if rc.n_variables > 2 or rc.iter_count == 0:
                 np.random.shuffle(indices)
             for i in indices:
-                dydx[i] = 1.0
+                # dydx is a vector along the gradient in n-dimensional space
+                dydx = np.zeros(rc.n_variables)
+                if rc.refinement_scale < 0:
+                    dydx[i] = rc.refined_variable_scale[i]
+                else:
+                    dydx[i] = -rc.refinement_scale
                 dydx = refine_multi_variable(xtal, basis, cell, hkl,
                                                  bloch, cbed, rc, dydx)
-        elif rc.refine_method == 1:
-            print("Multiparameter refinement, finding parameter gradients")
-            # =========== step 1: individual variable minimisation
-            # if all variables have been refined, reset
-            if np.sum(np.abs(dydx)) < 1e-10:
-                dydx = np.ones(rc.n_variables)
-            # Go through the variables looking at three points in the hope
-            # of capturing a minimum - if there is one, we take it and remove
-            # that variable from multidimensional refinement, dydx[i] = 0.
-            # Otherwise dydx[i] is the gradient for that variable.
-            # We also get a predicted best starting point
-            # for gradient descent, rc.next_var
-            for i in range(rc.n_variables):
-                # Skip variables already optimized
-                if abs(dydx[i]) < 1e-10:
-                    dydx[i] = 0.0
-                    continue
-                dydx[i] = refine_single_variable(xtal, basis, cell, hkl,
-                                                     bloch, cbed, rc, i)
+                # reduce refinement scale for next round
+                rc.refined_variable_scale[i] *= 0.5
+            if rc.precision < 0:
+                rc.refinement_scale = -np.max(rc.refined_variable_scale)
+            else:
+                rc.refinement_scale *= 0.5
 
-            # all variables have updated/predicted so do a final simulation
-            # if it's better, update rc.best_fit and rc.best_var accordingly
-            if np.count_nonzero(dydx) == 0:
-                print("Closing simulation for this cycle")
-                rc.refined_variable = np.copy(rc.next_var)
-                fom = sim_fom(xtal, basis, hkl, bloch, cbed, rc, i)
-                if (fom < rc.best_fit):
-                    rc.best_fit = fom*1.0
-                    rc.best_var = np.copy(rc.refined_variable)
-            print("Vector gradient descent")
-            # ===========step 2: vector descent
-            # Downhill minimisation until we eliminate all variables
-            while np.sum(np.abs(dydx)) > 1e-10:
-                # the returned dydx will have an extra zero!
-                dydx = refine_multi_variable(xtal, basis, cell, hkl,
-                                                 bloch, cbed, rc, dydx, False)
+        elif rc.refine_method == 1:
+            # needs updating to function correctly!
+
+            # print("Multiparameter refinement, finding parameter gradients")
+            # # =========== step 1: individual variable minimisation
+            # # if all variables have been refined, reset
+            # if np.sum(np.abs(dydx)) < 1e-10:
+            #     dydx = np.ones(rc.n_variables)
+            # # Go through the variables looking at three points in the hope
+            # # of capturing a minimum - if there is one, we take it and remove
+            # # that variable from multidimensional refinement, dydx[i] = 0.
+            # # Otherwise dydx[i] is the gradient for that variable.
+            # # We also get a predicted best starting point
+            # # for gradient descent, rc.next_var
+            # for i in range(rc.n_variables):
+            #     # Skip variables already optimized
+            #     if abs(dydx[i]) < 1e-10:
+            #         dydx[i] = 0.0
+            #         continue
+            #     dydx[i] = refine_single_variable(xtal, basis, cell, hkl,
+            #                                          bloch, cbed, rc, i)
+
+            # # all variables have updated/predicted so do a final simulation
+            # # if it's better, update rc.best_fit and rc.best_var accordingly
+            # if np.count_nonzero(dydx) == 0:
+            #     print("Closing simulation for this cycle")
+            #     rc.refined_variable = np.copy(rc.next_var)
+            #     fom = sim_fom(xtal, basis, hkl, bloch, cbed, rc, i)
+            #     if (fom < rc.best_fit):
+            #         rc.best_fit = fom*1.0
+            #         rc.best_var = np.copy(rc.refined_variable)
+            # print("Vector gradient descent")
+            # # ===========step 2: vector descent
+            # # Downhill minimisation until we eliminate all variables
+            # while np.sum(np.abs(dydx)) > 1e-10:
+            #     # the returned dydx will have an extra zero!
+            #     dydx = refine_multi_variable(xtal, basis, cell, hkl,
+            #                                      bloch, cbed, rc, dydx, False)
+            # rc.refinement_scale *= (1 - 1 / (1 + rc.n_variables))
+            print("Multiparameter refinement not functioning, needs updating")
         else:
             raise ValueError("No valid refine method (0,1) in felix.inp")
         if rc.plot > 0:
@@ -1633,7 +1640,10 @@ def refine(xtal, basis, cell, hkl, bloch, cbed, rc):
 
         # Update for next iteration
         df = rc.last_fit - rc.best_fit
+        
 
+        
+ 
         rc.last_fit = np.copy(rc.best_fit)
         rc.refined_variable = np.copy(rc.best_var)
         if rc.precision > 0:
@@ -1656,7 +1666,6 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     rc.refined_variable_type: what kind of variable (see felixrefine)
     rc.best_fit: best figure of merit so far
     rc.best_var: array of variables that gives best fit
-    rc.refinement_scale: size of change in variable to obtain gradient
 
     dydx = array of gradients, size [n_var]
     '''
@@ -1667,7 +1676,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     rc.last_fit = 1.0*rc.best_fit
 
     n_var = np.count_nonzero(dydx)
-    if n_var > 1:
+    if n_var > 1:  # needs updating
         print(f"Multidimensional refinement, {n_var} variables")
         with np.printoptions(formatter={'float': lambda x: f"{x:.3f}"}):
             print(f"    Refinement vector {dydx}")
@@ -1720,7 +1729,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     # F = np.zeros(3)
 
     # set the refinement scale
-    delta = np.random.choice([-1, 1]) * dydx * rc.refinement_scale
+    delta = np.random.choice([-1, 1]) * dydx
     if rc.refined_variable_type[j] == 20:  # atom coordinates
         # reduce scale by an order of magnitude to allow it to be refined
         # alongside other parameters like Biso
