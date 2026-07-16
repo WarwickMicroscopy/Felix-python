@@ -280,6 +280,371 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     return
 
 
+def refine(xtal, basis, cell, hkl, bloch, cbed, rc):
+    # principal figure of merit
+    i = -1  # the current variable being refined, negative means no variable
+    fom = figure_of_merit(bloch, cbed, rc, i)
+    print(f"  Figure of merit {100*fom:.2f}%")
+
+    # we also have a figure of merit for each variable using masks
+    # rc.refined_variable_fom
+    # Initialise variables for refinement
+    rc.best_fit = fom*1.0
+    rc.last_fit = fom*1.0
+
+    # for a plot
+    rc.fit_log = ([rc.last_fit*1.0])
+    rc.param_log = ([np.copy(rc.refined_variable)])
+
+    # Refinement loop - df is the improvement in fom in each cycle
+    df = 1.0  
+    # we have two possible end points
+    # if precision > 0 we exit when df < precision
+    # if precision < 0 we exit when |refinement_scale| < |precision|
+    while df >= rc.precision and abs(rc.refinement_scale) >= abs(rc.precision):
+        # refined_variable is the working array of variables
+        # best_var is the best array of variables so far
+        rc.best_var = np.copy(rc.refined_variable)
+        # next_var is the predicted next (best) point
+        rc.next_var = np.copy(rc.refined_variable)
+
+        # we have two possible refinement modes
+        # if refinement_scale > 0 we use this value for delta_variable
+        # if refinement_scale < 0 we use the default values that are 
+        # given in pylix.dicts, refined_variable_scale
+        if rc.refine_method == 0:
+            print("Gradient descent, one parameter at a time")
+            # random order for 2 or more variables
+            indices = np.arange(rc.n_variables)
+            if rc.n_variables > 1:
+                np.random.shuffle(indices)
+
+            # pick a variable and refine it
+            for i in indices:
+                # dydx is a vector along the gradient in n-dimensional space
+                # in single parameter mode this only has one non-zero value
+                dydx = np.zeros(rc.n_variables)
+                if rc.refinement_scale < 0:
+                    dydx[i] = rc.refined_variable_scale[i]
+                else:
+                    dydx[i] = rc.refinement_scale
+                # refinement loop
+                refine_multi_variable(xtal, basis, cell, hkl,
+                                                 bloch, cbed, rc, dydx)
+                # reduce scale for next round
+                if rc.refinement_scale < 0:
+                    rc.refined_variable_scale[i] *= 0.5
+            rc.refinement_scale *= 0.5
+
+        elif rc.refine_method == 1:
+            # needs updating to function correctly!
+
+            # print("Multiparameter refinement, finding parameter gradients")
+            # # =========== step 1: individual variable minimisation
+            # # if all variables have been refined, reset
+            # if np.sum(np.abs(dydx)) < 1e-10:
+            #     dydx = np.ones(rc.n_variables)
+            # # Go through the variables looking at three points in the hope
+            # # of capturing a minimum - if there is one, we take it and remove
+            # # that variable from multidimensional refinement, dydx[i] = 0.
+            # # Otherwise dydx[i] is the gradient for that variable.
+            # # We also get a predicted best starting point
+            # # for gradient descent, rc.next_var
+            # for i in range(rc.n_variables):
+            #     # Skip variables already optimized
+            #     if abs(dydx[i]) < 1e-10:
+            #         dydx[i] = 0.0
+            #         continue
+            #     dydx[i] = refine_single_variable(xtal, basis, cell, hkl,
+            #                                          bloch, cbed, rc, i)
+
+            # # all variables have updated/predicted so do a final simulation
+            # # if it's better, update rc.best_fit and rc.best_var accordingly
+            # if np.count_nonzero(dydx) == 0:
+            #     print("Closing simulation for this cycle")
+            #     rc.refined_variable = np.copy(rc.next_var)
+            #     fom = sim_fom(xtal, basis, hkl, bloch, cbed, rc, i)
+            #     if (fom < rc.best_fit):
+            #         rc.best_fit = fom*1.0
+            #         rc.best_var = np.copy(rc.refined_variable)
+            # print("Vector gradient descent")
+            # # ===========step 2: vector descent
+            # # Downhill minimisation until we eliminate all variables
+            # while np.sum(np.abs(dydx)) > 1e-10:
+            #     # the returned dydx will have an extra zero!
+            #     dydx = refine_multi_variable(xtal, basis, cell, hkl,
+            #                                      bloch, cbed, rc, dydx, False)
+            # rc.refinement_scale *= (1 - 1 / (1 + rc.n_variables))
+            print("Multiparameter refinement not functioning, needs updating")
+        else:
+            raise ValueError("No valid refine method (0,1) in felix.inp")
+        print(f"Step size {abs(rc.refinement_scale):g}")
+
+        if rc.plot > 0:
+            plot_progress(rc)
+            print_LACBED(bloch, cbed, rc, 0)
+
+        # Update for next iteration
+        df = rc.last_fit - rc.best_fit
+ 
+        rc.last_fit = np.copy(rc.best_fit)
+        rc.refined_variable = np.copy(rc.best_var)
+        if rc.precision > 0:
+            print(f"Improvement in fit {100*df:.2f}%, will stop at {100*rc.precision:.2f}%")
+        else:
+            print(f"Improvement in fit {100*df:.2f}%, will stop after step size < {abs(rc.precision)}")
+        print("-------------------------------")
+    print(f"Refinement complete after {rc.iter_count} simulations.")
+    for i in range(rc.n_variables):
+        print_current_var(xtal, basis, rc, i)
+
+
+def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
+                          rc, dydx, single=True):
+    '''
+    multidimensional refinement
+    dydx: float array of gradients, generated in refine_single_variable
+    Uses the whole variable space rc, only:
+    rc.refined_variable: array of variables to refine size [n_var]
+    rc.refined_variable_type: what kind of variable (see felixrefine)
+    rc.best_fit: best figure of merit so far
+    rc.best_var: array of variables that gives best fit
+
+    dydx = array of gradients, size [n_var]
+    '''
+    n_var = np.count_nonzero(dydx)
+    if n_var > 1:  # needs updating
+        print(f"Multidimensional refinement, {n_var} variables")
+        with np.printoptions(formatter={'float': lambda x: f"{x:.3f}"}):
+            print(f"    Refinement vector {dydx}")
+        p_mag = np.linalg.norm(dydx)
+        if np.isinf(p_mag) or np.isnan(p_mag):
+            raise ValueError("Infinite or NaN gradient!")
+        dydx = dydx / p_mag   # Normalized direction of max gradient
+    elif n_var == 1:
+        print("Single variable refinement")
+    else:
+        raise ValueError("No refinement variables defined!")
+    # index of principal variable
+    j = np.argmax(abs(dydx))
+    t = rc.refined_variable_type[j]
+    print(f"  Principal variable: changing {variable_message(t)}")
+
+    # Check the gradient vector magnitude and initialize vector descent
+    # if not single:  # needs updating
+    #     print(f"    Extrapolation, should be better than {100*rc.best_fit:.2f}%")
+    #     # initial trial uses the predicted best set of variables
+    #     rc.refined_variable = 1.0*rc.next_var
+    #     # simulate and get figure of merit
+    #     # check for validity: Occupancy and ADPs must be >=0
+    #     rc.refined_variable[j], cont = variable_check(rc.refined_variable[j],
+    #                                                   t)
+    #     fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
+    #     if rc.plot > 1:
+    #         print_LACBED(bloch, cbed, rc, 0)
+    #     # is it actually any better
+    #     if fom < rc.last_fit:
+    #         rc.best_fit = fom*1.0
+    #         rc.best_var = np.copy(rc.refined_variable)
+    #         print("Point 1 of 3: extrapolated")  # yes, use it
+    #     else:
+    #         print("Point 1 of 3: previous best")  # no, use the best
+    #     rc.refined_variable = np.copy(rc.best_var)
+    #     print_LACBED(bloch, cbed, rc, 0)
+    #     if rc.plot == 3:  # also do difference image
+    #         print_LACBED(bloch, cbed, rc, 2)
+
+    #     print(f"-a-----------------------------{rc.iter_count}")  # "{r3_var},{r3_fom}")
+
+    # First point: incoming best simulation
+    # starting point is the current best set of variables
+    rc.last_fit = 1.0*rc.best_fit
+    # take the incoming simulation as a reference for signature images
+    sim = np.copy(cbed.lacbed_sim[rc.best_t, :, :, :])
+    if rc.image_processing != 0:
+        sim = gaussian_filter(sim, sigma=(rc.blur_radius, rc.blur_radius, 0))
+    mean = sim.mean(axis=(0, 1), keepdims=True)
+    std = sim.std(axis=(0, 1), keepdims=True)
+    cbed.lacbed_ref = (sim - mean) / std
+    r3_var = np.zeros(3)  # variable values
+    r3_fom = np.zeros(3)  # their figures of merit
+    r3_var[0] = 1.0*rc.best_var[j]  # using principal variable
+    r3_fom[0] = 1.0*rc.best_fit
+    # variable and fit arrays for error estimate
+    # V = np.zeros(3)
+    # F = np.zeros(3)
+
+    # set the refinement scale
+    delta = np.random.choice([-1, 1]) * dydx
+    # change magnitude when we only have a single refinement scale
+    if rc.refinement_scale > 0:
+        if rc.refined_variable_type[j] == 20:  # atom coordinates
+        # reduce scale by an order of magnitude to allow it to be refined
+        # alongside other parameters like Biso
+            delta *= 0.1
+        # *** should probably do the same for Uij refinement ***
+
+    # Second point
+    print("Refining, point 2 of 3")
+    # Change the array of variables by a small amount
+    rc.refined_variable += delta  # point 2
+    # check for validity: Occupancy and ADPs must be >=0
+    rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
+    # simulate and get figure of merit
+    fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
+    # if it's better it will have a lower fom, positive improvement
+    improvement = rc.best_fit - fom
+    if fom < rc.best_fit:
+        rc.best_fit = fom*1.0
+        rc.best_var = np.copy(rc.refined_variable)
+    if rc.plot > 1:
+        print_LACBED(bloch, cbed, rc, 0)
+
+    # make the difference 'signature' image dI/dx, if none exists
+    # cbed.lacbed_sig, size [n_variables, imgX, imgY, n_out]
+    if np.sum(abs(cbed.lacbed_sig[j])) < eps:
+        # we need a better message here!
+        print(f"  Making mask for {variable_message(t)}")
+        sim = np.copy(cbed.lacbed_sim[rc.best_t, :, :, :])
+        if rc.image_processing != 0:
+            sim = gaussian_filter(sim, sigma=(rc.blur_radius,
+                                              rc.blur_radius, 0))
+        mean = sim.mean(axis=(0, 1), keepdims=True)
+        std = sim.std(axis=(0, 1), keepdims=True)
+        cbed.lacbed_sig[j] = ((sim - mean) / std) - cbed.lacbed_ref
+
+        # # remove outliers
+        # for i in range(rc.n_out):
+        #     remove_outliers(cbed.lacbed_sig[j, :, :, i])
+
+        # print if desired
+        if rc.plot > 2:
+            print_LACBED(bloch, cbed, rc, 3)
+
+        # the initial mask just takes pixels in the top 50% of dI/dx
+        # cbed.lacbed_mask, size [n_variables, imgX, imgY, n_out],
+        sig = cbed.lacbed_sig[j]
+        thresh = np.mean(np.abs(sig), axis=(0, 1), keepdims=True)
+        cbed.lacbed_mask[j] = sig * (np.abs(sig) > thresh)
+    
+        # temporary plot to show it's working
+        img = cbed.lacbed_mask[j, :, :, 1]
+        cmap = LinearSegmentedColormap.from_list(
+            "two_color_black_center",
+            [(0.0, "c"), (0.5, "k"), (1.0, "orange")])
+        # two colour look up table
+        norm = TwoSlopeNorm(vmin=img.min(), vcenter=0.0, vmax=img.max())
+        plt.imshow(img, cmap=cmap, norm=norm)
+        plt.axis('off')
+        plt.show()
+
+        # masked figures of merit
+        masked_sim = (cbed.lacbed_mask[j] * sim)
+        masked_expt = (cbed.lacbed_mask[j] * cbed.lacbed_expt)
+        masked_ref = (cbed.lacbed_mask[j] * cbed.lacbed_ref)
+        refined_variable_hkl_fom = np.empty(rc.n_out)
+        for i in range(rc.n_out):
+            ex = masked_expt[:, :, i]
+            ex = ex[ex != 0]  # 1d masked experimental image without zeros
+            ex = (ex - ex.mean()) / ex.std()
+            re = masked_ref[:, :, i]
+            re = re[re != 0]  # 1d masked simulated image without zeros
+            re = (re - re.mean()) / re.std()
+            si = masked_ref[:, :, i]
+            si = si[si != 0]  # 1d masked simulated image without zeros
+            si = (si - si.mean()) / si.std()
+            # individual figure of merit for lacbed pattern hkl
+            # NB as usual we have best fom = 0
+            refined_variable_hkl_fom[i] = 1 - np.mean(ex * re)
+        rc.refined_variable_fom[j] = np.mean(refined_variable_hkl_fom)
+
+
+
+
+
+
+    # check for no effect or parameter out of range
+    if abs(improvement) < 0.1*abs(rc.precision):
+        # we leave best_var unchanged and go on to the next
+        print(f"    Improvement {abs(improvement)} is smaller than {0.1*abs(rc.precision)}")
+        print(f"-next=========================={rc.iter_count}")
+        dydx[j] = 0.0
+        return dydx
+    elif cont is False:
+        print("    Parameter out of range")
+        print(f"-next=========================={rc.iter_count}")
+        dydx[j] = 0.0
+        return dydx
+    else:
+        r3_var[1] = 1.0*rc.refined_variable[j]
+        r3_fom[1] = 1.0*fom
+        # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
+        print(f"-b-----------------------------{rc.iter_count}")  # {r3_var},{r3_fom}")
+
+    # Third point
+    print("Refining, point 3 of 3")
+    if r3_fom[1] > r3_fom[0]:  # if second point is worse
+        # Go in the opposite direction
+        rc.refined_variable -= np.exp(0.8)*delta
+    else:  # keep going
+        rc.refined_variable += np.exp(0.4)*delta
+    rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
+    fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
+    if fom < rc.best_fit:
+        rc.best_fit = fom*1.0
+        rc.best_var = np.copy(rc.refined_variable)
+    if rc.plot > 1:
+        print_LACBED(bloch, cbed, rc, 0)
+    r3_var[2] = 1.0*rc.refined_variable[j]
+    r3_fom[2] = 1.0*fom
+    # if cont is False:
+    #     print(f"-next=========================={rc.iter_count}")
+    #     dydx[j] = 0.0
+    #     return dydx
+    # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
+    print(f"-c-----------------------------{rc.iter_count}")  # {r3_var},{r3_fom}")
+
+    # We continue downhill until we get a predicted minnymum
+    minny = False
+    # uncertainty in figure of merit  ***hack at the moment to fixed value***
+    dy = 0.00003  # 0.003%
+    dx = 0
+    while minny is False:
+        # predict the next point as a minimum or a step on
+        next_x, minny, dx = px.convex(r3_var, r3_fom, dy)
+        # version that scales the whole vector
+        # last_x = 1.0*rc.refined_variable[j]
+        # rc.refined_variable[j] *= next_x/last_x
+        # version that just changes one variable 
+        rc.refined_variable[j] = next_x
+        rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
+        fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
+        improvement = rc.best_fit - fom
+        if fom < rc.best_fit:
+            rc.best_fit = fom*1.0
+            rc.best_var = np.copy(rc.refined_variable)
+        if rc.plot > 1:
+            print_LACBED(bloch, cbed, rc, 0)
+        # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
+        print(f"-.-----------------------------{rc.iter_count}")  # {r3_var}: {r3_fom}")
+        if (improvement > 0.1*abs(rc.precision)) and cont is True:  # it's better, keep going
+            # replace worst point with this one
+            i = np.argmax(r3_fom)
+            r3_var[i] = 1.0*rc.refined_variable[j]
+            r3_fom[i] = 1.0*fom
+        else:  # we're done
+            minny = True
+    # we have taken the principal variable to a minimum
+    rc.refined_variable = np.copy(rc.best_var)
+    dydx[j] = 0.0
+    # Error estimate
+    rc.refined_variable_sigma[j] = dx
+    print(f"    ====Refined variable {j}====")
+    print_LACBED(bloch, cbed, rc, 0)
+    if rc.plot == 3:  # also do difference image
+        print_LACBED(bloch, cbed, rc, 2)
+
+
 def remove_outliers(img):
     # compare image with one after applying a median filter 
     m = median(img)
@@ -787,9 +1152,12 @@ def figure_of_merit(bloch, cbed, rc, k):
 
         # apply the blur
         if rc.image_processing != 0:
-            for j in range(rc.n_out):
-                cbed.lacbed_sim[i, :, :, j] = gaussian_filter(cbed.lacbed_sim[i, :, :, j],
-                                                           sigma=rc.blur_radius)
+            cbed.lacbed_sim[i] = gaussian_filter(cbed.lacbed_sim[i],
+                                                 sigma=(rc.blur_radius,
+                                                        rc.blur_radius, 0))
+            # for j in range(rc.n_out):
+            #     cbed.lacbed_sim[i, :, :, j] = gaussian_filter(cbed.lacbed_sim[i, :, :, j],
+            #                                                sigma=rc.blur_radius)
 
         # sub-pixel shift for correlation if required
         c_time = time.time()
@@ -1525,342 +1893,6 @@ def refine_single_variable(xtal, basis, cell, hkl, bloch, cbed, rc, i):
         # uncert_brak(var_min, independent_delta[i])
 
     return dydx_i
-
-
-def refine(xtal, basis, cell, hkl, bloch, cbed, rc):
-    # principal figure of merit
-    i = -1  # the current variable being refined, negative means no variable
-    fom = figure_of_merit(bloch, cbed, rc, i)
-    print(f"  Figure of merit {100*fom:.2f}%")
-
-    # we also have a figure of merit for each variable using masks
-    # rc.refined_variable_fom
-    # Initialise variables for refinement
-    rc.best_fit = fom*1.0
-    rc.last_fit = fom*1.0
-
-    # for a plot
-    rc.fit_log = ([rc.last_fit*1.0])
-    rc.param_log = ([np.copy(rc.refined_variable)])
-
-    # Refinement loop - df is the improvement in fom in each cycle
-    df = 1.0  
-    # we have two possible end points
-    # if precision > 0 we exit when df < precision
-    # if precision < 0 we exit when |refinement_scale| < |precision|
-    while df >= rc.precision and abs(rc.refinement_scale) >= abs(rc.precision):
-        # refined_variable is the working array of variables
-        # best_var is the best array of variables so far
-        rc.best_var = np.copy(rc.refined_variable)
-        # next_var is the predicted next (best) point
-        rc.next_var = np.copy(rc.refined_variable)
-
-        # we have two possible refinement modes
-        # if refinement_scale > 0 we use this value for delta_variable
-        # if refinement_scale < 0 we use the default values that are 
-        # given in pylix.dicts, refined_variable_scale
-        if rc.refine_method == 0:
-            print("Gradient descent, one parameter at a time")
-            # random order for 2 or more variables
-            indices = np.arange(rc.n_variables)
-            if rc.n_variables > 1:
-                np.random.shuffle(indices)
-
-            # pick a variable and refine it
-            for i in indices:
-                # dydx is a vector along the gradient in n-dimensional space
-                # in single parameter mode this only has one non-zero value
-                dydx = np.zeros(rc.n_variables)
-                if rc.refinement_scale < 0:
-                    dydx[i] = rc.refined_variable_scale[i]
-                else:
-                    dydx[i] = rc.refinement_scale
-                # refinement loop
-                refine_multi_variable(xtal, basis, cell, hkl,
-                                                 bloch, cbed, rc, dydx)
-                # reduce scale for next round
-                if rc.refinement_scale < 0:
-                    rc.refined_variable_scale[i] *= 0.5
-            rc.refinement_scale *= 0.5
-
-        elif rc.refine_method == 1:
-            # needs updating to function correctly!
-
-            # print("Multiparameter refinement, finding parameter gradients")
-            # # =========== step 1: individual variable minimisation
-            # # if all variables have been refined, reset
-            # if np.sum(np.abs(dydx)) < 1e-10:
-            #     dydx = np.ones(rc.n_variables)
-            # # Go through the variables looking at three points in the hope
-            # # of capturing a minimum - if there is one, we take it and remove
-            # # that variable from multidimensional refinement, dydx[i] = 0.
-            # # Otherwise dydx[i] is the gradient for that variable.
-            # # We also get a predicted best starting point
-            # # for gradient descent, rc.next_var
-            # for i in range(rc.n_variables):
-            #     # Skip variables already optimized
-            #     if abs(dydx[i]) < 1e-10:
-            #         dydx[i] = 0.0
-            #         continue
-            #     dydx[i] = refine_single_variable(xtal, basis, cell, hkl,
-            #                                          bloch, cbed, rc, i)
-
-            # # all variables have updated/predicted so do a final simulation
-            # # if it's better, update rc.best_fit and rc.best_var accordingly
-            # if np.count_nonzero(dydx) == 0:
-            #     print("Closing simulation for this cycle")
-            #     rc.refined_variable = np.copy(rc.next_var)
-            #     fom = sim_fom(xtal, basis, hkl, bloch, cbed, rc, i)
-            #     if (fom < rc.best_fit):
-            #         rc.best_fit = fom*1.0
-            #         rc.best_var = np.copy(rc.refined_variable)
-            # print("Vector gradient descent")
-            # # ===========step 2: vector descent
-            # # Downhill minimisation until we eliminate all variables
-            # while np.sum(np.abs(dydx)) > 1e-10:
-            #     # the returned dydx will have an extra zero!
-            #     dydx = refine_multi_variable(xtal, basis, cell, hkl,
-            #                                      bloch, cbed, rc, dydx, False)
-            # rc.refinement_scale *= (1 - 1 / (1 + rc.n_variables))
-            print("Multiparameter refinement not functioning, needs updating")
-        else:
-            raise ValueError("No valid refine method (0,1) in felix.inp")
-        print(f"Step size {abs(rc.refinement_scale):g}")
-
-        if rc.plot > 0:
-            plot_progress(rc)
-            print_LACBED(bloch, cbed, rc, 0)
-
-        # Update for next iteration
-        df = rc.last_fit - rc.best_fit
- 
-        rc.last_fit = np.copy(rc.best_fit)
-        rc.refined_variable = np.copy(rc.best_var)
-        if rc.precision > 0:
-            print(f"Improvement in fit {100*df:.2f}%, will stop at {100*rc.precision:.2f}%")
-        else:
-            print(f"Improvement in fit {100*df:.2f}%, will stop after step size < {abs(rc.precision)}")
-        print("-------------------------------")
-    print(f"Refinement complete after {rc.iter_count} simulations.")
-    for i in range(rc.n_variables):
-        print_current_var(xtal, basis, rc, i)
-
-
-def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
-                          rc, dydx, single=True):
-    '''
-    multidimensional refinement
-    dydx: float array of gradients, generated in refine_single_variable
-    Uses the whole variable space rc, only:
-    rc.refined_variable: array of variables to refine size [n_var]
-    rc.refined_variable_type: what kind of variable (see felixrefine)
-    rc.best_fit: best figure of merit so far
-    rc.best_var: array of variables that gives best fit
-
-    dydx = array of gradients, size [n_var]
-    '''
-    n_var = np.count_nonzero(dydx)
-    if n_var > 1:  # needs updating
-        print(f"Multidimensional refinement, {n_var} variables")
-        with np.printoptions(formatter={'float': lambda x: f"{x:.3f}"}):
-            print(f"    Refinement vector {dydx}")
-        p_mag = np.linalg.norm(dydx)
-        if np.isinf(p_mag) or np.isnan(p_mag):
-            raise ValueError("Infinite or NaN gradient!")
-        dydx = dydx / p_mag   # Normalized direction of max gradient
-    elif n_var == 1:
-        print("Single variable refinement")
-    else:
-        raise ValueError("No refinement variables defined!")
-    # index of principal variable
-    j = np.argmax(abs(dydx))
-    t = rc.refined_variable_type[j]
-    print(f"  Principal variable: changing {variable_message(t)}")
-
-    # Check the gradient vector magnitude and initialize vector descent
-    # if not single:  # needs updating
-    #     print(f"    Extrapolation, should be better than {100*rc.best_fit:.2f}%")
-    #     # initial trial uses the predicted best set of variables
-    #     rc.refined_variable = 1.0*rc.next_var
-    #     # simulate and get figure of merit
-    #     # check for validity: Occupancy and ADPs must be >=0
-    #     rc.refined_variable[j], cont = variable_check(rc.refined_variable[j],
-    #                                                   t)
-    #     fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
-    #     if rc.plot > 1:
-    #         print_LACBED(bloch, cbed, rc, 0)
-    #     # is it actually any better
-    #     if fom < rc.last_fit:
-    #         rc.best_fit = fom*1.0
-    #         rc.best_var = np.copy(rc.refined_variable)
-    #         print("Point 1 of 3: extrapolated")  # yes, use it
-    #     else:
-    #         print("Point 1 of 3: previous best")  # no, use the best
-    #     rc.refined_variable = np.copy(rc.best_var)
-    #     print_LACBED(bloch, cbed, rc, 0)
-    #     if rc.plot == 3:  # also do difference image
-    #         print_LACBED(bloch, cbed, rc, 2)
-
-    #     print(f"-a-----------------------------{rc.iter_count}")  # "{r3_var},{r3_fom}")
-
-    # First point: incoming best simulation
-    # starting point is the current best set of variables
-    rc.last_fit = 1.0*rc.best_fit
-    # take the incoming simulation as a reference for signature images
-    sim = np.copy(cbed.lacbed_sim[rc.best_t, :, :, :])
-    mean = sim.mean(axis=(0, 1), keepdims=True)
-    std = sim.std(axis=(0, 1), keepdims=True)
-    cbed.lacbed_ref = (sim - mean) / std
-    r3_var = np.zeros(3)  # variable values
-    r3_fom = np.zeros(3)  # their figures of merit
-    r3_var[0] = 1.0*rc.best_var[j]  # using principal variable
-    r3_fom[0] = 1.0*rc.best_fit
-    # variable and fit arrays for error estimate
-    # V = np.zeros(3)
-    # F = np.zeros(3)
-
-    # set the refinement scale
-    delta = np.random.choice([-1, 1]) * dydx
-    # change magnitude when we only have a single refinement scale
-    if rc.refinement_scale > 0:
-        if rc.refined_variable_type[j] == 20:  # atom coordinates
-        # reduce scale by an order of magnitude to allow it to be refined
-        # alongside other parameters like Biso
-            delta *= 0.1
-        # *** should probably do the same for Uij refinement ***
-
-    # Second point
-    print("Refining, point 2 of 3")
-    # Change the array of variables by a small amount
-    rc.refined_variable += delta  # point 2
-    # check for validity: Occupancy and ADPs must be >=0
-    rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
-    # simulate and get figure of merit
-    fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
-    # if it's better it will have a lower fom, positive improvement
-    improvement = rc.best_fit - fom
-    if fom < rc.best_fit:
-        rc.best_fit = fom*1.0
-        rc.best_var = np.copy(rc.refined_variable)
-    if rc.plot > 1:
-        print_LACBED(bloch, cbed, rc, 0)
-
-    # make the difference 'signature' image dI/dx, if none exists
-    # cbed.lacbed_sig, size [n_variables, imgX, imgY, n_out]
-    if np.sum(abs(cbed.lacbed_sig[j])) < eps:
-        # we need a better message here!
-        print(f"  Making mask for {variable_message(t)}")
-        sim = np.copy(cbed.lacbed_sim[rc.best_t, :, :, :])
-        mean = sim.mean(axis=(0, 1), keepdims=True)
-        std = sim.std(axis=(0, 1), keepdims=True)
-        cbed.lacbed_sig[j] = ((sim - mean) / std) - cbed.lacbed_ref
-
-        # remove outliers
-        for i in range(rc.n_out):
-            remove_outliers(cbed.lacbed_sig[j, :, :, i])
-
-        # print if desired
-        if rc.plot > 2:
-            print_LACBED(bloch, cbed, rc, 3)
-
-        # the initial mask just takes pixels in the top 50% of dI/dx
-        # cbed.lacbed_mask, size [n_variables, imgX, imgY, n_out],
-        sig = cbed.lacbed_sig[j]
-        thresh = np.mean(np.abs(sig), axis=(0, 1), keepdims=True)
-        cbed.lacbed_mask[j] = sig * (np.abs(sig) > thresh)
-    
-        # temporary plot to show it's working
-        img = cbed.lacbed_mask[j, :, :, 1]
-        cmap = LinearSegmentedColormap.from_list(
-            "two_color_black_center",
-            [(0.0, "c"), (0.5, "k"), (1.0, "orange")])
-        # two colour look up table
-        norm = TwoSlopeNorm(vmin=img.min(), vcenter=0.0, vmax=img.max())
-        plt.imshow(img, cmap=cmap, norm=norm)
-        plt.axis('off')
-        plt.show()
-
-    # check for no effect or parameter out of range
-    if abs(improvement) < 0.1*abs(rc.precision):
-        # we leave best_var unchanged and go on to the next
-        print(f"    Improvement {abs(improvement)} is smaller than {0.1*abs(rc.precision)}")
-        print(f"-next=========================={rc.iter_count}")
-        dydx[j] = 0.0
-        return dydx
-    elif cont is False:
-        print("    Parameter out of range")
-        print(f"-next=========================={rc.iter_count}")
-        dydx[j] = 0.0
-        return dydx
-    else:
-        r3_var[1] = 1.0*rc.refined_variable[j]
-        r3_fom[1] = 1.0*fom
-        # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
-        print(f"-b-----------------------------{rc.iter_count}")  # {r3_var},{r3_fom}")
-
-    # Third point
-    print("Refining, point 3 of 3")
-    if r3_fom[1] > r3_fom[0]:  # if second point is worse
-        # Go in the opposite direction
-        rc.refined_variable -= np.exp(0.8)*delta
-    else:  # keep going
-        rc.refined_variable += np.exp(0.4)*delta
-    rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
-    fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
-    if fom < rc.best_fit:
-        rc.best_fit = fom*1.0
-        rc.best_var = np.copy(rc.refined_variable)
-    if rc.plot > 1:
-        print_LACBED(bloch, cbed, rc, 0)
-    r3_var[2] = 1.0*rc.refined_variable[j]
-    r3_fom[2] = 1.0*fom
-    # if cont is False:
-    #     print(f"-next=========================={rc.iter_count}")
-    #     dydx[j] = 0.0
-    #     return dydx
-    # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
-    print(f"-c-----------------------------{rc.iter_count}")  # {r3_var},{r3_fom}")
-
-
-    # We continue downhill until we get a predicted minnymum
-    minny = False
-    # uncertainty in figure of merit  ***hack at the moment to fixed value***
-    dy = 0.00003  # 0.003%
-    dx = 0
-    while minny is False:
-        # predict the next point as a minimum or a step on
-        next_x, minny, dx = px.convex(r3_var, r3_fom, dy)
-        # version that scales the whole vector
-        # last_x = 1.0*rc.refined_variable[j]
-        # rc.refined_variable[j] *= next_x/last_x
-        # version that just changes one variable 
-        rc.refined_variable[j] = next_x
-        rc.refined_variable[j], cont = variable_check(rc.refined_variable[j], t)
-        fom = sim_fom(xtal, basis, cell, hkl, bloch, cbed, rc, j)
-        improvement = rc.best_fit - fom
-        if fom < rc.best_fit:
-            rc.best_fit = fom*1.0
-            rc.best_var = np.copy(rc.refined_variable)
-        if rc.plot > 1:
-            print_LACBED(bloch, cbed, rc, 0)
-        # with np.printoptions(formatter={'float': lambda x: f"{x:.4f}"}):
-        print(f"-.-----------------------------{rc.iter_count}")  # {r3_var}: {r3_fom}")
-        if (improvement > 0.1*abs(rc.precision)) and cont is True:  # it's better, keep going
-            # replace worst point with this one
-            i = np.argmax(r3_fom)
-            r3_var[i] = 1.0*rc.refined_variable[j]
-            r3_fom[i] = 1.0*fom
-        else:  # we're done
-            minny = True
-    # we have taken the principal variable to a minimum
-    rc.refined_variable = np.copy(rc.best_var)
-    dydx[j] = 0.0
-    # Error estimate
-    rc.refined_variable_sigma[j] = dx
-    print(f"    ====Refined variable {j}====")
-    print_LACBED(bloch, cbed, rc, 0)
-    if rc.plot == 3:  # also do difference image
-        print_LACBED(bloch, cbed, rc, 2)
 
 
 def plot_progress(rc):
