@@ -75,9 +75,6 @@ exit_ criteria, refinement scale & precision_:
         Individual variable refinement exits when improvement in FoM falls below precision_/10
     When precision_ is negative:
         Stop when refinement scale becomes smaller than precision_.
-
-n jobs:
-	how many cores to use in the simulation, -1 uses all available
 # ------------------------------------
 
 # Control flags
@@ -128,4 +125,3 @@ atomic_sites              = [0,1,2]
 precision                 = -0.00002
 weighting_flag            = 0
 no_of_ugs                 = 40
-n_jobs                    = 5

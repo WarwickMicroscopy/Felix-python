@@ -64,7 +64,6 @@ class RunControl:
     correlation_type = None
     atomic_sites = None
     no_of_ugs = None
-    n_jobs = None  # 1=serial, -1=all cores, >1 explicit cores
 
     def update_from_dict(self, data):
         for key, value in data.items():
