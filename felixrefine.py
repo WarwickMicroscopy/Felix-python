@@ -590,6 +590,7 @@ if 'S' not in rc.refine_mode:
 
     rc.refined_variable = np.array(rc.refined_variable)
     rc.refined_variable_sigma = np.zeros(rc.n_variables)
+    rc.refined_variable_fom = np.zeros(rc.n_variables)
     rc.refined_variable_type = np.array(rc.refined_variable_type)
     rc.refined_variable_scale = np.array(rc.refined_variable_scale)
     rc.refined_variable_atom = np.array(rc.atom_refine_flag[:rc.n_variables])
