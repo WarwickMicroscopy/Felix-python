@@ -597,6 +597,8 @@ if 'S' not in rc.refine_mode:
 
     rc.n_correlations = 1 + rc.n_variables * (rc.n_variables - 1) // 2
     d = 2*rc.image_radius
+    cbed.lacbed_mask = np.zeros([rc.n_variables, d, d, rc.n_out],
+                                dtype=np.float64)
     cbed.lacbed_mask_i = np.zeros([rc.n_correlations, d, d, rc.n_out],
                                 dtype=np.float64)
     cbed.lacbed_mask_j = np.zeros([rc.n_correlations, d, d, rc.n_out],

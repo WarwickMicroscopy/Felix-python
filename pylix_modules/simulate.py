@@ -29,7 +29,8 @@ import time
 import os
 from pylix_modules import pylix as px
 from pylix_modules import pylix_dicts as fu
-
+# a small number
+eps = 1e-10
 
 def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
 
@@ -1744,27 +1745,40 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     if rc.plot > 1:
         print_LACBED(bloch, cbed, rc, 0)
 
-    # make the difference 'signature' image if none exists
+    # make the difference 'signature' image dI/dx, if none exists
     # cbed.lacbed_sig, size [n_variables, imgX, imgY, n_out]
-    sim = np.copy(cbed.lacbed_sim[rc.best_t, :, :, :])
-    mean = sim.mean(axis=(0, 1), keepdims=True)
-    std = sim.std(axis=(0, 1), keepdims=True)
-    sim_norm = (sim - mean) / std
-    cbed.lacbed_sig[j] = sim_norm - cbed.lacbed_ref
-    # print if desired
-    if rc.plot > 2:  # get a signature image
-        print_LACBED(bloch, cbed, rc, 3)
+    if np.sum(abs(cbed.lacbed_sig[j])) < eps:
+        # we need a better message here!
+        print(f"  Making mask for {variable_message(t)}")
+        sim = np.copy(cbed.lacbed_sim[rc.best_t, :, :, :])
+        mean = sim.mean(axis=(0, 1), keepdims=True)
+        std = sim.std(axis=(0, 1), keepdims=True)
+        cbed.lacbed_sig[j] = ((sim - mean) / std) - cbed.lacbed_ref
 
-    # temporary plot to show it's working
-    img = cbed.lacbed_sig[j, :, :, 0]
-    cmap = LinearSegmentedColormap.from_list(
-        "two_color_black_center",
-        [(0.0, "c"), (0.5, "k"), (1.0, "orange")])
-    # two colour look up table
-    norm = TwoSlopeNorm(vmin=img.min(), vcenter=0.0, vmax=img.max())
-    plt.imshow(img, cmap=cmap, norm=norm)
-    plt.axis('off')
-    plt.show()
+        # remove outliers
+        for i in range(rc.n_out):
+            remove_outliers(cbed.lacbed_sig[j, :, :, i])
+
+        # print if desired
+        if rc.plot > 2:
+            print_LACBED(bloch, cbed, rc, 3)
+
+        # the initial mask just takes pixels in the top 50% of dI/dx
+        # cbed.lacbed_mask, size [n_variables, imgX, imgY, n_out],
+        sig = cbed.lacbed_sig[j]
+        thresh = np.mean(np.abs(sig), axis=(0, 1), keepdims=True)
+        cbed.lacbed_mask[j] = sig * (np.abs(sig) > thresh)
+    
+        # temporary plot to show it's working
+        img = cbed.lacbed_mask[j, :, :, 1]
+        cmap = LinearSegmentedColormap.from_list(
+            "two_color_black_center",
+            [(0.0, "c"), (0.5, "k"), (1.0, "orange")])
+        # two colour look up table
+        norm = TwoSlopeNorm(vmin=img.min(), vcenter=0.0, vmax=img.max())
+        plt.imshow(img, cmap=cmap, norm=norm)
+        plt.axis('off')
+        plt.show()
 
     # check for no effect or parameter out of range
     if abs(improvement) < 0.1*abs(rc.precision):
@@ -1847,8 +1861,6 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
     print_LACBED(bloch, cbed, rc, 0)
     if rc.plot == 3:  # also do difference image
         print_LACBED(bloch, cbed, rc, 2)
-
-    return dydx
 
 
 def plot_progress(rc):
