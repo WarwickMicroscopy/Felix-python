@@ -388,6 +388,12 @@ else:  # atom-specific refinements can be done simultaneously
     else:
         raise ValueError("Correlation type invalid in felix.inp")
 
+if rc.n_jobs == -1:
+    print("  Calculating with all available cores")
+elif rc.n_jobs == 1:
+    print("  Calculating with a single core")
+else:
+    print(f"  Calculating with {rc.n_jobs} cores")
 
 # %% set up refinement
 # --------------------------------------------------------------------

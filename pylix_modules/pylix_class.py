@@ -64,6 +64,7 @@ class RunControl:
     correlation_type = None
     atomic_sites = None
     no_of_ugs = None
+    n_jobs = None  # 1=serial, -1=all cores, >1 explicit cores
 
     def update_from_dict(self, data):
         for key, value in data.items():
@@ -98,7 +99,6 @@ class RunControl:
     iter_count: int = 0
     plot: int = 0
     path = None
-    n_jobs: int = 1  # 1=serial, -1=all cores, >1 explicit cores
 
 # ----------------------------------------------------------------------------
 # variables used in the Bloch wave calculation
