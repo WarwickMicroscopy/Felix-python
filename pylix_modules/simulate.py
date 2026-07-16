@@ -29,6 +29,47 @@ import time
 import os
 from pylix_modules import pylix as px
 from pylix_modules import pylix_dicts as fu
+# a small number
+eps = 1e-10
+
+
+# =============================================================================
+# Pixel-parallel helpers (process based, cross-platform)
+# =============================================================================
+_PX_BLOCH = None
+_PX_RC = None
+_PX_NOUT = None
+
+
+def _init_pixel_worker(bloch, rc, n_out):
+    """
+    Worker initializer for pixel-parallel Bloch wave calculations.
+    Each process gets its own local copy of objects, so mutable state is isolated.
+    """
+    global _PX_BLOCH, _PX_RC, _PX_NOUT
+    _PX_BLOCH = bloch
+    _PX_RC = rc
+    _PX_NOUT = n_out
+
+
+def _compute_pixel_task(pixel):
+    """
+    Compute one pixel of the Bloch-wave simulation.
+    Returns (pix_x, pix_y, intensity_slice) where intensity_slice has
+    shape [n_thickness, n_out].
+    """
+    pix_x, pix_y = pixel
+    bloch = _PX_BLOCH
+    rc = _PX_RC
+
+    bloch.s_g_pix = np.squeeze(bloch.s_g[pix_x, pix_y, :])
+    bloch.k_dot_n_pix = bloch.k_dot_n[pix_x, pix_y]
+
+    px.wave_functions(bloch, rc)
+    intensity = np.abs(bloch.wave_function) ** 2
+    return pix_x, pix_y, intensity[:, :_PX_NOUT]
+
+
 def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
 
     typ = rc.refined_variable_type // 10  # array of variable types
@@ -245,23 +286,69 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
         print(bloch.hkl_output[:15])
 
     # = = = = = = = = = = = = = = = = = = = = = = = =
-    # pixel by pixel calculations from here
-    for pix_x in range(2*rc.image_radius):
-        # progess
-        print(f"\rBloch wave calculation... {50*pix_x/rc.image_radius:.0f}%", end="")
+    # pixel-by-pixel calculations from here
+    n_xy = 2 * rc.image_radius
+    n_pixels = n_xy * n_xy
+    n_out = len(bloch.hkl_output)
 
-        for pix_y in range(2*rc.image_radius):
-            bloch.s_g_pix = np.squeeze(bloch.s_g[pix_x, pix_y, :])
-            bloch.k_dot_n_pix = bloch.k_dot_n[pix_x, pix_y]
+    # Optional parallelisation across pixels:
+    # rc.n_jobs > 1 or rc.n_jobs == -1 (all cores) triggers process parallel.
+    n_jobs_raw = getattr(rc, "n_jobs", 1)
+    try:
+        n_jobs = 1 if n_jobs_raw is None else int(n_jobs_raw)
+    except (TypeError, ValueError):
+        n_jobs = 1
+    use_parallel = n_jobs == -1 or n_jobs > 1
 
-            # works for multiple thicknesses
-            px.wave_functions(bloch, rc)
+    if use_parallel:
+        cpu_total = os.cpu_count() or 1
+        if n_jobs == -1:
+            n_jobs_eff = cpu_total
+        else:
+            n_jobs_eff = max(1, min(n_jobs, cpu_total))
 
-            intensity = np.abs(bloch.wave_function)**2
+        # Cross-platform process context:
+        # - Windows: spawn (safe default)
+        # - POSIX: fork (lower overhead)
+        from multiprocessing import get_context
+        ctx = get_context("spawn" if os.name == "nt" else "fork")
 
-            # Map diffracted intensity to required output g vectors
-            # note x and y swapped!
-            cbed.lacbed_sim[:, -pix_y, pix_x, :] = intensity[:, :len(bloch.hkl_output)]
+        pixels = [(pix_x, pix_y) for pix_x in range(n_xy) for pix_y in range(n_xy)]
+        chunksize = max(1, n_pixels // (8 * n_jobs_eff))
+
+        done = 0
+        with ctx.Pool(
+            processes=n_jobs_eff,
+            initializer=_init_pixel_worker,
+            initargs=(bloch, rc, n_out),
+        ) as pool:
+            for pix_x, pix_y, intensity_out in pool.imap_unordered(
+                _compute_pixel_task, pixels, chunksize=chunksize
+            ):
+                # Map diffracted intensity to required output g vectors
+                # note x and y swapped!
+                cbed.lacbed_sim[:, -pix_y, pix_x, :] = intensity_out
+
+                done += 1
+                if done % max(1, n_pixels // 100) == 0 or done == n_pixels:
+                    print(f"\rBloch wave calculation... {100*done/n_pixels:.0f}%", end="")
+    else:
+        for pix_x in range(n_xy):
+            # progress by row
+            print(f"\rBloch wave calculation... {100*pix_x/n_xy:.0f}%", end="")
+
+            for pix_y in range(n_xy):
+                bloch.s_g_pix = np.squeeze(bloch.s_g[pix_x, pix_y, :])
+                bloch.k_dot_n_pix = bloch.k_dot_n[pix_x, pix_y]
+
+                # works for multiple thicknesses
+                px.wave_functions(bloch, rc)
+
+                intensity = np.abs(bloch.wave_function) ** 2
+
+                # Map diffracted intensity to required output g vectors
+                # note x and y swapped!
+                cbed.lacbed_sim[:, -pix_y, pix_x, :] = intensity[:, :n_out]
     # = = = = = = = = = = = = = = = = = = = = = = = =
 
     # timings
@@ -499,16 +586,16 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
 
     # make the difference 'signature' image dI/dx, if none exists
     # cbed.lacbed_sig, size [n_variables, imgX, imgY, n_out]
-    if np.sum(np.abs(cbed.lacbed_sig[j])) < rc.eps_std:
+    if np.sum(abs(cbed.lacbed_sig[j])) < eps:
         # we need a better message here!
         print(f"  Making mask for {variable_message(t)}")
         sim = np.copy(cbed.lacbed_sim[rc.best_t, :, :, :])
         if rc.image_processing != 0:
             sim = gaussian_filter(sim, sigma=(rc.blur_radius,
                                               rc.blur_radius, 0))
-        # use safe z-score normalization for consistency and numerical stability
-        sim_z = px.safe_zscore(sim, axis=(0, 1), keepdims=True, eps=rc.eps_std)
-        cbed.lacbed_sig[j] = sim_z - cbed.lacbed_ref
+        mean = sim.mean(axis=(0, 1), keepdims=True)
+        std = sim.std(axis=(0, 1), keepdims=True)
+        cbed.lacbed_sig[j] = ((sim - mean) / std) - cbed.lacbed_ref
 
         # # remove outliers
         # for i in range(rc.n_out):
@@ -1066,34 +1153,32 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
         # single signature output to show we're making progress
         print_sig_pattern(i, 0, cbed, bloch, basis, rc)  # i=variable, j=pattern
 
-    # Fisher/cosine approach using signed derivative images S = dI/dp.
-    # We RMS-normalize each signature image per variable/per pattern over (x, y).
-    # This preserves derivative sign while removing pure scale.
-    rms = px.safe_rms(cbed.lacbed_sig, axis=(1, 2), keepdims=True, eps=rc.eps_std)
-    S = cbed.lacbed_sig / rms
+    # Fisher matrix approach.  We normalise each difference image to
+    # be a unit vector and we take these to be S = dI/dp
+    # To improve refinement of variable i we want to find regions
+    # that have high values of dI/dp for variable i and low values
+    # for other variables.  So for variable i vs j we want a mask where
+    # we emphasise large positive values of di_dj = abs(S[i])-abs(S[j]).
+    mag = np.sqrt(np.sum(cbed.lacbed_sig**2, axis=(1, 2), keepdims=True))
+    S = cbed.lacbed_sig / mag
+    # std = np.std(cbed.lacbed_sig, axis=(1, 2), keepdims=True)
+    # S = cbed.lacbed_sig / std
 
-    # Pair bookkeeping: one row per (i, j) parameter pair
-    pair_i, pair_j = np.triu_indices(nv, k=1)
-    cbed.correlation_pairs = np.column_stack((pair_i, pair_j)).astype(np.int32)
-
-    n_pairs = pair_i.size
-    cbed.correlation_matrix = np.zeros((n_pairs, rc.n_out), dtype=np.float32)
-
-    # Masks for pair-discriminating regions use magnitude only by design
-    abs_S = np.abs(S)
-    di_dj = abs_S[pair_i] - abs_S[pair_j]  # [n_pairs, imgX, imgY, n_out]
-    cbed.lacbed_mask_i[:n_pairs] = np.where(di_dj > 0.0, di_dj, 0.0)
-    cbed.lacbed_mask_j[:n_pairs] = np.where(di_dj < 0.0, -di_dj, 0.0)
-
-    # Signed cosine similarity per pair and output pattern
-    # sum over x and y to obtain one correlation value per pattern
-    num = np.sum(S[pair_i] * S[pair_j], axis=(1, 2))
-    den = np.sqrt(np.sum(S[pair_i] ** 2, axis=(1, 2)) *
-                  np.sum(S[pair_j] ** 2, axis=(1, 2)))
-    den = np.maximum(den, rc.eps_corr)
-    cbed.correlation_matrix[:n_pairs] = np.clip(num / den, -1.0, 1.0)
-
-
+    # correlation between parameters x and y is rho = (dI/dp)[x] . (dI/dp)[y]
+    cbed.correlation_matrix = np.zeros([rc.n_correlations, rc.n_out],
+                                       dtype=np.float32)
+    k = 0
+    for i in range(nv):
+        for j in range(i+1, nv):
+            # correlation mask
+            abs_S = np.abs(S)
+            di_dj = abs_S[i] - abs_S[j]
+            cbed.lacbed_mask_i[k] = di_dj * (di_dj > 0)  # take only +ve values
+            cbed.lacbed_mask_j[k] = -di_dj * (di_dj < 0)  # take only -ve values
+            # dot product correlation
+            dot = S[i] * S[j]
+            cbed.correlation_matrix[k] = np.sum(dot, axis=(0, 1))
+            k += 1
     # we will load these masks to weight subsequent refinement
     if nv == 2:
         save_masks(cbed, xtal, bloch, rc)
