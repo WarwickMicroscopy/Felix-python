@@ -65,6 +65,12 @@ class RunControl:
     atomic_sites = None
     no_of_ugs = None
 
+    # numerical tolerances (can be overridden in felix.inp)
+    eps_div = 1e-12       # generic denominator protection
+    eps_std = 1e-12       # std/rms floor for normalization
+    eps_param = 1e-10     # threshold for physically non-zero parameters
+    eps_corr = 1e-12      # norm floor in cosine/correlation calculations
+
     def update_from_dict(self, data):
         for key, value in data.items():
             if hasattr(self, key):

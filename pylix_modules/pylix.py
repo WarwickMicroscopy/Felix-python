@@ -15,6 +15,37 @@ import math
 # import matplotlib.pyplot as plt
 
 
+
+def safe_rms(x, axis=None, keepdims=False, eps=1e-12):
+    """Root-mean-square with denominator floor for numerical stability."""
+    x = np.asarray(x)
+    rms = np.sqrt(np.mean(x * x, axis=axis, keepdims=keepdims))
+    return np.maximum(rms, eps)
+
+
+def safe_zscore(x, axis=None, keepdims=False, eps=1e-12):
+    """Zero-mean, unit-variance normalization with std floor."""
+    x = np.asarray(x)
+    mean = np.mean(x, axis=axis, keepdims=True)
+    std = np.std(x, axis=axis, keepdims=True)
+    std = np.maximum(std, eps)
+    z = (x - mean) / std
+    if not keepdims and axis is not None:
+        # return z unchanged; keepdims is used only for consistency with safe_rms
+        return z
+    return z
+
+
+def cosine_similarity(a, b, axis=None, eps=1e-12):
+    """Cosine similarity between arrays along `axis`, with norm protection."""
+    a = np.asarray(a)
+    b = np.asarray(b)
+    num = np.sum(a * b, axis=axis)
+    den = np.sqrt(np.sum(a * a, axis=axis) * np.sum(b * b, axis=axis))
+    den = np.maximum(den, eps)
+    return num / den
+
+
 def read_inp_file(filename):
     """
     Reads in the file felix.inp and assigns values based on text labels.

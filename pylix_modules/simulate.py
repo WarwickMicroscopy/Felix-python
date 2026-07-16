@@ -29,9 +29,6 @@ import time
 import os
 from pylix_modules import pylix as px
 from pylix_modules import pylix_dicts as fu
-# a small number
-eps = 1e-10
-
 def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
 
     typ = rc.refined_variable_type // 10  # array of variable types
@@ -502,16 +499,16 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
 
     # make the difference 'signature' image dI/dx, if none exists
     # cbed.lacbed_sig, size [n_variables, imgX, imgY, n_out]
-    if np.sum(abs(cbed.lacbed_sig[j])) < eps:
+    if np.sum(np.abs(cbed.lacbed_sig[j])) < rc.eps_std:
         # we need a better message here!
         print(f"  Making mask for {variable_message(t)}")
         sim = np.copy(cbed.lacbed_sim[rc.best_t, :, :, :])
         if rc.image_processing != 0:
             sim = gaussian_filter(sim, sigma=(rc.blur_radius,
                                               rc.blur_radius, 0))
-        mean = sim.mean(axis=(0, 1), keepdims=True)
-        std = sim.std(axis=(0, 1), keepdims=True)
-        cbed.lacbed_sig[j] = ((sim - mean) / std) - cbed.lacbed_ref
+        # use safe z-score normalization for consistency and numerical stability
+        sim_z = px.safe_zscore(sim, axis=(0, 1), keepdims=True, eps=rc.eps_std)
+        cbed.lacbed_sig[j] = sim_z - cbed.lacbed_ref
 
         # # remove outliers
         # for i in range(rc.n_out):
@@ -1069,44 +1066,33 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
         # single signature output to show we're making progress
         print_sig_pattern(i, 0, cbed, bloch, basis, rc)  # i=variable, j=pattern
 
-    # Fisher-style parameter-identifiability signatures:
-    # S = dI/dp, normalized per variable and per output pattern over (x, y)
-    # using RMS (no mean subtraction, derivative sign preserved).
-    eps = np.finfo(np.float64).eps
-    rms = np.sqrt(np.mean(cbed.lacbed_sig**2, axis=(1, 2), keepdims=True))
-    S = np.divide(
-        cbed.lacbed_sig,
-        np.where(rms > eps, rms, 1.0),
-        out=np.zeros_like(cbed.lacbed_sig),
-        where=rms > eps,
-    )
+    # Fisher/cosine approach using signed derivative images S = dI/dp.
+    # We RMS-normalize each signature image per variable/per pattern over (x, y).
+    # This preserves derivative sign while removing pure scale.
+    rms = px.safe_rms(cbed.lacbed_sig, axis=(1, 2), keepdims=True, eps=rc.eps_std)
+    S = cbed.lacbed_sig / rms
 
-    # pair bookkeeping: one row per parameter pair
-    i_pair, j_pair = np.triu_indices(nv, k=1)
-    n_pairs = i_pair.size
-    cbed.correlation_pairs = np.column_stack((i_pair, j_pair)).astype(np.int32)
+    # Pair bookkeeping: one row per (i, j) parameter pair
+    pair_i, pair_j = np.triu_indices(nv, k=1)
+    cbed.correlation_pairs = np.column_stack((pair_i, pair_j)).astype(np.int32)
 
-    # cosine similarity per output pattern:
-    # rho_ij(k) = sum_xy(S_i * S_j) / sqrt(sum_xy(S_i^2) * sum_xy(S_j^2))
-    Si = S[i_pair]  # [n_pairs, imgX, imgY, n_out]
-    Sj = S[j_pair]
-    num = np.sum(Si * Sj, axis=(1, 2))
-    den = np.sqrt(np.sum(Si**2, axis=(1, 2)) * np.sum(Sj**2, axis=(1, 2)))
+    n_pairs = pair_i.size
+    cbed.correlation_matrix = np.zeros((n_pairs, rc.n_out), dtype=np.float32)
 
-    cbed.correlation_matrix = np.divide(
-        num,
-        np.where(den > eps, den, 1.0),
-        out=np.zeros_like(num, dtype=np.float64),
-        where=den > eps,
-    ).astype(np.float32)
-    cbed.correlation_matrix = np.clip(cbed.correlation_matrix, -1.0, 1.0)
-
-    # masks for pair-discriminating weighting (magnitude-only on purpose):
-    # positive region for i mask and negative region for j mask.
+    # Masks for pair-discriminating regions use magnitude only by design
     abs_S = np.abs(S)
-    di_dj = abs_S[i_pair] - abs_S[j_pair]  # [n_pairs, imgX, imgY, n_out]
-    cbed.lacbed_mask_i[:n_pairs] = np.where(di_dj > 0, di_dj, 0.0)
-    cbed.lacbed_mask_j[:n_pairs] = np.where(di_dj < 0, -di_dj, 0.0)
+    di_dj = abs_S[pair_i] - abs_S[pair_j]  # [n_pairs, imgX, imgY, n_out]
+    cbed.lacbed_mask_i[:n_pairs] = np.where(di_dj > 0.0, di_dj, 0.0)
+    cbed.lacbed_mask_j[:n_pairs] = np.where(di_dj < 0.0, -di_dj, 0.0)
+
+    # Signed cosine similarity per pair and output pattern
+    # sum over x and y to obtain one correlation value per pattern
+    num = np.sum(S[pair_i] * S[pair_j], axis=(1, 2))
+    den = np.sqrt(np.sum(S[pair_i] ** 2, axis=(1, 2)) *
+                  np.sum(S[pair_j] ** 2, axis=(1, 2)))
+    den = np.maximum(den, rc.eps_corr)
+    cbed.correlation_matrix[:n_pairs] = np.clip(num / den, -1.0, 1.0)
+
 
     # we will load these masks to weight subsequent refinement
     if nv == 2:

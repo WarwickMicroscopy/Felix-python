@@ -44,9 +44,6 @@ rc.path = os.getcwd()
 start = time.time()
 latest_commit_id = px.get_git()
 rc.iter_count = 0  # initialise iteration count
-# a small number
-eps = 1e-10
-
 # outputs
 print("-----------------------------------------------------------------")
 print(f"felixrefine:  version {latest_commit_id[:8]}")
@@ -496,7 +493,7 @@ if 'S' not in rc.refine_mode:
                                      U[0, 1], U[0, 2], U[1, 2]])
             anisotypes = [23, 24, 25, 26, 27, 28]
             for param, t in zip(aniso_params, anisotypes):
-                if abs(param) > eps:
+                if abs(param) > rc.eps_param:
                     rc.refined_variable.append(param)
                     rc.refined_variable_type.append(t)
                     rc.refined_variable_scale.append(fu.delta[t])
@@ -595,7 +592,7 @@ if 'S' not in rc.refine_mode:
     rc.refined_variable_scale = np.array(rc.refined_variable_scale)
     rc.refined_variable_atom = np.array(rc.atom_refine_flag[:rc.n_variables])
 
-    rc.n_correlations = 1 + rc.n_variables * (rc.n_variables - 1) // 2
+    rc.n_correlations = rc.n_variables * (rc.n_variables - 1) // 2
     d = 2*rc.image_radius
     cbed.lacbed_mask = np.zeros([rc.n_variables, d, d, rc.n_out],
                                 dtype=np.float64)
