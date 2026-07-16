@@ -117,7 +117,7 @@ print_flag                = 0
 debug                     = 0
 
 # Refinement specific flags
-refine_mode               = 'B'
+refine_mode               = 'X,C'
 refine_method             = 0
 refinement_scale          = 0.05
 correlation_type          = 2

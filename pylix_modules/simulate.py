@@ -1069,32 +1069,45 @@ def correlations(xtal, basis, cell, hkl, bloch, cbed, rc):
         # single signature output to show we're making progress
         print_sig_pattern(i, 0, cbed, bloch, basis, rc)  # i=variable, j=pattern
 
-    # Fisher matrix approach.  We normalise each difference image to
-    # be a unit vector and we take these to be S = dI/dp
-    # To improve refinement of variable i we want to find regions
-    # that have high values of dI/dp for variable i and low values
-    # for other variables.  So for variable i vs j we want a mask where
-    # we emphasise large positive values of di_dj = abs(S[i])-abs(S[j]).
-    mag = np.sqrt(np.sum(cbed.lacbed_sig**2, axis=(1, 2), keepdims=True))
-    S = cbed.lacbed_sig / mag
-    # std = np.std(cbed.lacbed_sig, axis=(1, 2), keepdims=True)
-    # S = cbed.lacbed_sig / std
+    # Fisher-style parameter-identifiability signatures:
+    # S = dI/dp, normalized per variable and per output pattern over (x, y)
+    # using RMS (no mean subtraction, derivative sign preserved).
+    eps = np.finfo(np.float64).eps
+    rms = np.sqrt(np.mean(cbed.lacbed_sig**2, axis=(1, 2), keepdims=True))
+    S = np.divide(
+        cbed.lacbed_sig,
+        np.where(rms > eps, rms, 1.0),
+        out=np.zeros_like(cbed.lacbed_sig),
+        where=rms > eps,
+    )
 
-    # correlation between parameters x and y is rho = (dI/dp)[x] . (dI/dp)[y]
-    cbed.correlation_matrix = np.zeros([rc.n_correlations, rc.n_out],
-                                       dtype=np.float32)
-    k = 0
-    for i in range(nv):
-        for j in range(i+1, nv):
-            # correlation mask
-            abs_S = np.abs(S)
-            di_dj = abs_S[i] - abs_S[j]
-            cbed.lacbed_mask_i[k] = di_dj * (di_dj > 0)  # take only +ve values
-            cbed.lacbed_mask_j[k] = -di_dj * (di_dj < 0)  # take only -ve values
-            # dot product correlation
-            dot = S[i] * S[j]
-            cbed.correlation_matrix[k] = np.sum(dot, axis=(0, 1))
-            k += 1
+    # pair bookkeeping: one row per parameter pair
+    i_pair, j_pair = np.triu_indices(nv, k=1)
+    n_pairs = i_pair.size
+    cbed.correlation_pairs = np.column_stack((i_pair, j_pair)).astype(np.int32)
+
+    # cosine similarity per output pattern:
+    # rho_ij(k) = sum_xy(S_i * S_j) / sqrt(sum_xy(S_i^2) * sum_xy(S_j^2))
+    Si = S[i_pair]  # [n_pairs, imgX, imgY, n_out]
+    Sj = S[j_pair]
+    num = np.sum(Si * Sj, axis=(1, 2))
+    den = np.sqrt(np.sum(Si**2, axis=(1, 2)) * np.sum(Sj**2, axis=(1, 2)))
+
+    cbed.correlation_matrix = np.divide(
+        num,
+        np.where(den > eps, den, 1.0),
+        out=np.zeros_like(num, dtype=np.float64),
+        where=den > eps,
+    ).astype(np.float32)
+    cbed.correlation_matrix = np.clip(cbed.correlation_matrix, -1.0, 1.0)
+
+    # masks for pair-discriminating weighting (magnitude-only on purpose):
+    # positive region for i mask and negative region for j mask.
+    abs_S = np.abs(S)
+    di_dj = abs_S[i_pair] - abs_S[j_pair]  # [n_pairs, imgX, imgY, n_out]
+    cbed.lacbed_mask_i[:n_pairs] = np.where(di_dj > 0, di_dj, 0.0)
+    cbed.lacbed_mask_j[:n_pairs] = np.where(di_dj < 0, -di_dj, 0.0)
+
     # we will load these masks to weight subsequent refinement
     if nv == 2:
         save_masks(cbed, xtal, bloch, rc)
