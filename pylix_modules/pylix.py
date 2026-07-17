@@ -1,7 +1,6 @@
 import ast
 import re
 import sympy as sp
-import subprocess
 import numpy as np
 from scipy.constants import c
 from scipy.linalg import eig, solve
@@ -11,6 +10,9 @@ import struct
 from pylix_modules import simulate as sim  # simulation control and output
 from pylix_modules import pylix_dicts as fu
 import os
+import sys
+import shutil
+import subprocess
 import math
 # import matplotlib.pyplot as plt
 
@@ -2393,14 +2395,43 @@ def convex(x, y, dy):
 
 
 def get_git():
+    # Search PATH first (works on Linux, macOS, and Windows when PATH is correct)
+    git_exe = shutil.which('git')
+
+    # If not on PATH, try common install locations per platform
+    if git_exe is None:
+        if sys.platform == 'win32':
+            candidates = [
+                r'C:\Program Files\Git\cmd\git.exe',
+                r'C:\Program Files (x86)\Git\cmd\git.exe',
+                os.path.expandvars(r'%LOCALAPPDATA%\Programs\Git\cmd\git.exe'),
+            ]
+        elif sys.platform == 'darwin':
+            candidates = [
+                '/usr/bin/git',
+                '/usr/local/bin/git',
+                '/opt/homebrew/bin/git',  # Apple Silicon Homebrew
+            ]
+        else:  # Linux and other Unix
+            candidates = [
+                '/usr/bin/git',
+                '/usr/local/bin/git',
+            ]
+        git_exe = next((p for p in candidates if os.path.isfile(p)), None)
+
+    if git_exe is None:
+        return 'unknown'
+
     try:
-        # Run the git command to get the latest commit ID
-        commit_id = subprocess.check_output(['git', 'rev-parse', 'HEAD']
-                                            ).strip().decode('utf-8')
-        return commit_id
-    except subprocess.CalledProcessError as e:
-        print(f"Error retrieving commit ID: {e}")
-        return None
+        repo_dir = os.path.dirname(os.path.abspath(__file__))
+        commit_id = subprocess.check_output(
+            [git_exe, 'rev-parse', 'HEAD'],
+            cwd=repo_dir,
+            stderr=subprocess.DEVNULL
+        ).strip().decode('utf-8')
+    except Exception:
+        commit_id = 'unknown'
+    return commit_id
 
 
 def hkl_string(hkl):
