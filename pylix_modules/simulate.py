@@ -27,10 +27,133 @@ from matplotlib.patheffects import withStroke
 from matplotlib.ticker import PercentFormatter
 import time
 import os
+from concurrent.futures import ProcessPoolExecutor
+from scipy.linalg import eig, solve
 from pylix_modules import pylix as px
 from pylix_modules import pylix_dicts as fu
 # a small number
 eps = 1e-10
+
+# ---------------------------------------------------------------------------
+# Parallel Bloch-wave pixel worker
+# ---------------------------------------------------------------------------
+# Each worker process receives shared read-only Bloch data once via the
+# ProcessPoolExecutor initializer, stored here at module level.
+_worker_shared = {}
+
+
+def _init_worker(shared_data):
+    """
+    ProcessPoolExecutor initializer.
+    Stores read-only Bloch/run-control data in each worker process so that it
+    does not need to be pickled and sent with every individual row task.
+    Called once per worker process at pool start-up.
+    """
+    global _worker_shared
+    _worker_shared = shared_data
+
+
+def _pixel_row_worker(row_args):
+    """
+    Compute Bloch-wave intensities for every pixel in one image row (fixed
+    pix_x).  All mutable state is local; no shared Bloch object is touched.
+
+    This function inlines px.strong_beams -> px.blochwave -> px.wave_functions
+    so that each worker process is entirely self-contained.  Any future
+    changes to those routines in pylix.py should be mirrored here.
+
+    Parameters
+    ----------
+    row_args : tuple
+        (s_g_row, k_dot_n_row)
+        s_g_row     : ndarray, shape (n_pix, n_hkl)  deviation parameters
+        k_dot_n_row : ndarray, shape (n_pix,)        k.n_hat for each pixel
+
+    Returns
+    -------
+    row_intensity : ndarray, shape (n_pix, n_thickness, n_out)
+        Diffracted intensities for every pixel in the row.
+    """
+    s_g_row, k_dot_n_row = row_args
+
+    # Unpack shared read-only data (set once per process by _init_worker)
+    ug_matrix        = _worker_shared['ug_matrix']
+    g_dot_norm       = _worker_shared['g_dot_norm']
+    hkl_output       = _worker_shared['hkl_output']
+    big_k_mag        = _worker_shared['big_k_mag']
+    thickness        = _worker_shared['thickness']
+    min_strong_beams = _worker_shared['min_strong_beams']
+    n_hkl            = _worker_shared['n_hkl']
+
+    n_pix       = s_g_row.shape[0]
+    n_out       = len(hkl_output)
+    n_thickness = len(thickness)
+
+    row_intensity = np.zeros((n_pix, n_thickness, n_out))
+
+    # Column 0 of ug_matrix gives Ug for g=000 (perturbation reference)
+    u_g_col0 = np.abs(ug_matrix[:, 0])
+
+    for pix_y in range(n_pix):
+        s_g_pix     = s_g_row[pix_y]      # shape (n_hkl,)
+        k_dot_n_pix = k_dot_n_row[pix_y]  # scalar
+
+        # ---- strong_beams (mirrors px.strong_beams) -------------------------
+        pert = np.divide(u_g_col0, np.abs(s_g_pix),
+                         out=np.full_like(s_g_pix, 100.0),
+                         where=s_g_pix != 0)
+        max_sg = 0.001
+        strong = np.zeros(n_hkl, dtype=int)
+        while np.sum(strong) < min_strong_beams:
+            min_pert_strong = 0.025 / max_sg
+            strong = np.where(
+                (np.abs(s_g_pix) < max_sg) | (pert >= min_pert_strong), 1, 0)
+            max_sg += 0.001
+        strong_beam = np.flatnonzero(strong)
+
+        # ---- blochwave (mirrors px.blochwave) --------------------------------
+        strong_new          = np.setdiff1d(strong_beam, hkl_output)
+        strong_beam_indices = np.concatenate((hkl_output, strong_new))
+        n_beams             = len(strong_beam_indices)
+
+        # Reduced Ug matrix for the strong-beam subset
+        beam_proj = np.zeros((n_beams, n_hkl), dtype=np.complex128)
+        beam_proj[np.arange(n_beams), strong_beam_indices] = 1.0 + 0j
+        ug_sg = beam_proj @ ug_matrix @ beam_proj.T
+
+        # Off-diagonal: Ug/2K scaling (Spence 1990 structure matrix)
+        ug_sg = 2.0 * np.pi**2 * ug_sg / big_k_mag
+        # Diagonal: deviation parameters Sg
+        ug_sg[np.arange(n_beams), np.arange(n_beams)] = (
+            s_g_pix[strong_beam_indices])
+
+        # Surface-normal correction
+        norm_fac      = np.sqrt(1.0 + g_dot_norm[strong_beam_indices]
+                                / k_dot_n_pix)
+        structure_mat = ug_sg / np.outer(norm_fac, norm_fac)
+
+        gamma, eigenvecs = eig(structure_mat)
+
+        # ---- wave_functions (mirrors px.wave_functions) ---------------------
+        # Incident wave: 000 beam only
+        psi0    = np.zeros(n_beams, dtype=np.complex128)
+        psi0[0] = 1.0 + 0j
+
+        # norm_fac is identical to inv_m_ii - reuse to avoid recomputation
+        inv_m_ii = norm_fac
+        m_ii     = 1.0 / inv_m_ii
+
+        u     = inv_m_ii * psi0
+        y     = solve(eigenvecs, u)
+        phase = np.exp(1j * np.outer(gamma, thickness))
+        z     = eigenvecs @ (y[:, None] * phase)
+        wave_funct = (m_ii[:, None] * z).T  # shape (n_thickness, n_beams)
+
+        row_intensity[pix_y] = np.abs(wave_funct[:, :n_out])**2
+
+    return row_intensity
+# ---------------------------------------------------------------------------
+
 
 def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
 
@@ -248,23 +371,49 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
         print(bloch.hkl_output[:15])
 
     # = = = = = = = = = = = = = = = = = = = = = = = =
-    # pixel by pixel calculations from here
-    for pix_x in range(2*rc.image_radius):
-        # progess
-        print(f"\rBloch wave calculation... {50*pix_x/rc.image_radius:.0f}%", end="")
+    # pixel by pixel calculations - parallelised over rows
+    #
+    # Strategy: one task per image row (pix_x).  Shared read-only arrays are
+    # sent to each worker process once at pool start-up via _init_worker.
+    # Per-row slices of s_g and k_dot_n are the only per-task data.
+    # This avoids the GIL and keeps inter-process data transfer minimal.
+    #
+    # Note for Spyder / Windows users: multiprocessing requires the entry-
+    # point script (felixrefine.py) to be protected with an
+    #   if __name__ == '__main__':
+    # guard, or the script must be run from an external terminal rather than
+    # the Spyder console.  See Python docs on multiprocessing on Windows.
 
-        for pix_y in range(2*rc.image_radius):
-            bloch.s_g_pix = np.squeeze(bloch.s_g[pix_x, pix_y, :])
-            bloch.k_dot_n_pix = bloch.k_dot_n[pix_x, pix_y]
+    n_pix    = 2 * rc.image_radius
+    n_workers = min(os.cpu_count() or 1, n_pix)
 
-            # works for multiple thicknesses
-            px.wave_functions(bloch, rc)
+    # Read-only data shared across all workers (pickled once per process)
+    shared_data = {
+        'ug_matrix'       : bloch.ug_matrix,
+        'g_dot_norm'      : bloch.g_dot_norm,
+        'hkl_output'      : bloch.hkl_output,
+        'big_k_mag'       : bloch.big_k_mag,
+        'thickness'       : rc.thickness,
+        'min_strong_beams': rc.min_strong_beams,
+        'n_hkl'           : bloch.n_hkl,
+    }
 
-            intensity = np.abs(bloch.wave_function)**2
+    # Per-task arguments: one tuple per row, containing only small array slices
+    row_args = [(bloch.s_g[px_, :, :], bloch.k_dot_n[px_, :])
+                for px_ in range(n_pix)]
 
-            # Map diffracted intensity to required output g vectors
-            # note x and y swapped!
-            cbed.lacbed_sim[:, -pix_y, pix_x, :] = intensity[:, :len(bloch.hkl_output)]
+    with ProcessPoolExecutor(max_workers=n_workers,
+                             initializer=_init_worker,
+                             initargs=(shared_data,)) as executor:
+        for pix_x, row_intensity in enumerate(
+                executor.map(_pixel_row_worker, row_args)):
+            print(f"\rBloch wave calculation... {50*pix_x/rc.image_radius:.0f}%",
+                  end="")
+            # row_intensity shape: (n_pix, n_thickness, n_out)
+            # Assemble into cbed.lacbed_sim, preserving the original
+            # x/y swap: lacbed_sim[:, -pix_y, pix_x, :]
+            for pix_y in range(n_pix):
+                cbed.lacbed_sim[:, -pix_y, pix_x, :] = row_intensity[pix_y]
     # = = = = = = = = = = = = = = = = = = = = = = = =
 
     # timings
