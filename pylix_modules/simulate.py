@@ -27,7 +27,7 @@ from matplotlib.patheffects import withStroke
 from matplotlib.ticker import PercentFormatter
 import time
 import os
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from scipy.linalg import eig, solve
 from pylix_modules import pylix as px
 from pylix_modules import pylix_dicts as fu
@@ -384,7 +384,7 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     # guard, or the script must be run from an external terminal rather than
     # the Spyder console.  See Python docs on multiprocessing on Windows.
 
-    n_pix    = 2 * rc.image_radius
+    n_pix = 2 * rc.image_radius
     n_workers = min(os.cpu_count() or 1, n_pix)
 
     # Read-only data shared across all workers (pickled once per process)
@@ -399,21 +399,54 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     }
 
     # Per-task arguments: one tuple per row, containing only small array slices
-    row_args = [(bloch.s_g[px_, :, :], bloch.k_dot_n[px_, :])
-                for px_ in range(n_pix)]
+    intensity = np.zeros((n_pix, n_pix, rc.n_thickness, rc.n_out))
+    row_tasks = [
+        (bloch.s_g[pix_x, :, :], bloch.k_dot_n[pix_x, :])
+        for pix_x in range(n_pix)
+    ]
 
-    with ProcessPoolExecutor(max_workers=n_workers,
-                             initializer=_init_worker,
-                             initargs=(shared_data,)) as executor:
-        for pix_x, row_intensity in enumerate(
-                executor.map(_pixel_row_worker, row_args)):
-            print(f"\rBloch wave calculation... {50*pix_x/rc.image_radius:.0f}%",
-                  end="")
-            # row_intensity shape: (n_pix, n_thickness, n_out)
-            # Assemble into cbed.lacbed_sim, preserving the original
-            # x/y swap: lacbed_sim[:, -pix_y, pix_x, :]
-            for pix_y in range(n_pix):
-                cbed.lacbed_sim[:, -pix_y, pix_x, :] = row_intensity[pix_y]
+    pool = ProcessPoolExecutor(max_workers=n_workers,
+                               initializer=_init_worker,
+                               initargs=(shared_data,))
+    futures = {pool.submit(_pixel_row_worker, task): pix_x
+               for pix_x, task in enumerate(row_tasks)}
+    try:
+        for future in as_completed(futures):
+            pix_x = futures[future]
+            intensity[pix_x] = future.result()
+    except KeyboardInterrupt:
+        # Cancel any queued (not yet started) futures immediately
+        for f in futures:
+            f.cancel()
+        pool.shutdown(wait=False)
+        print("\n  Simulation interrupted by user.")
+        raise  # re-raise so Spyder/caller knows it was interrupted
+    else:
+        pool.shutdown(wait=True)
+
+    # Unpack intensity into cbed.lacbed_sim
+    # Shape: intensity[pix_x, pix_y, n_thickness, n_out]
+    # lacbed_sim[n_thickness, imgX, imgY, n_out] with image y-axis flipped
+    for pix_x in range(n_pix):
+        for pix_y in range(n_pix):
+            cbed.lacbed_sim[:, n_pix - 1 - pix_y, pix_x, :] = \
+                intensity[pix_x, pix_y, :, :]
+
+    # row_args = [(bloch.s_g[px_, :, :], bloch.k_dot_n[px_, :])
+    #             for px_ in range(n_pix)]
+
+    # with ProcessPoolExecutor(max_workers=n_workers,
+    #                          initializer=_init_worker,
+    #                          initargs=(shared_data,)) as executor:
+    #     for pix_x, row_intensity in enumerate(
+    #             executor.map(_pixel_row_worker, row_args)):
+    #         print(f"\rBloch wave calculation... {50*pix_x/rc.image_radius:.0f}%",
+    #               end="")
+    #         # row_intensity shape: (n_pix, n_thickness, n_out)
+    #         # Assemble into cbed.lacbed_sim, preserving the original
+    #         # x/y swap: lacbed_sim[:, -pix_y, pix_x, :]
+    #         for pix_y in range(n_pix):
+    #             cbed.lacbed_sim[:, -pix_y, pix_x, :] = row_intensity[pix_y]
     # = = = = = = = = = = = = = = = = = = = = = = = =
 
     # timings
