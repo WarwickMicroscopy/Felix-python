@@ -1347,8 +1347,11 @@ def deviation_parameter(bloch, rc):
 
 
 def strong_beams(bloch, rc):
-    # def strong_beams(s_g_pix, ug_matrix, min_strong_beams):
     """
+    *** Legacy subroutine, deprecated ***
+    Inlined into simulate._pixel_row_worker for CPU parallelisation.
+    Retained as a serial reference implementation for debugging.
+
     returns a list of strong beams according to their perturbation strength
     NB bloch.s_g_pix here is a 1D array of values for a given pixel,
     and is different to bloch.s_g which is for all pixels & g-vectors
@@ -1381,8 +1384,14 @@ def strong_beams(bloch, rc):
 
 
 def blochwave(bloch, rc):
-    # strong_beam_indices gives the index of a strong beam in the beam pool
-    # Use Sg and perturbation strength to define strong beams
+    """
+    *** Legacy subroutine, deprecated ***
+    Inlined into simulate._pixel_row_worker for CPU parallelisation.
+    Retained as a serial reference implementation for debugging.
+
+    strong_beam_indices gives the index of a strong beam in the beam pool
+    Use Sg and perturbation strength to define strong beams
+    """
     strong_beams(bloch, rc)
     # which ones are new (i.e. not already in the output list)
     strong_new = np.setdiff1d(bloch.strong_beam, bloch.hkl_output)
@@ -1428,10 +1437,15 @@ def blochwave(bloch, rc):
 
 
 def wave_functions(bloch, rc):
-    # calculates wave functions for a given thickness by calling the bloch
-    # subroutine to get the eigenvector matrices
-    # and evaluating for a range of thicknesses
+    """
+    *** Legacy subroutine, deprecated ***
+    Inlined into simulate._pixel_row_worker for CPU parallelisation.
+    Retained as a serial reference implementation for debugging.
 
+    calculates wave functions for a given thickness by calling the bloch
+    subroutine to get the eigenvector matrices
+    and evaluating for a range of thicknesses
+    """
     blochwave(bloch, rc)
     # calculate intensities
 
@@ -1466,7 +1480,7 @@ def wave_functions(bloch, rc):
 def weak_beams(s_g_pix, ug_matrix, ug_sg_matrix, strong_beam_list,
                min_weak_beams, big_k_mag):
     """
-    *** Legacy subroutine, not currently used ***
+    *** Legacy subroutine, deprecated ***
     Updates the Ug-Sg matrix usingweak beams according to their perturbation
     strength. We start with all non-strong beams in the list.
     We then raise the threshold perturbation strength until we have fewer than

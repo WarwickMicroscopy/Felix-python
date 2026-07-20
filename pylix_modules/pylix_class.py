@@ -138,7 +138,10 @@ class Cbed:
     lacbed_sim: NDArray[np.floating] | None = None  # simulation
     lacbed_expt_raw: NDArray[np.floating] | None = None  # experiment
     lacbed_expt: NDArray[np.floating] | None = None  # experiment, processed
-    # lacbed_expt_norm: NDArray[np.floating] | None = None  # normalised
+    # lacbed_grad gives gradient images for atomic coordinates
+    # axis 0 : coordinate direction (0=x, 1=y, 2=z)
+    # shape [3, n_refined_atoms, n_thickness, imgX, imgY, n_out]
+    lacbed_grad: NDArray[np.floating] | None = None
     lacbed_diff: NDArray[np.floating] | None = None  # difference sim:expt
     lacbed_ref: NDArray[np.floating] | None = None  # reference used for sig
     lacbed_sig: NDArray[np.floating] | None = None  # signature 

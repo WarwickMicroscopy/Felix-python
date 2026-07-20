@@ -28,8 +28,9 @@ from matplotlib.ticker import PercentFormatter
 import time
 import os
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from scipy.linalg import eig, solve
+from scipy.linalg import eig, solve, lu_factor
 from pylix_modules import pylix as px
+from pylix_modules import pylix_grad as pg
 from pylix_modules import pylix_dicts as fu
 # a small number
 eps = 1e-10
@@ -84,12 +85,19 @@ def _pixel_row_worker(row_args):
     thickness        = _worker_shared['thickness']
     min_strong_beams = _worker_shared['min_strong_beams']
     n_hkl            = _worker_shared['n_hkl']
+    compute_grad  = _worker_shared.get('compute_grad', False)
+    hkl_indices   = _worker_shared.get('hkl_indices', None)   # (n_hkl, 3) int
+    atom_ug_all   = _worker_shared.get('atom_ug', None)        # (n_atoms, n_hkl, n_hkl)
+    atomic_sites  = _worker_shared.get('atomic_sites', [])     # refined atom indices
 
     n_pix       = s_g_row.shape[0]
     n_out       = len(hkl_output)
     n_thickness = len(thickness)
-
     row_intensity = np.zeros((n_pix, n_thickness, n_out))
+
+    n_refined = len(atomic_sites)
+    row_grad  = (np.zeros((n_pix, n_thickness, 3, n_refined, n_out))
+                 if compute_grad else None)
 
     # Column 0 of ug_matrix gives Ug for g=000 (perturbation reference)
     u_g_col0 = np.abs(ug_matrix[:, 0])
@@ -128,8 +136,7 @@ def _pixel_row_worker(row_args):
             s_g_pix[strong_beam_indices])
 
         # Surface-normal correction
-        norm_fac      = np.sqrt(1.0 + g_dot_norm[strong_beam_indices]
-                                / k_dot_n_pix)
+        norm_fac = np.sqrt(1.0 + g_dot_norm[strong_beam_indices] / k_dot_n_pix)
         structure_mat = ug_sg / np.outer(norm_fac, norm_fac)
 
         gamma, eigenvecs = eig(structure_mat)
@@ -151,8 +158,47 @@ def _pixel_row_worker(row_args):
 
         row_intensity[pix_y] = np.abs(wave_funct[:, :n_out])**2
 
-    return row_intensity
-# ---------------------------------------------------------------------------
+        # Gradient dI/dx_alpha for each refined atom using the Tsai-Chan
+        # matrix-exponential derivative (Appendix A.4 of Dolomanov et al.).
+        # lu_piv is factorised once per pixel and reused across all atoms
+        # and all three coordinate directions.
+        if compute_grad:
+            lu_piv = lu_factor(eigenvecs)  # (n_beams, n_beams), once per pixel
+
+            idx    = strong_beam_indices                          # (n_beams,)
+            h_sub  = hkl_indices[idx]                            # (n_beams, 3)
+            h_diff = h_sub[:, None, :] - h_sub[None, :, :]      # (n_beams, n_beams, 3)
+
+            # Obliquity scaling applied to off-diagonal A elements
+            # matches the 2*pi^2/big_k_mag * m_ii * m_jj factor in blochwave
+            obliq = np.outer(m_ii, m_ii) * 2.0 * np.pi**2 / big_k_mag
+
+            for j_idx, atom_idx in enumerate(atomic_sites):
+                # Per-atom Ug for the strong-beam subset: (n_beams, n_beams)
+                Ug_j = atom_ug_all[atom_idx][np.ix_(idx, idx)]
+                base = Ug_j * obliq  # (n_beams, n_beams)
+
+                for alpha in range(3):
+                    # dA/dp for fractional coordinate x_alpha of atom j.
+                    # Phase convention exp(-i g.r) gives factor -2*pi*i*h_alpha.
+                    # Off-diagonal only; diagonal (Sg) is coordinate-independent.
+                    dA_dp = -2j * np.pi * h_diff[:, :, alpha] * base
+
+                    # pg.dI_dp_pixel returns (n_thickness, n_out)
+                    dI = pg.dI_dp_pixel(
+                        eigenvecs  = eigenvecs,
+                        gamma      = gamma,
+                        y          = y,
+                        m_ii       = m_ii,
+                        dA_dp      = dA_dp,
+                        thickness  = thickness,
+                        wave_funct = wave_funct,
+                        n_out      = n_out,
+                        lu_piv     = lu_piv,   # reuse LU factorisation
+                    )
+                    row_grad[pix_y, :, alpha, j_idx, :] = dI
+
+    return row_intensity, row_grad
 
 
 def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
@@ -346,6 +392,9 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
         if rc.correlation_type == 6 and 'X' not in rc.refine_mode:
             px.read_mask(cbed, bloch, xtal, rc)
             print("    Weighting masks loaded")
+
+    atom_ug = pg.compute_atom_ug_contributions(cell, bloch, xtal)
+
     if rc.debug > 0:
         np.set_printoptions(precision=5, suppress=True)
         print(100*bloch.ug_matrix[:5, :5])
@@ -360,10 +409,12 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     # Dot product of k with surface normal, [image diameter, image diameter]
     bloch.k_dot_n = np.tensordot(bloch.tilted_k, xtal.norm_dir_m,
                                  axes=([2], [0]))
-    # # reset output container
-    # cbed.lacbed_sim = np.zeros([rc.n_thickness, 2*rc.image_radius,
-    #                            2*rc.image_radius, len(bloch.hkl_output)],
-    #                            dtype=float)
+
+    # set up gradient images
+    n_refined = len(rc.atomic_sites)
+    cbed.lacbed_grad = np.zeros(
+        [3, n_refined, rc.n_thickness, 2*rc.image_radius, 2*rc.image_radius,
+         len(bloch.hkl_output)], dtype=float)
     print("Bloch wave calculation...", end=' ')
     if rc.debug > 0:
         print("")
@@ -386,6 +437,9 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
 
     n_pix = 2 * rc.image_radius
     n_workers = min(os.cpu_count() or 1, n_pix)
+    
+    # gradient calculation for coord refinement
+    compute_grad = 'B' in rc.refine_mode
 
     # Read-only data shared across all workers (pickled once per process)
     shared_data = {
@@ -396,14 +450,18 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
         'thickness'       : rc.thickness,
         'min_strong_beams': rc.min_strong_beams,
         'n_hkl'           : bloch.n_hkl,
+        'hkl_indices':      bloch.hkl_indices,   # shape (n_hkl,3)
+        'atom_ug':          atom_ug,  # per-atom U_g, [n_atoms, n_hkl, n_hkl]
+        'atomic_sites':     rc.atomic_sites,
     }
 
     # Per-task arguments: one tuple per row, containing only small array slices
     intensity = np.zeros((n_pix, n_pix, rc.n_thickness, rc.n_out))
-    row_tasks = [
-        (bloch.s_g[pix_x, :, :], bloch.k_dot_n[pix_x, :])
-        for pix_x in range(n_pix)
-    ]
+    grad = (np.zeros((n_pix, n_pix, rc.n_thickness, 3, n_refined, rc.n_out))
+            if compute_grad else None)
+
+    row_tasks = [(bloch.s_g[pix_x, :, :], bloch.k_dot_n[pix_x, :])
+                 for pix_x in range(n_pix)]
 
     pool = ProcessPoolExecutor(max_workers=n_workers,
                                initializer=_init_worker,
@@ -413,14 +471,16 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     try:
         for future in as_completed(futures):
             pix_x = futures[future]
-            intensity[pix_x] = future.result()
+            row_intensity, row_grad = future.result()
+            intensity[pix_x] = row_intensity
+            if compute_grad and row_grad is not None:
+                grad[pix_x] = row_grad
     except KeyboardInterrupt:
-        # Cancel any queued (not yet started) futures immediately
         for f in futures:
             f.cancel()
         pool.shutdown(wait=False)
         print("\n  Simulation interrupted by user.")
-        raise  # re-raise so Spyder/caller knows it was interrupted
+        raise
     else:
         pool.shutdown(wait=True)
 
@@ -432,21 +492,15 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
             cbed.lacbed_sim[:, n_pix - 1 - pix_y, pix_x, :] = \
                 intensity[pix_x, pix_y, :, :]
 
-    # row_args = [(bloch.s_g[px_, :, :], bloch.k_dot_n[px_, :])
-    #             for px_ in range(n_pix)]
-
-    # with ProcessPoolExecutor(max_workers=n_workers,
-    #                          initializer=_init_worker,
-    #                          initargs=(shared_data,)) as executor:
-    #     for pix_x, row_intensity in enumerate(
-    #             executor.map(_pixel_row_worker, row_args)):
-    #         print(f"\rBloch wave calculation... {50*pix_x/rc.image_radius:.0f}%",
-    #               end="")
-    #         # row_intensity shape: (n_pix, n_thickness, n_out)
-    #         # Assemble into cbed.lacbed_sim, preserving the original
-    #         # x/y swap: lacbed_sim[:, -pix_y, pix_x, :]
-    #         for pix_y in range(n_pix):
-    #             cbed.lacbed_sim[:, -pix_y, pix_x, :] = row_intensity[pix_y]
+    # assemble cbed.lacbed_grad from grad accumulator.
+    # grad axes:        (pix_x, pix_y,   n_thickness, 3,     n_refined, n_out)
+    # lacbed_grad axes: (3,     n_refined, n_thickness, imgX,  imgY,     n_out)
+    # imgX = n_pix - 1 - pix_y  =>  flip axis 1 of grad
+    # imgY = pix_x               =>  axis 0 of grad becomes axis 4
+    # Achieved in one vectorised step: flip then transpose (3,4,2,1,0,5)
+    if compute_grad and grad is not None:
+        cbed.lacbed_grad[:] = grad[:, ::-1, :, :, :, :].transpose(3, 4, 2, 1, 0, 5)
+        print("   Gradient images calculated")
     # = = = = = = = = = = = = = = = = = = = = = = = =
 
     # timings
