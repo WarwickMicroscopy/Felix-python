@@ -450,9 +450,10 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
         'thickness'       : rc.thickness,
         'min_strong_beams': rc.min_strong_beams,
         'n_hkl'           : bloch.n_hkl,
-        'hkl_indices':      bloch.hkl_indices,   # shape (n_hkl,3)
-        'atom_ug':          atom_ug,  # per-atom U_g, [n_atoms, n_hkl, n_hkl]
-        'atomic_sites':     rc.atomic_sites,
+        'hkl_indices'     : bloch.hkl_indices,   # shape (n_hkl,3)
+        'atom_ug'         : atom_ug,  # per-atom U_g, [n_atoms, n_hkl, n_hkl]
+        'atomic_sites'    : rc.atomic_sites,
+        'compute_grad'    : compute_grad,
     }
 
     # Per-task arguments: one tuple per row, containing only small array slices
