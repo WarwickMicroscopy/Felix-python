@@ -164,48 +164,62 @@ def f_matrix(gamma, t, tol=1e-10):
 # 3.  Pixel-level gradient  (standalone, for testing / serial use)
 # ---------------------------------------------------------------------------
 
-def dI_dp_pixel(eigenvecs, gamma, y, m_ii, dA_dp, thickness, wave_funct,
-                n_out, lu_piv=None):
+def dI_dp_pixel(eigenvecs, gamma, y, m_ii, dA_dp, thickness,
+                wave_funct, n_out, lu_piv=None):
     """
-    Analytical ∂I/∂p for all thicknesses at one pixel.
-
-    Reuses the eigensolution already computed in the forward pass.
-    G = V⁻¹(∂A/∂p)V is thickness-independent and computed once;
-    only the F matrix (and hence X_p) varies with thickness.
+    Analytical gradient dI/dp for one pixel, one parameter.
 
     Parameters
     ----------
-    eigenvecs  : (n_beams, n_beams) complex   V from forward pass
-    gamma      : (n_beams,) complex            eigenvalues
-    y          : (n_beams,) complex            V⁻¹ M⁻¹ ψ₀ from forward pass
-    m_ii       : (n_beams,) float              m_gi = 1/norm_fac
-    dA_dp      : (n_beams, n_beams) complex    ∂A/∂p  (diagonal zero)
-    thickness  : (n_thickness,) float
-    wave_funct : (n_thickness, n_beams) complex  from forward pass
-    n_out      : int
-    lu_piv     : tuple or None
-                 Pre-computed lu_factor(eigenvecs).  Supply when calling for
-                 multiple parameters at the same pixel to avoid refactorising.
+    eigenvecs : (n_beams, n_beams) complex   — eigenvector matrix V
+    gamma     : (n_beams,) complex           — eigenvalues of structure matrix
+    y         : (n_beams,) complex           — V^-1 M^-1 psi_0
+    m_ii      : (n_beams,) float             — 1/norm_fac (obliquity factors)
+    dA_dp     : (n_beams, n_beams) complex   — derivative of structure matrix
+    thickness : (n_t,) float                 — thickness values
+    wave_funct: (n_t, n_beams) complex       — wave functions (from forward pass)
+    n_out     : int                          — number of output beams
+    lu_piv    : result of lu_factor(eigenvecs), optional
+                If provided, reuses the LU factorisation already computed
+                in the calling worker (saves ~N^3/3 work per parameter).
 
     Returns
     -------
-    dI : (n_thickness, n_out) float
+    dI : (n_t, n_out) float   — dI/dp for each thickness and output beam
     """
+    from scipy.linalg import lu_factor, lu_solve
+
+    n_t     = len(thickness)
+    n_beams = len(gamma)
+
+    # LU factorisation of V — reuse if already computed by caller
     if lu_piv is None:
         lu_piv = lu_factor(eigenvecs)
 
-    # G = V⁻¹ (∂A/∂p) V  — thickness-independent
-    G = lu_solve(lu_piv, dA_dp @ eigenvecs)              # (n_beams, n_beams)
+    # G = V^-1 (dA/dp) V  — uses lu_solve for efficiency
+    # shape: (n_beams, n_beams)
+    G = lu_solve(lu_piv, dA_dp @ eigenvecs)
 
-    n_thickness = len(thickness)
-    dI = np.zeros((n_thickness, n_out))
+    dI = np.zeros((n_t, n_out))
+    s  = 1j * thickness                           # (n_t,) scalar per thickness
 
-    for t_idx, t in enumerate(thickness):
-        F    = f_matrix(gamma, t)                        # (n_beams, n_beams)
-        Xpy  = (G * F) @ y                              # X_p y
-        dpsi = m_ii * (eigenvecs @ Xpy)                 # M V X_p y
-        dI[t_idx] = 2.0 * np.real(
-            np.conj(wave_funct[t_idx, :n_out]) * dpsi[:n_out])
+    for t_idx in range(n_t):
+        # F matrix (Tsai-Chan): F_ij = (exp(d_i*s) - exp(d_j*s))/(d_i - d_j)
+        #                        F_ii = s * exp(d_i*s)
+        F = f_matrix(gamma, s[t_idx])             # (n_beams, n_beams)
+
+        # X_p = G hadamard F
+        Xp = G * F                                 # (n_beams, n_beams)
+
+        # dpsi/dp = M (V Xp y)   where M = diag(m_ii)
+        # V Xp y:
+        VXpy = eigenvecs @ (Xp @ y)               # (n_beams,)
+        dpsi = m_ii * VXpy                         # (n_beams,)
+
+        # dI/dp = 2 Re(psi_g* dpsi_g) for each output beam g
+        psi_g  = wave_funct[t_idx, :n_out]         # (n_out,)
+        dpsi_g = dpsi[:n_out]                      # (n_out,)
+        dI[t_idx] = 2.0 * np.real(np.conj(psi_g) * dpsi_g)
 
     return dI
 

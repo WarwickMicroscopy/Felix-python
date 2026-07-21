@@ -670,6 +670,7 @@ if __name__ == '__main__':
     # %% read in experimental images and start refinement
     os.chdir(rc.path)
     if 'S' not in rc.refine_mode and 'X' not in rc.refine_mode:
+        a = rc.b
         cbed.lacbed_expt_raw = np.zeros([2*rc.image_radius, 2*rc.image_radius,
                                          rc.n_out])
         # get the list of available images

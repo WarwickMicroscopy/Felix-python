@@ -396,6 +396,10 @@ def unique_atom_positions(xtal, basis, cell, rc):
                                    for na in cell.atom_name])
 
     cell.n_atoms = len(cell.atom_name)
+    # basis atom index for each cell atom
+    cell.basis_atom_index = np.array(i) % basis.n_atoms
+    # symop index for each cell atom
+    cell.symop_index = np.array(i) // basis.n_atoms
 
     if rc.scatter_factor_method == 4:
         cell.kappa = all_kappa[i]

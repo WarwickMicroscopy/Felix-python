@@ -289,6 +289,10 @@ class Cell:
     u_aniso_m: NDArray[np.floating] | None = None  # in microscope frame
     u_iso: NDArray[np.floating] | None = None
     B_iso: NDArray[np.floating] | None = None
+    # basis_atom_index[k] = which basis atom generated cell atom k
+    basis_atom_index: NDArray[np.integer] | None = None
+    # symop_index[k] = which symmetry operation was applied
+    symop_index:      NDArray[np.integer] | None = None
     atom_delta: NDArray[np.floating] | None = None
     f_g: NDArray[np.complex128] | None = None
     # kappa model
