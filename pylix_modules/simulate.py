@@ -34,13 +34,13 @@ from pylix_modules import pylix_grad as pg
 from pylix_modules import pylix_dicts as fu
 # a small number
 eps = 1e-10
+_worker_shared = {}
 
 # ---------------------------------------------------------------------------
 # Parallel Bloch-wave pixel worker
 # ---------------------------------------------------------------------------
 # Each worker process receives shared read-only Bloch data once via the
 # ProcessPoolExecutor initializer, stored here at module level.
-_worker_shared = {}
 
 
 def _init_worker(shared_data):
@@ -78,32 +78,32 @@ def _pixel_row_worker(row_args):
     s_g_row, k_dot_n_row = row_args
 
     # Unpack shared read-only data (set once per process by _init_worker)
-    ug_matrix        = _worker_shared['ug_matrix']
-    g_dot_norm       = _worker_shared['g_dot_norm']
-    hkl_output       = _worker_shared['hkl_output']
-    big_k_mag        = _worker_shared['big_k_mag']
-    thickness        = _worker_shared['thickness']
+    ug_matrix = _worker_shared['ug_matrix']
+    g_dot_norm = _worker_shared['g_dot_norm']
+    hkl_output = _worker_shared['hkl_output']
+    big_k_mag = _worker_shared['big_k_mag']
+    thickness = _worker_shared['thickness']
     min_strong_beams = _worker_shared['min_strong_beams']
-    n_hkl            = _worker_shared['n_hkl']
-    compute_grad  = _worker_shared.get('compute_grad', False)
-    hkl_indices   = _worker_shared.get('hkl_indices', None)   # (n_hkl, 3) int
-    atom_ug_all   = _worker_shared.get('atom_ug', None)        # (n_atoms, n_hkl, n_hkl)
-    atomic_sites  = _worker_shared.get('atomic_sites', [])     # refined atom indices
+    n_hkl = _worker_shared['n_hkl']
+    hkl_indices = _worker_shared.get('hkl_indices', None)   # (n_hkl, 3) int
+    atom_ug_all = _worker_shared.get('atom_ug', None)  # (n_atoms, n_hkl, n_hkl)
+    atomic_sites = _worker_shared.get('atomic_sites', [])  # refined atom indices
+    compute_grad = _worker_shared['compute_grad']
 
-    n_pix       = s_g_row.shape[0]
-    n_out       = len(hkl_output)
+    n_pix = s_g_row.shape[0]
+    n_out = len(hkl_output)
     n_thickness = len(thickness)
     row_intensity = np.zeros((n_pix, n_thickness, n_out))
 
     n_refined = len(atomic_sites)
-    row_grad  = (np.zeros((n_pix, n_thickness, 3, n_refined, n_out))
-                 if compute_grad else None)
+    row_grad = (np.zeros((n_pix, n_thickness, 3, n_refined, n_out))
+                if compute_grad else None)
 
     # Column 0 of ug_matrix gives Ug for g=000 (perturbation reference)
     u_g_col0 = np.abs(ug_matrix[:, 0])
 
     for pix_y in range(n_pix):
-        s_g_pix     = s_g_row[pix_y]      # shape (n_hkl,)
+        s_g_pix = s_g_row[pix_y]      # shape (n_hkl,)
         k_dot_n_pix = k_dot_n_row[pix_y]  # scalar
 
         # ---- strong_beams (mirrors px.strong_beams) -------------------------
@@ -119,10 +119,10 @@ def _pixel_row_worker(row_args):
             max_sg += 0.001
         strong_beam = np.flatnonzero(strong)
 
-        # ---- blochwave (mirrors px.blochwave) --------------------------------
-        strong_new          = np.setdiff1d(strong_beam, hkl_output)
+        # ---- blochwave (mirrors px.blochwave) -------------------------------
+        strong_new = np.setdiff1d(strong_beam, hkl_output)
         strong_beam_indices = np.concatenate((hkl_output, strong_new))
-        n_beams             = len(strong_beam_indices)
+        n_beams = len(strong_beam_indices)
 
         # Reduced Ug matrix for the strong-beam subset
         beam_proj = np.zeros((n_beams, n_hkl), dtype=np.complex128)
@@ -143,17 +143,17 @@ def _pixel_row_worker(row_args):
 
         # ---- wave_functions (mirrors px.wave_functions) ---------------------
         # Incident wave: 000 beam only
-        psi0    = np.zeros(n_beams, dtype=np.complex128)
+        psi0 = np.zeros(n_beams, dtype=np.complex128)
         psi0[0] = 1.0 + 0j
 
         # norm_fac is identical to inv_m_ii - reuse to avoid recomputation
         inv_m_ii = norm_fac
-        m_ii     = 1.0 / inv_m_ii
+        m_ii = 1.0 / inv_m_ii
 
-        u     = inv_m_ii * psi0
-        y     = solve(eigenvecs, u)
+        u = inv_m_ii * psi0
+        y = solve(eigenvecs, u)
         phase = np.exp(1j * np.outer(gamma, thickness))
-        z     = eigenvecs @ (y[:, None] * phase)
+        z = eigenvecs @ (y[:, None] * phase)
         wave_funct = (m_ii[:, None] * z).T  # shape (n_thickness, n_beams)
 
         row_intensity[pix_y] = np.abs(wave_funct[:, :n_out])**2
@@ -165,9 +165,9 @@ def _pixel_row_worker(row_args):
         if compute_grad:
             lu_piv = lu_factor(eigenvecs)  # (n_beams, n_beams), once per pixel
 
-            idx    = strong_beam_indices                          # (n_beams,)
-            h_sub  = hkl_indices[idx]                            # (n_beams, 3)
-            h_diff = h_sub[:, None, :] - h_sub[None, :, :]      # (n_beams, n_beams, 3)
+            idx = strong_beam_indices  # [n_beams]
+            h_sub = hkl_indices[idx]  # (n_beams, 3)
+            h_diff = h_sub[:, None, :] - h_sub[None, :, :]  # (n_beams, n_beams, 3)
 
             # Obliquity scaling applied to off-diagonal A elements
             # matches the 2*pi^2/big_k_mag * m_ii * m_jj factor in blochwave
@@ -180,21 +180,21 @@ def _pixel_row_worker(row_args):
 
                 for alpha in range(3):
                     # dA/dp for fractional coordinate x_alpha of atom j.
-                    # Phase convention exp(-i g.r) gives factor -2*pi*i*h_alpha.
-                    # Off-diagonal only; diagonal (Sg) is coordinate-independent.
+                    # Phase convention exp(-i g.r) gives factor -2*pi*i*h_alpha
+                    # Off-diagonal only; diagonal Sg is coordinate-independent
                     dA_dp = -2j * np.pi * h_diff[:, :, alpha] * base
 
                     # pg.dI_dp_pixel returns (n_thickness, n_out)
                     dI = pg.dI_dp_pixel(
-                        eigenvecs  = eigenvecs,
-                        gamma      = gamma,
-                        y          = y,
-                        m_ii       = m_ii,
-                        dA_dp      = dA_dp,
-                        thickness  = thickness,
-                        wave_funct = wave_funct,
-                        n_out      = n_out,
-                        lu_piv     = lu_piv,   # reuse LU factorisation
+                        eigenvecs=eigenvecs,
+                        gamma=gamma,
+                        y=y,
+                        m_ii=m_ii,
+                        dA_dp=dA_dp,
+                        thickness=thickness,
+                        wave_funct=wave_funct,
+                        n_out=n_out,
+                        lu_piv=lu_piv,   # reuse LU factorisation
                     )
                     row_grad[pix_y, :, alpha, j_idx, :] = dI
 
@@ -437,23 +437,22 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
 
     n_pix = 2 * rc.image_radius
     n_workers = min(os.cpu_count() or 1, n_pix)
-    
     # gradient calculation for coord refinement
     compute_grad = 'B' in rc.refine_mode
 
     # Read-only data shared across all workers (pickled once per process)
     shared_data = {
-        'ug_matrix'       : bloch.ug_matrix,
-        'g_dot_norm'      : bloch.g_dot_norm,
-        'hkl_output'      : bloch.hkl_output,
-        'big_k_mag'       : bloch.big_k_mag,
-        'thickness'       : rc.thickness,
+        'ug_matrix': bloch.ug_matrix,
+        'g_dot_norm': bloch.g_dot_norm,
+        'hkl_output': bloch.hkl_output,
+        'big_k_mag': bloch.big_k_mag,
+        'thickness': rc.thickness,
         'min_strong_beams': rc.min_strong_beams,
-        'n_hkl'           : bloch.n_hkl,
-        'hkl_indices'     : bloch.hkl_indices,   # shape (n_hkl,3)
-        'atom_ug'         : atom_ug,  # per-atom U_g, [n_atoms, n_hkl, n_hkl]
-        'atomic_sites'    : rc.atomic_sites,
-        'compute_grad'    : compute_grad,
+        'n_hkl': bloch.n_hkl,
+        'hkl_indices': bloch.hkl_indices,   # shape (n_hkl,3)
+        'atom_ug': atom_ug,  # per-atom U_g, [n_atoms, n_hkl, n_hkl]
+        'atomic_sites': rc.atomic_sites,
+        'compute_grad': compute_grad,
     }
 
     # Per-task arguments: one tuple per row, containing only small array slices
@@ -472,6 +471,7 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     try:
         for future in as_completed(futures):
             pix_x = futures[future]
+            print(f"row {pix_x}")
             row_intensity, row_grad = future.result()
             intensity[pix_x] = row_intensity
             if compute_grad and row_grad is not None:
@@ -507,8 +507,9 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     # timings
     # setup = mid-strt
     bwc = time.time()-mid
-    print(f"\rBloch wave calculation... done in {bwc:.1f}s")  # " (beam pool setup {setup:.1f} s)")
-    if rc.iter_count == 0: 
+    print(f"\rBloch wave calculation... done in {bwc:.1f}s")
+    # " (beam pool setup {setup:.1f} s)")
+    if rc.iter_count == 0:
         print(f"    {1000*(bwc)/(4*rc.image_radius**2):.2f} ms/pixel")
 
     # increment iteration counter

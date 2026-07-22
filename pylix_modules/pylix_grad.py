@@ -28,11 +28,9 @@ pylix notation (from _pixel_row_worker in simulate.py):
 
 Sign convention
 ---------------
-pylix uses  phase = exp(-i g_cart · r_cart)  in Fg_matrix, so:
+pylix uses exp(-i g·r) in Fg_matrix, so
 
     ∂U_{gm-gn} / ∂x_{α,j}  =  -2πi · (hm-hn)_α · U_{j, gm-gn}
-
-The negative sign is critical for the correct gradient direction.
 
 Implemented parameter types
 ---------------------------
@@ -58,32 +56,28 @@ import numpy as np
 from scipy.linalg import eig, solve, lu_factor, lu_solve
 
 
-# ---------------------------------------------------------------------------
-# 1.  Per-atom optical potential contributions
-#     Call once after px.Fg_matrix(); result is passed to the parallel worker.
-# ---------------------------------------------------------------------------
-
 def compute_atom_ug_contributions(cell, bloch, xtal):
     """
     Build the per-atom contribution to ug_matrix for each cell atom.
+    Call once after px.Fg_matrix(); result is passed to the parallel worker
 
-    After px.Fg_matrix() has been called, cell.f_g (shape n_atoms × n_hkl × n_hkl)
+    After px.Fg_matrix() has been called, cell.f_g [n_atoms × n_hkl × n_hkl]
     holds the complex scattering factors (including absorption) already mapped
     onto the g-difference grid.  This function assembles the remaining factors
     (phase, Debye-Waller, occupancy, relativistic/volume prefactor) to give the
     per-atom optical potential matrix:
 
         atom_ug[j, i, k]  =  (γ / π Ω) · f_j(|gi-gk|) · occ_j
-                              · exp(-i g_cart · r_j_cart)
+                              · exp(-i g · r_j)
                               · exp(-½ g^T U_aniso_m g)
 
-    Summing over j exactly reproduces bloch.ug_matrix.
+    Summing over j reproduces bloch.ug_matrix exactly.
 
     Parameters
     ----------
-    cell  : pylix Cell object   (needs f_g, atom_coordinate, occupancy, u_aniso_m)
-    bloch : pylix Bloch object  (needs g_matrix, relativistic_correction)
-    xtal  : pylix Crystal object (needs cell_volume)
+    cell  : pylix Cell object   (f_g, atom_coordinate, occupancy, u_aniso_m)
+    bloch : pylix Bloch object  (g_matrix, relativistic_correction)
+    xtal  : pylix Crystal object (cell_volume)
 
     Returns
     -------
@@ -108,21 +102,16 @@ def compute_atom_ug_contributions(cell, bloch, xtal):
     # Phase: exp(-i g_cart · r_cart), shape (n_hkl, n_hkl, n_atoms)
     # Identical to the phase array built inside px.Fg_matrix.
     g_dot_r = np.einsum('ijk, lk -> ijl', bloch.g_matrix, cell.atom_coordinate)
-    phase = np.exp(-1j * g_dot_r)                        # (n_hkl, n_hkl, n_atoms)
+    phase = np.exp(-1j * g_dot_r)  # (n_hkl, n_hkl, n_atoms)
 
-    # Assemble: (n_atoms, n_hkl, n_hkl)
     atom_ug = (Fg_to_Ug
-               * cell.f_g                                # (n_atoms, n_hkl, n_hkl)
-               * phase.transpose(2, 0, 1)               # (n_atoms, n_hkl, n_hkl)
+               * cell.f_g  # [n_atoms, n_hkl, n_hkl]
+               * phase.transpose(2, 0, 1)  # [n_atoms, n_hkl, n_hkl]
                * cell.occupancy[:, None, None]
                * np.exp(-Ugg / 2))
 
-    return atom_ug
+    return atom_ug  # [n_atoms, n_hkl, n_hkl]
 
-
-# ---------------------------------------------------------------------------
-# 2.  F matrix  (core of the Tsai-Chan derivative)
-# ---------------------------------------------------------------------------
 
 def f_matrix(gamma, t, tol=1e-10):
     """
@@ -145,29 +134,23 @@ def f_matrix(gamma, t, tol=1e-10):
     -------
     F : (n_beams, n_beams) complex
     """
-    phase  = np.exp(1j * gamma * t)                      # (n,)
-    d_diff = gamma[:, None] - gamma[None, :]             # (n, n)
-
+    phase = np.exp(1j * gamma * t)  # [n,]
+    d_diff = gamma[:, None] - gamma[None, :]  # [n, n]
     degenerate = np.abs(d_diff) < tol
-    safe_diff  = np.where(degenerate, 1.0 + 0j, d_diff)
-
-    F     = (phase[:, None] - phase[None, :]) / safe_diff
-    limit = 1j * t * phase                               # L'Hôpital limit
-
+    safe_diff = np.where(degenerate, 1.0 + 0j, d_diff)
+    F = (phase[:, None] - phase[None, :]) / safe_diff
+    limit = 1j * t * phase  # L'Hôpital limit
     rows, _ = np.where(degenerate)
     F[degenerate] = limit[rows]
     np.fill_diagonal(F, limit)
     return F
 
 
-# ---------------------------------------------------------------------------
-# 3.  Pixel-level gradient  (standalone, for testing / serial use)
-# ---------------------------------------------------------------------------
-
 def dI_dp_pixel(eigenvecs, gamma, y, m_ii, dA_dp, thickness,
                 wave_funct, n_out, lu_piv=None):
     """
     Analytical gradient dI/dp for one pixel, one parameter.
+    (standalone, for testing / serial use)
 
     Parameters
     ----------
@@ -187,10 +170,8 @@ def dI_dp_pixel(eigenvecs, gamma, y, m_ii, dA_dp, thickness,
     -------
     dI : (n_t, n_out) float   — dI/dp for each thickness and output beam
     """
-    from scipy.linalg import lu_factor, lu_solve
-
-    n_t     = len(thickness)
-    n_beams = len(gamma)
+    n_t = len(thickness)
+    # n_beams = len(gamma)
 
     # LU factorisation of V — reuse if already computed by caller
     if lu_piv is None:
@@ -201,44 +182,43 @@ def dI_dp_pixel(eigenvecs, gamma, y, m_ii, dA_dp, thickness,
     G = lu_solve(lu_piv, dA_dp @ eigenvecs)
 
     dI = np.zeros((n_t, n_out))
-    s  = 1j * thickness                           # (n_t,) scalar per thickness
+    s = 1j * thickness  # (n_t,) scalar per thickness
 
     for t_idx in range(n_t):
         # F matrix (Tsai-Chan): F_ij = (exp(d_i*s) - exp(d_j*s))/(d_i - d_j)
-        #                        F_ii = s * exp(d_i*s)
-        F = f_matrix(gamma, s[t_idx])             # (n_beams, n_beams)
+        #                       F_ii = s * exp(d_i*s)
+        F = f_matrix(gamma, s[t_idx])  # [n_beams, n_beams]
 
         # X_p = G hadamard F
-        Xp = G * F                                 # (n_beams, n_beams)
+        Xp = G * F  # (n_beams, n_beams)
 
         # dpsi/dp = M (V Xp y)   where M = diag(m_ii)
         # V Xp y:
-        VXpy = eigenvecs @ (Xp @ y)               # (n_beams,)
-        dpsi = m_ii * VXpy                         # (n_beams,)
+        VXpy = eigenvecs @ (Xp @ y)  # [n_beams]
+        dpsi = m_ii * VXpy  # [n_beams]
 
         # dI/dp = 2 Re(psi_g* dpsi_g) for each output beam g
-        psi_g  = wave_funct[t_idx, :n_out]         # (n_out,)
-        dpsi_g = dpsi[:n_out]                      # (n_out,)
+        psi_g = wave_funct[t_idx, :n_out]   # [n_out]
+        dpsi_g = dpsi[:n_out]  # [n_out]
         dI[t_idx] = 2.0 * np.real(np.conj(psi_g) * dpsi_g)
 
     return dI
 
-
-# ---------------------------------------------------------------------------
-# 4.  Parallel row worker with analytical coordinate gradients
-# ---------------------------------------------------------------------------
 
 _worker_grad_shared = {}
 
 
 def _init_worker_grad(shared_data):
     """
+    Parallel row worker with analytical coordinate gradients
     ProcessPoolExecutor initializer for gradient workers.
 
     Expects the same keys as _init_worker in simulate.py, plus:
-        'hkl_int'      : (n_hkl, 3) int   bloch.hkl_indices — integer Miller indices
+        'hkl_int'      : (n_hkl, 3) int
+                          bloch.hkl_indices — integer Miller indices
         'atom_ug_list' : list of (n_hkl, n_hkl) complex arrays,
-                         one per refined atom, from compute_atom_ug_contributions.
+                         one per refined atom,
+                         from compute_atom_ug_contributions.
                          Pass  atom_ug[rc.atomic_sites]  as a Python list.
 
     Called once per worker process at pool start-up.
@@ -249,7 +229,7 @@ def _init_worker_grad(shared_data):
 
 def _pixel_row_worker_grad(row_args):
     """
-    Bloch-wave forward pass + analytical coordinate gradients for one image row.
+    Bloch-wave forward pass + analytical coordinate gradients for one image row
 
     Mirrors _pixel_row_worker in simulate.py but additionally computes
     ∂I/∂x_{α,j} for each refined atom j and coordinate α ∈ {x, y, z}.
@@ -314,29 +294,28 @@ def _pixel_row_worker_grad(row_args):
     s_g_row, k_dot_n_row = row_args
 
     # Unpack shared data
-    ug_matrix        = _worker_grad_shared['ug_matrix']
-    g_dot_norm       = _worker_grad_shared['g_dot_norm']
-    hkl_output       = _worker_grad_shared['hkl_output']
-    big_k_mag        = _worker_grad_shared['big_k_mag']
-    thickness        = _worker_grad_shared['thickness']
+    ug_matrix = _worker_grad_shared['ug_matrix']
+    g_dot_norm = _worker_grad_shared['g_dot_norm']
+    hkl_output = _worker_grad_shared['hkl_output']
+    big_k_mag = _worker_grad_shared['big_k_mag']
+    thickness = _worker_grad_shared['thickness']
     min_strong_beams = _worker_grad_shared['min_strong_beams']
-    n_hkl            = _worker_grad_shared['n_hkl']
-    hkl_int          = _worker_grad_shared['hkl_int']       # (n_hkl, 3) int
-    atom_ug_list     = _worker_grad_shared['atom_ug_list']  # list of (n_hkl, n_hkl)
+    n_hkl = _worker_grad_shared['n_hkl']
+    hkl_int = _worker_grad_shared['hkl_int']  # [n_hkl, 3]
+    atom_ug_list = _worker_grad_shared['atom_ug_list']  # [n_hkl, n_hkl]
 
-    n_pix         = s_g_row.shape[0]
-    n_out         = len(hkl_output)
-    n_thickness   = len(thickness)
-    n_atoms_ref   = len(atom_ug_list)
-    n_grad_params = n_atoms_ref * 3                          # x, y, z per atom
+    n_pix = s_g_row.shape[0]
+    n_out = len(hkl_output)
+    n_thickness = len(thickness)
+    n_atoms_ref = len(atom_ug_list)
+    n_grad_params = n_atoms_ref * 3  # x, y, z per atom
 
     row_intensity = np.zeros((n_pix, n_thickness, n_out))
-    row_gradient  = np.zeros((n_pix, n_grad_params, n_thickness, n_out))
-
+    row_gradient = np.zeros((n_pix, n_grad_params, n_thickness, n_out))
     u_g_col0 = np.abs(ug_matrix[:, 0])
 
     for pix_y in range(n_pix):
-        s_g_pix     = s_g_row[pix_y]
+        s_g_pix = s_g_row[pix_y]
         k_dot_n_pix = k_dot_n_row[pix_y]
 
         # ---- strong_beams (mirrors _pixel_row_worker) ----------------------
@@ -353,33 +332,34 @@ def _pixel_row_worker_grad(row_args):
         strong_beam = np.flatnonzero(strong)
 
         # ---- blochwave -----------------------------------------------------
-        strong_new          = np.setdiff1d(strong_beam, hkl_output)
+        strong_new = np.setdiff1d(strong_beam, hkl_output)
         strong_beam_indices = np.concatenate((hkl_output, strong_new))
-        n_beams             = len(strong_beam_indices)
+        n_beams = len(strong_beam_indices)
 
         beam_proj = np.zeros((n_beams, n_hkl), dtype=np.complex128)
         beam_proj[np.arange(n_beams), strong_beam_indices] = 1.0 + 0j
 
         ug_sg = beam_proj @ ug_matrix @ beam_proj.T
         ug_sg = 2.0 * np.pi**2 * ug_sg / big_k_mag
-        ug_sg[np.arange(n_beams), np.arange(n_beams)] = s_g_pix[strong_beam_indices]
+        ug_sg[np.arange(n_beams),
+              np.arange(n_beams)] = s_g_pix[strong_beam_indices]
 
-        norm_fac      = np.sqrt(1.0 + g_dot_norm[strong_beam_indices] / k_dot_n_pix)
+        norm_fac = np.sqrt(1.0 + g_dot_norm[strong_beam_indices] / k_dot_n_pix)
         structure_mat = ug_sg / np.outer(norm_fac, norm_fac)
 
         gamma, eigenvecs = eig(structure_mat)
 
         # ---- wave_functions ------------------------------------------------
-        psi0    = np.zeros(n_beams, dtype=np.complex128)
+        psi0 = np.zeros(n_beams, dtype=np.complex128)
         psi0[0] = 1.0 + 0j
 
-        inv_m_ii   = norm_fac
-        m_ii       = 1.0 / inv_m_ii
-        u          = inv_m_ii * psi0
-        y          = solve(eigenvecs, u)
-        phase_fwd  = np.exp(1j * np.outer(gamma, thickness))
-        z          = eigenvecs @ (y[:, None] * phase_fwd)
-        wave_funct = (m_ii[:, None] * z).T               # (n_thickness, n_beams)
+        inv_m_ii = norm_fac
+        m_ii = 1.0 / inv_m_ii
+        u = inv_m_ii * psi0
+        y = solve(eigenvecs, u)
+        phase_fwd = np.exp(1j * np.outer(gamma, thickness))
+        z = eigenvecs @ (y[:, None] * phase_fwd)
+        wave_funct = (m_ii[:, None] * z).T  # [n_thickness, n_beams]
 
         row_intensity[pix_y] = np.abs(wave_funct[:, :n_out])**2
 
@@ -389,9 +369,9 @@ def _pixel_row_worker_grad(row_args):
 
         # Miller index differences for all strong-beam pairs, all 3 coordinates
         # h_diff[m, n, alpha] = hkl_indices[gm, alpha] - hkl_indices[gn, alpha]
-        h_strong = hkl_int[strong_beam_indices, :]            # (n_beams, 3)
-        h_diff   = (h_strong[:, None, :] -
-                    h_strong[None, :, :])                     # (n_beams, n_beams, 3)
+        h_strong = hkl_int[strong_beam_indices, :]  # [n_beams, 3]
+        h_diff = (h_strong[:, None, :] -
+                  h_strong[None, :, :])  # [n_beams, n_beams, 3]
 
         for a_idx, atom_ug_full in enumerate(atom_ug_list):
 
@@ -404,38 +384,38 @@ def _pixel_row_worker_grad(row_args):
             #               / (norm_fac_m · norm_fac_n)
             # Factor out the scalar and obliquity terms:
             # NB: NEGATIVE sign from pylix phase convention exp(-i g·r)
-            base = (-4.0 * np.pi**3 * 1j / big_k_mag) * atom_ug_strong \
-                   / np.outer(norm_fac, norm_fac)             # (n_beams, n_beams)
+            base = (-4.0 * np.pi**3 * 1j / big_k_mag) * atom_ug_strong / \
+                np.outer(norm_fac, norm_fac)  # [n_beams, n_beams]
 
-            # Stack ∂A/∂x, ∂A/∂y, ∂A/∂z into a (3, n_beams, n_beams) array
-            # h_diff has shape (n_beams, n_beams, 3); transpose to (3, n, n)
+            # Stack ∂A/∂x, ∂A/∂y, ∂A/∂z into a [3, n_beams, n_beams] array
+            # h_diff has shape [n_beams, n_beams, 3]; transpose to [3, n, n]
             dA_all = h_diff.transpose(2, 0, 1) * base[None, :, :]
-            # Diagonal of ∂A/∂x_{α,j} is zero (S_g has no coordinate dependence)
+            # Diagonal of ∂A/∂x_{α,j} is 0 (S_g has no coordinate dependence)
             dA_all[:, np.arange(n_beams), np.arange(n_beams)] = 0.0
 
             # G_all[alpha] = V⁻¹ (∂A/∂x_alpha) V  for all 3 coords at once.
             # Solve: eigenvecs @ G_all = dA_all @ eigenvecs
             # Reshape (3, n, n) → (3n, n), solve, reshape back.
-            rhs   = dA_all @ eigenvecs                        # (3, n_beams, n_beams)
+            rhs = dA_all @ eigenvecs  # [3, n_beams, n_beams]
             G_all = lu_solve(
                 lu_piv,
                 rhs.reshape(3 * n_beams, n_beams)
-            ).reshape(3, n_beams, n_beams)                    # (3, n_beams, n_beams)
+            ).reshape(3, n_beams, n_beams)  # [3, n_beams, n_beams]
 
-            # For each thickness: X_p = G ⊙ F, dpsi = M V X_p y, dI = 2Re(ψ* dpsi)
+            # For each t: X_p = G ⊙ F, dpsi = M V X_p y, dI = 2Re(ψ* dpsi)
             for t_idx, t in enumerate(thickness):
-                F = f_matrix(gamma, t)                        # (n_beams, n_beams)
+                F = f_matrix(gamma, t)  # [n_beams, n_beams]
 
-                # X_p y for all 3 coords: (G_all * F[None]) @ y → (3, n_beams)
-                Xpy_all  = (G_all * F[None, :, :]) @ y
+                # X_p y for all 3 coords: (G_all * F[None]) @ y → [3, n_beams]
+                Xpy_all = (G_all * F[None, :, :]) @ y
 
-                # dpsi = M V X_p y = m_ii * (V @ Xpy)  — vectorised over coords
+                # dpsi = M V X_p y = m_ii * (V @ Xpy) — vectorised over coords
                 # (Xpy_all @ V^T)[c, i] = Σ_j Xpy_all[c,j] * V[i,j]  ✓
-                dpsi_all = m_ii[None, :] * (Xpy_all @ eigenvecs.T)  # (3, n_beams)
+                dpsi_all = m_ii[None, :] * (Xpy_all @ eigenvecs.T)  # [3, n_beams]
 
                 # ∂I_g/∂x_α = 2 Re(ψ_g* · ∂ψ_g/∂x_α)
                 row_gradient[pix_y,
-                             a_idx*3 : a_idx*3+3,
+                             a_idx*3:a_idx*3+3,
                              t_idx] = 2.0 * np.real(
                     np.conj(wave_funct[t_idx, None, :n_out])
                     * dpsi_all[:, :n_out])

@@ -67,10 +67,9 @@ if __name__ == '__main__':
     print("felixrefine:  https://github.com/WarwickMicroscopy/Felix-python")
     print("-----------------------------------------------------------------")
 
-
     # %% read felix.cif
     # cif_dict is a dictionary of value-key pairs.  values are given as tuples
-    # with the second number the uncertainty in the first.  Nothing is currently
+    # with the second number the uncertainty in the first. Nothing is currently
     # done with these uncertainties...
     cif_dict = px.read_cif('felix.cif')
     cif.update_from_dict(cif_dict)
@@ -94,7 +93,8 @@ if __name__ == '__main__':
     elif "space_group_it_number" in cif_dict:
         xtal.space_group_number = int(cif.space_group_it_number[0])
         reverse_space_groups = {rc: k for k, rc in fu.space_groups.items()}
-        xtal.space_group = reverse_space_groups.get(xtal.space_group_number, "Unknown")
+        xtal.space_group = reverse_space_groups.get(xtal.space_group_number,
+                                                    "Unknown")
     else:
         error_flag = True
         raise ValueError("No space group found in .cif")
@@ -172,11 +172,13 @@ if __name__ == '__main__':
     basis.u_aniso = np.zeros((basis.n_atoms, 3, 3))
     idx = np.arange(3)
     if "atom_site_b_iso_or_equiv" in cif_dict:
-        basis.B_iso = np.array([tup[0] for tup in cif.atom_site_b_iso_or_equiv])
+        basis.B_iso = np.array([tup[0]
+                                for tup in cif.atom_site_b_iso_or_equiv])
         basis.u_iso = basis.B_iso/(8 * np.pi**2)
         basis.u_aniso[:, idx, idx] = basis.u_iso[:, None]
     elif "atom_site_u_iso_or_equiv" in cif_dict:
-        basis.u_iso = np.array([tup[0] for tup in cif.atom_site_u_iso_or_equiv])
+        basis.u_iso = np.array([tup[0]
+                                for tup in cif.atom_site_u_iso_or_equiv])
         basis.B_iso = basis.u_iso * 8 * np.pi**2  # *** TO BE DELETED? ***
         basis.u_aniso[:, idx, idx] = basis.u_iso[:, None]
 
@@ -184,7 +186,8 @@ if __name__ == '__main__':
     # and if they exist match them with the correct basis atom
     if "atom_site_aniso_label" in cif_dict:
         # remove any trailing blanks
-        cif.atom_site_aniso_label = [s.rstrip() for s in cif.atom_site_aniso_label]
+        cif.atom_site_aniso_label = [s.rstrip()
+                                     for s in cif.atom_site_aniso_label]
         # link to the basis labels
         for i in range(basis.n_atoms):
             for j in range(len(cif.atom_site_aniso_label)):
@@ -221,13 +224,11 @@ if __name__ == '__main__':
 
     # coordinate refinement
     basis.atom_delta = np.zeros([basis.n_atoms, 3])  # direction of movement
-    basis.n_electrons = np.zeros(basis.n_atoms, dtype=float)  # for kappa refinement
-
+    basis.n_electrons = np.zeros(basis.n_atoms, dtype=float)  # for kappa
 
     # %% read felix.hkl
     px.read_hkl_file(hkl, "felix.hkl")
     rc.n_out = len(hkl.input_hkls)+1  # we expect 000 NOT to be in the hkl list
-
 
     # %% read felix.inp
     inp_dict = px.read_inp_file('felix.inp')
@@ -244,7 +245,7 @@ if __name__ == '__main__':
                                  rc.delta_thickness)
         rc.n_thickness = len(rc.thickness)
     else:
-        # need np.array rather than float so wave_functions works for 1 or many t's
+        # np.array rather than float so wave_functions works for 1 or many t's
         rc.thickness = np.atleast_1d(rc.initial_thickness)
         rc.n_thickness = 1
     # give best thickness a value of 0 for the case of only one t
@@ -266,12 +267,13 @@ if __name__ == '__main__':
 
     #  multiple occupancy check
     tol = 0.05  # tolerance for saying atoms are the same, in Angstroms
-    coords = basis.atom_position - np.round(basis.atom_position)  # periodic boundary fix
+    # periodic boundary fix
+    coords = basis.atom_position - np.round(basis.atom_position)
     coords = coords @ xtal.t_mat_c2o  # atom coords in Angstroms
     diff = coords[:, None, :] - coords[None, :, :]
     dist = np.sqrt(np.sum(diff**2, axis=2))
     close = (dist <= tol) & (~np.eye(basis.n_atoms, dtype=bool))
-    # mult_occ has same number for shared occupancy, different numbers otherwise
+    # mult_occ has same number for shared occupancy, different otherwise
     basis.mult_occ = np.arange(basis.n_atoms, dtype=int)
     visited = np.zeros(basis.n_atoms, dtype=bool)
     group_id = 0
@@ -405,7 +407,6 @@ if __name__ == '__main__':
         else:
             raise ValueError("Correlation type invalid in felix.inp")
 
-
     # %% set up refinement
     # --------------------------------------------------------------------
     # n_variables calculated depending upon Ug and non-Ug refinement
@@ -455,7 +456,7 @@ if __name__ == '__main__':
                 # symbol and space group) as row vectors with magnitude 1.
                 # ***NB NOT ALL SPACE GROUPS IMPLEMENTED ***
                 rc.moves = px.atom_move(xtal.space_group_number,
-                                          basis.wyckoff[rc.atomic_sites[i]])
+                                        basis.wyckoff[rc.atomic_sites[i]])
                 degrees_of_freedom = np.sum(np.any(rc.moves, axis=1))
                 if degrees_of_freedom == 0:
                     raise ValueError(f"Coordinate refinement of atom \
@@ -544,7 +545,7 @@ if __name__ == '__main__':
                 # Need to work out R- vs H- settings!!!
                 raise ValueError("Rhombohedral R- vs H- not yet implemented")
             elif (160 < xtal.space_group_number < 195) or \
-                 (74 < xtal.space_group_number < 143):  # Hexagonal or Tetragonal 167
+                 (74 < xtal.space_group_number < 143):
                 rc.refined_variable.append(xtal.cell_c)
                 rc.refined_variable_type.append(32)
                 rc.refined_variable_scale.append(fu.delta[32])
@@ -614,9 +615,9 @@ if __name__ == '__main__':
         cbed.lacbed_mask = np.zeros([rc.n_variables, d, d, rc.n_out],
                                     dtype=np.float64)
         cbed.lacbed_mask_i = np.zeros([rc.n_correlations, d, d, rc.n_out],
-                                    dtype=np.float64)
+                                      dtype=np.float64)
         cbed.lacbed_mask_j = np.zeros([rc.n_correlations, d, d, rc.n_out],
-                                    dtype=np.float64)
+                                      dtype=np.float64)
     else:
         # we still need a type for later code, set it to zero for sim only
         rc.refined_variable_type = np.array([0])
@@ -648,7 +649,6 @@ if __name__ == '__main__':
     else:
         print(f"{rc.n_thickness} thicknesses: {', '.join(map(str, rc.thickness/10))} nm")
 
-
     # %% baseline simulation
     print("-------------------------------")
     if 'O' in rc.refine_mode:
@@ -666,11 +666,9 @@ if __name__ == '__main__':
     if 'X' in rc.refine_mode:
         sim.correlations(xtal, basis, cell, hkl, bloch, cbed, rc)
 
-
     # %% read in experimental images and start refinement
     os.chdir(rc.path)
     if 'S' not in rc.refine_mode and 'X' not in rc.refine_mode:
-        a = rc.b
         cbed.lacbed_expt_raw = np.zeros([2*rc.image_radius, 2*rc.image_radius,
                                          rc.n_out])
         # get the list of available images
@@ -685,8 +683,8 @@ if __name__ == '__main__':
         if dm3_folder is not None:
             dm3_files = [file for file in os.listdir(dm3_folder)
                          if file.lower().endswith('.dm3')]
-            # just match the indices in the filename to felix.hkl, expect the user
-            # to ensure the data is of the right material!
+            # just match the indices in the filename to felix.hkl
+            # expect the user to ensure the data is of the right material!
             n_expt = rc.n_out
             for i in range(rc.n_out):
                 g_string = px.hkl_string(bloch.hkl_indices[bloch.hkl_output[i]])
@@ -694,9 +692,9 @@ if __name__ == '__main__':
                 for file_name in dm3_files:
                     if g_string in file_name:
                         file_path = os.path.join(dm3_folder, file_name)
-                        cbed.lacbed_expt_raw[:, :, i] = px.read_dm3(file_path,
-                                                                 2*rc.image_radius,
-                                                                 rc.debug)
+                        cbed.lacbed_expt_raw[:, :, i] = (
+                            px.read_dm3(file_path,
+                                        2*rc.image_radius, rc.debug))
                         found = True
                 if not found:
                     n_expt -= 1
@@ -714,7 +712,6 @@ if __name__ == '__main__':
 
         # start refinement
         sim.refine(xtal, basis, cell, hkl, bloch, cbed, rc)
-
 
     # %% final print
     sim.print_LACBED(bloch, cbed, rc, 0)  # simulation
