@@ -471,7 +471,8 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     try:
         for future in as_completed(futures):
             pix_x = futures[future]
-            print(f"row {pix_x}")
+            if rc.debug > 0:
+                print(f"row {pix_x}")
             row_intensity, row_grad = future.result()
             intensity[pix_x] = row_intensity
             if compute_grad and row_grad is not None:
