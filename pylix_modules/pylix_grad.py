@@ -24,7 +24,6 @@ pylix notation (from _pixel_row_worker in simulate.py):
     V        ↔  eigenvecs                        (complex, n_beams × n_beams)
     M        ↔  diag(m_ii) = diag(1/norm_fac)
     y        =  V⁻¹ M⁻¹ ψ₀                      (computed in forward pass)
-    s        =  it                               (imaginary × thickness)
 
 Sign convention
 ---------------
@@ -32,24 +31,39 @@ pylix uses exp(-i g·r) in Fg_matrix, so
 
     ∂U_{gm-gn} / ∂x_{α,j}  =  -2πi · (hm-hn)_α · U_{j, gm-gn}
 
-Implemented parameter types
----------------------------
-    ∂I/∂x_{α,j}   fractional atomic coordinates   (this module)
-    ∂I/∂U_iso,j   isotropic ADP                   (placeholder — to be added)
-    ∂I/∂U_{αβ,j}  anisotropic ADP                 (placeholder — to be added)
+Coordinate refinement — symmetry and projection
+------------------------------------------------
+The refinement variable is  p = r_j · v  (projection of basis atom j's
+fractional coordinate onto its allowed movement direction v, from atom_move).
 
-Workflow
---------
-1. Call px.Fg_matrix() as normal.
-2. Call compute_atom_ug_contributions() to build per-atom U matrices.
-3. Add 'hkl_int' and 'atom_ug_list' to the shared_data dict.
-4. Use _init_worker_grad / _pixel_row_worker_grad in place of the forward
-   worker when gradient images are required.
+The off-diagonal element A[m,n] of the structure matrix is:
+
+    A[m,n]  =  (2π²/K) / (ν_m ν_n)  ×  U[g_m − g_n]
+
+where ν = norm_fac and U = bloch.ug_matrix.  Differentiating:
+
+    dA[m,n]/dp  =  (2π²/K) / (ν_m ν_n)  ×
+                   Σ_{k: cell.basis_atom_index[k] = j}
+                   (−2πi) · (h_mn · R_k v) · atom_ug[k,m,n]
+
+where:
+    h_mn   = hkl_indices[m] − hkl_indices[n]   (integer Miller differences)
+    R_k    = xtal.symmetry_matrix[cell.symop_index[k]]   (3×3 rotation)
+    ν      = norm_fac  (pixel-dependent — applied in the worker, not here)
+
+build_atom_ug_grad pre-computes the pixel-independent part for each variable:
+
+    atom_ug_grad[var_idx][m,n]  =
+        −2πi · Σ_{k: basis_atom_index[k] == j}  (h_mn · R_k v) · atom_ug[k,m,n]
+
+The worker applies the pixel-dependent obliquity factor:
+    dA/dp = atom_ug_grad[var_idx][strong subset] × (2π²/K) × m_ii⊗m_ii
 
 Verification
 ------------
-The gradient formula has been verified against central finite differences
-on synthetic Bloch problems (relative error < 10⁻⁷).
+Central finite differences, step δ = 1e-5 in fractional coordinates:
+    dI_fd = (I_plus − I_minus) / (2δ)
+    expect |dI_analytical − dI_fd| / |dI_fd| < 1e-5 per pixel
 """
 
 import numpy as np
@@ -58,60 +72,126 @@ from scipy.linalg import eig, solve, lu_factor, lu_solve
 
 def compute_atom_ug_contributions(cell, bloch, xtal):
     """
-    Build the per-atom contribution to ug_matrix for each cell atom.
-    Call once after px.Fg_matrix(); result is passed to the parallel worker
+    Per-cell-atom optical potential matrices.
 
-    After px.Fg_matrix() has been called, cell.f_g [n_atoms × n_hkl × n_hkl]
-    holds the complex scattering factors (including absorption) already mapped
-    onto the g-difference grid.  This function assembles the remaining factors
-    (phase, Debye-Waller, occupancy, relativistic/volume prefactor) to give the
-    per-atom optical potential matrix:
+    Reproduces the per-atom terms summed by px.Fg_matrix so that coordinate
+    gradients can be formed analytically.
 
-        atom_ug[j, i, k]  =  (γ / π Ω) · f_j(|gi-gk|) · occ_j
-                              · exp(-i g · r_j)
-                              · exp(-½ g^T U_aniso_m g)
+    After px.Fg_matrix() has been called, cell.f_g[k,m,n] holds the complex
+    scattering factor (including absorption) for cell atom k and g-difference
+    (m,n).  This function applies the remaining phase, Debye-Waller,
+    occupancy, and Fg→Ug prefactor:
 
-    Summing over j reproduces bloch.ug_matrix exactly.
+        atom_ug[k,m,n]  =  (γ_rel / π Ω)
+                            × f_k(|g_m − g_n|)
+                            × occ_k
+                            × exp(−i g_{mn} · r_k)
+                            × exp(−½ g_{mn}^T U_aniso_m[k] g_{mn})
+
+    Summing over k reproduces bloch.ug_matrix exactly.
 
     Parameters
     ----------
-    cell  : pylix Cell object   (f_g, atom_coordinate, occupancy, u_aniso_m)
-    bloch : pylix Bloch object  (g_matrix, relativistic_correction)
-    xtal  : pylix Crystal object (cell_volume)
+    cell  : Cell   (f_g, atom_coordinate, occupancy, u_aniso_m, n_atoms)
+    bloch : Bloch  (g_matrix, relativistic_correction)
+    xtal  : Crystal (cell_volume)
 
     Returns
     -------
-    atom_ug : ndarray, shape (n_atoms, n_hkl, n_hkl), complex
-        atom_ug[j, i, k]  =  U_{j, g_i - g_k}
+    atom_ug : ndarray, shape (cell.n_atoms, n_hkl, n_hkl), complex128
 
     Notes
     -----
-    Call AFTER px.Fg_matrix() so that cell.f_g is populated.
-    For the gradient, pass slices atom_ug[rc.atomic_sites] to the worker.
-
-    Consistency check (use during development):
+    Must be called after px.Fg_matrix() so that cell.f_g is populated.
+    Consistency check (during development):
         assert np.allclose(atom_ug.sum(axis=0), bloch.ug_matrix, rtol=1e-6)
     """
     Fg_to_Ug = bloch.relativistic_correction / (np.pi * xtal.cell_volume)
 
-    # Anisotropic DW exponent: g^T U_aniso_m g, shape (n_atoms, n_hkl, n_hkl)
-    # Matches the Ugg computation inside px.Fg_matrix exactly.
+    # anisotropic DW exponent: g^T U_aniso_m[k] g, shape (n_atoms, n_hkl, n_hkl)
     Ugg = np.einsum('ijm, amn, ijn -> aij',
                     bloch.g_matrix, cell.u_aniso_m, bloch.g_matrix)
 
-    # Phase: exp(-i g_cart · r_cart), shape (n_hkl, n_hkl, n_atoms)
-    # Identical to the phase array built inside px.Fg_matrix.
+    # phase exp(−i g · r_k), shape (n_hkl, n_hkl, n_atoms)
     g_dot_r = np.einsum('ijk, lk -> ijl', bloch.g_matrix, cell.atom_coordinate)
-    phase = np.exp(-1j * g_dot_r)  # (n_hkl, n_hkl, n_atoms)
+    phase = np.exp(-1j * g_dot_r)               # (n_hkl, n_hkl, n_atoms)
 
     atom_ug = (Fg_to_Ug
-               * cell.f_g  # [n_atoms, n_hkl, n_hkl]
-               * phase.transpose(2, 0, 1)  # [n_atoms, n_hkl, n_hkl]
+               * cell.f_g                        # (n_atoms, n_hkl, n_hkl)
+               * phase.transpose(2, 0, 1)        # (n_atoms, n_hkl, n_hkl)
                * cell.occupancy[:, None, None]
                * np.exp(-Ugg / 2))
 
-    return atom_ug  # [n_atoms, n_hkl, n_hkl]
+    return atom_ug   # (n_atoms, n_hkl, n_hkl), complex128
 
+
+def build_atom_ug_grad(cell, bloch, xtal, rc, atom_ug):
+    """
+    Pre-compute rotation-weighted, symmetry-summed, v-projected gradient Ug.
+
+    For refinement variable var_idx with allowed direction v and basis atom j:
+
+        atom_ug_grad[var_idx][m, n]  =
+            −2πi · Σ_{k: cell.basis_atom_index[k] == j}
+                   (h_mn · R_k @ v) · atom_ug[k, m, n]
+
+    where:
+        h_mn  = hkl_indices[m] − hkl_indices[n]   (integer Miller differences)
+        R_k   = xtal.symmetry_matrix[cell.symop_index[k]]   (3×3 rotation)
+
+    The obliquity factor (2π²/K) / (ν_m ν_n) is NOT included here — it is
+    pixel-dependent and applied per-pixel in the worker.
+
+    Call once after compute_atom_ug_contributions(), before the parallel pool.
+
+    Parameters
+    ----------
+    cell     : Cell    (n_atoms, basis_atom_index, symop_index)
+    bloch    : Bloch   (hkl_indices, n_hkl)
+    xtal     : Crystal (symmetry_matrix)
+    rc       : RunControl (n_variables, refined_variable_type,
+                           atom_refine_flag, atom_refine_vec)
+    atom_ug  : ndarray (n_atoms, n_hkl, n_hkl) complex128
+               from compute_atom_ug_contributions()
+
+    Returns
+    -------
+    atom_ug_grad : dict { var_idx (int) : ndarray (n_hkl, n_hkl) complex128 }
+        Only contains entries for variables with refined_variable_type == 20.
+        Diagonal is identically zero (h_diff[m,m] = 0 by construction).
+    """
+    # integer Miller-index differences h_mn = hkl[m] − hkl[n]
+    # shape (n_hkl, n_hkl, 3)
+    hkl = bloch.hkl_indices.astype(float)
+    h_diff_all = hkl[:, None, :] - hkl[None, :, :]
+
+    atom_ug_grad = {}
+
+    for var_idx in range(rc.n_variables):
+        if rc.refined_variable_type[var_idx] != 20:
+            continue
+
+        atom_id = rc.atom_refine_flag[var_idx]               # basis atom index
+        v = np.array(rc.atom_refine_vec[var_idx], dtype=float)  # (3,) fractional
+
+        weighted = np.zeros((bloch.n_hkl, bloch.n_hkl), dtype=np.complex128)
+
+        for k in range(cell.n_atoms):
+            if cell.basis_atom_index[k] != atom_id:
+                continue
+            R_k = xtal.symmetry_matrix[cell.symop_index[k]]   # (3, 3)
+            Rv = R_k @ v                                       # (3,) rotated direction
+
+            # scalar factor[m,n] = h_diff[m,n,:] · Rv
+            # h_diff_all shape (n_hkl, n_hkl, 3); @ Rv gives (n_hkl, n_hkl)
+            factor = h_diff_all @ Rv
+            weighted += factor * atom_ug[k]                  # atom_ug[k] (n_hkl, n_hkl)
+
+        # absorb the −2πi prefactor
+        # diagonal is exactly zero because h_diff[m,m] = [0,0,0]
+        atom_ug_grad[var_idx] = -2j * np.pi * weighted
+
+    return atom_ug_grad
 
 def f_matrix(gamma, t, tol=1e-10):
     """
@@ -149,57 +229,46 @@ def f_matrix(gamma, t, tol=1e-10):
 def dI_dp_pixel(eigenvecs, gamma, y, m_ii, dA_dp, thickness,
                 wave_funct, n_out, lu_piv=None):
     """
-    Analytical gradient dI/dp for one pixel, one parameter.
-    (standalone, for testing / serial use)
+    Analytical gradient dI/dp for one pixel, one refinement variable.
 
     Parameters
     ----------
-    eigenvecs : (n_beams, n_beams) complex   — eigenvector matrix V
-    gamma     : (n_beams,) complex           — eigenvalues of structure matrix
-    y         : (n_beams,) complex           — V^-1 M^-1 psi_0
-    m_ii      : (n_beams,) float             — 1/norm_fac (obliquity factors)
-    dA_dp     : (n_beams, n_beams) complex   — derivative of structure matrix
-    thickness : (n_t,) float                 — thickness values
-    wave_funct: (n_t, n_beams) complex       — wave functions (from forward pass)
-    n_out     : int                          — number of output beams
-    lu_piv    : result of lu_factor(eigenvecs), optional
-                If provided, reuses the LU factorisation already computed
-                in the calling worker (saves ~N^3/3 work per parameter).
+    eigenvecs : (n_beams, n_beams) complex   eigenvector matrix V
+    gamma     : (n_beams,) complex           eigenvalues
+    y         : (n_beams,) complex           V⁻¹ M⁻¹ ψ₀  (from forward pass)
+    m_ii      : (n_beams,) float             1/norm_fac
+    dA_dp     : (n_beams, n_beams) complex   dA/dp for the strong-beam subset,
+                already including the (2π²/K) · m_ii⊗m_ii obliquity factor
+    thickness : (n_t,) float                 thickness values (Å)
+    wave_funct: (n_t, n_beams) complex       wave functions from forward pass
+    n_out     : int                          number of output beams
+    lu_piv    : lu_factor result, optional   reuse LU from the forward pass
 
     Returns
     -------
-    dI : (n_t, n_out) float   — dI/dp for each thickness and output beam
+    dI : (n_t, n_out) float
     """
-    n_t = len(thickness)
-    # n_beams = len(gamma)
-
-    # LU factorisation of V — reuse if already computed by caller
     if lu_piv is None:
         lu_piv = lu_factor(eigenvecs)
 
-    # G = V^-1 (dA/dp) V  — uses lu_solve for efficiency
-    # shape: (n_beams, n_beams)
-    G = lu_solve(lu_piv, dA_dp @ eigenvecs)
+    # G = V⁻¹ (dA/dp) V
+    G = lu_solve(lu_piv, dA_dp @ eigenvecs)        # (n_beams, n_beams)
 
+    n_t = len(thickness)
     dI = np.zeros((n_t, n_out))
-    s = 1j * thickness  # (n_t,) scalar per thickness
 
     for t_idx in range(n_t):
-        # F matrix (Tsai-Chan): F_ij = (exp(d_i*s) - exp(d_j*s))/(d_i - d_j)
-        #                       F_ii = s * exp(d_i*s)
-        F = f_matrix(gamma, s[t_idx])  # [n_beams, n_beams]
+        F = f_matrix(gamma, thickness[t_idx])      # (n_beams, n_beams)
 
-        # X_p = G hadamard F
-        Xp = G * F  # (n_beams, n_beams)
+        # X_p = G ⊙ F  (Hadamard product)
+        Xp = G * F                                 # (n_beams, n_beams)
 
-        # dpsi/dp = M (V Xp y)   where M = diag(m_ii)
-        # V Xp y:
-        VXpy = eigenvecs @ (Xp @ y)  # [n_beams]
-        dpsi = m_ii * VXpy  # [n_beams]
+        # dψ/dp = M V X_p y
+        dpsi = m_ii * (eigenvecs @ (Xp @ y))       # (n_beams,)
 
-        # dI/dp = 2 Re(psi_g* dpsi_g) for each output beam g
-        psi_g = wave_funct[t_idx, :n_out]   # [n_out]
-        dpsi_g = dpsi[:n_out]  # [n_out]
+        # dI_g/dp = 2 Re(ψ_g* · dψ_g/dp)
+        psi_g  = wave_funct[t_idx, :n_out]         # (n_out,)
+        dpsi_g = dpsi[:n_out]                      # (n_out,)
         dI[t_idx] = 2.0 * np.real(np.conj(psi_g) * dpsi_g)
 
     return dI

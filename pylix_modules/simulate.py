@@ -74,29 +74,33 @@ def _pixel_row_worker(row_args):
     -------
     row_intensity : ndarray, shape (n_pix, n_thickness, n_out)
         Diffracted intensities for every pixel in the row.
+    row_grad : ndarray or None, shape (n_pix, n_thickness, n_grad_vars, n_out)
+        Analytical gradient dI/dp for each coordinate refinement variable,
+        already projected onto the allowed movement direction v.
+        None when compute_grad is False.
     """
     s_g_row, k_dot_n_row = row_args
 
     # Unpack shared read-only data (set once per process by _init_worker)
-    ug_matrix = _worker_shared['ug_matrix']
-    g_dot_norm = _worker_shared['g_dot_norm']
-    hkl_output = _worker_shared['hkl_output']
-    big_k_mag = _worker_shared['big_k_mag']
-    thickness = _worker_shared['thickness']
+    ug_matrix        = _worker_shared['ug_matrix']
+    g_dot_norm       = _worker_shared['g_dot_norm']
+    hkl_output       = _worker_shared['hkl_output']
+    big_k_mag        = _worker_shared['big_k_mag']
+    thickness        = _worker_shared['thickness']
     min_strong_beams = _worker_shared['min_strong_beams']
-    n_hkl = _worker_shared['n_hkl']
-    hkl_indices = _worker_shared.get('hkl_indices', None)   # (n_hkl, 3) int
-    atom_ug_all = _worker_shared.get('atom_ug', None)  # (n_atoms, n_hkl, n_hkl)
-    atomic_sites = _worker_shared.get('atomic_sites', [])  # refined atom indices
-    compute_grad = _worker_shared['compute_grad']
+    n_hkl            = _worker_shared['n_hkl']
+    compute_grad     = _worker_shared['compute_grad']
+    # gradient data: one pre-projected (n_hkl, n_hkl) array per variable
+    atom_ug_grad     = _worker_shared.get('atom_ug_grad', {})   # {var_idx: array}
+    grad_var_indices = _worker_shared.get('grad_var_indices', [])  # sorted list of var_idx
 
     n_pix = s_g_row.shape[0]
     n_out = len(hkl_output)
     n_thickness = len(thickness)
-    row_intensity = np.zeros((n_pix, n_thickness, n_out))
+    n_grad_vars = len(grad_var_indices)
 
-    n_refined = len(atomic_sites)
-    row_grad = (np.zeros((n_pix, n_thickness, 3, n_refined, n_out))
+    row_intensity = np.zeros((n_pix, n_thickness, n_out))
+    row_grad = (np.zeros((n_pix, n_thickness, n_grad_vars, n_out))
                 if compute_grad else None)
 
     # Column 0 of ug_matrix gives Ug for g=000 (perturbation reference)
@@ -158,45 +162,36 @@ def _pixel_row_worker(row_args):
 
         row_intensity[pix_y] = np.abs(wave_funct[:, :n_out])**2
 
-        # Gradient dI/dx_alpha for each refined atom using the Tsai-Chan
-        # matrix-exponential derivative (Appendix A.4 of Dolomanov et al.).
-        # lu_piv is factorised once per pixel and reused across all atoms
-        # and all three coordinate directions.
-        if compute_grad:
-            lu_piv = lu_factor(eigenvecs)  # (n_beams, n_beams), once per pixel
+        # ---- Analytical gradient dI/dp -------------------------------------
+        # Uses the Tsai-Chan matrix-exponential derivative.
+        # atom_ug_grad[var_idx] contains the pre-projected dUg/dp for the
+        # full beam pool (n_hkl, n_hkl).  We extract the strong-beam subset
+        # and apply the pixel-dependent obliquity scaling here.
+        # lu_piv is factorised once per pixel and reused across all variables.
+        if compute_grad and n_grad_vars > 0:
+            lu_piv = lu_factor(eigenvecs)
 
-            idx = strong_beam_indices  # [n_beams]
-            h_sub = hkl_indices[idx]  # (n_beams, 3)
-            h_diff = h_sub[:, None, :] - h_sub[None, :, :]  # (n_beams, n_beams, 3)
-
-            # Obliquity scaling applied to off-diagonal A elements
-            # matches the 2*pi^2/big_k_mag * m_ii * m_jj factor in blochwave
+            idx = strong_beam_indices  # (n_beams,)
+            # obliquity factor: 2π²/K * m_ii[m] * m_ii[n]
             obliq = np.outer(m_ii, m_ii) * 2.0 * np.pi**2 / big_k_mag
 
-            for j_idx, atom_idx in enumerate(atomic_sites):
-                # Per-atom Ug for the strong-beam subset: (n_beams, n_beams)
-                Ug_j = atom_ug_all[atom_idx][np.ix_(idx, idx)]
-                base = Ug_j * obliq  # (n_beams, n_beams)
+            for g_idx, var_idx in enumerate(grad_var_indices):
+                # dA/dp for the strong-beam subset, with obliquity scaling
+                # atom_ug_grad[var_idx] already contains -2πi · Σ_k factor_k · atom_ug[k]
+                dA_dp = atom_ug_grad[var_idx][np.ix_(idx, idx)] * obliq
 
-                for alpha in range(3):
-                    # dA/dp for fractional coordinate x_alpha of atom j.
-                    # Phase convention exp(-i g.r) gives factor -2*pi*i*h_alpha
-                    # Off-diagonal only; diagonal Sg is coordinate-independent
-                    dA_dp = -2j * np.pi * h_diff[:, :, alpha] * base
-
-                    # pg.dI_dp_pixel returns (n_thickness, n_out)
-                    dI = pg.dI_dp_pixel(
-                        eigenvecs=eigenvecs,
-                        gamma=gamma,
-                        y=y,
-                        m_ii=m_ii,
-                        dA_dp=dA_dp,
-                        thickness=thickness,
-                        wave_funct=wave_funct,
-                        n_out=n_out,
-                        lu_piv=lu_piv,   # reuse LU factorisation
-                    )
-                    row_grad[pix_y, :, alpha, j_idx, :] = dI
+                dI = pg.dI_dp_pixel(
+                    eigenvecs=eigenvecs,
+                    gamma=gamma,
+                    y=y,
+                    m_ii=m_ii,
+                    dA_dp=dA_dp,
+                    thickness=thickness,
+                    wave_funct=wave_funct,
+                    n_out=n_out,
+                    lu_piv=lu_piv,   # reuse LU factorisation
+                )
+                row_grad[pix_y, :, g_idx, :] = dI   # (n_thickness, n_out)
 
     return row_intensity, row_grad
 
@@ -342,8 +337,7 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
         # differences g - h
         # but the maximum of the g pool is probably a more useful thing to know
         print(f"  Maximum |g| = {np.max(bloch.g_pool_mag)/(2*np.pi):.3f} 1/Å")
-        # for i in range(n_hkl):
-        #     print(f"{i},  {bloch.hkl_indices[i]}")
+
 
     # plot beam pool
     if rc.iter_count == 0 and rc.plot > 0:
@@ -410,17 +404,34 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
     bloch.k_dot_n = np.tensordot(bloch.tilted_k, xtal.norm_dir_m,
                                  axes=([2], [0]))
 
-    # set up gradient images
-    n_refined = len(rc.atomic_sites)
+    # gradient calculation for coord refinement
+    compute_grad = 'B' in rc.refine_mode
+
+    # Pre-compute rotation-weighted, symmetry-summed, v-projected gradient Ug
+    # arrays (one per coordinate refinement variable) before the parallel pool.
+    # atom_ug_grad[var_idx] : (n_hkl, n_hkl) complex, already contains
+    #     -2πi · Σ_{k: basis(k)==j}  (h_mn · R_k v) · atom_ug[k,m,n]
+    # The pixel-dependent obliquity factor is applied inside the worker.
+    atom_ug_grad = {}
+    grad_var_indices = []
+    if compute_grad:
+        atom_ug_grad = pg.build_atom_ug_grad(cell, bloch, xtal, rc, atom_ug)
+        grad_var_indices = sorted(atom_ug_grad.keys())
+
+    n_grad_vars = len(grad_var_indices)
+
+    # Gradient image array: shape [n_grad_vars, n_thickness, imgX, imgY, n_out]
+    # Each entry is dI/dp for the corresponding refinement variable,
+    # already projected onto the allowed movement direction v.
     cbed.lacbed_grad = np.zeros(
-        [3, n_refined, rc.n_thickness, 2*rc.image_radius, 2*rc.image_radius,
+        [n_grad_vars, rc.n_thickness, 2*rc.image_radius, 2*rc.image_radius,
          len(bloch.hkl_output)], dtype=float)
+
     print("Bloch wave calculation...", end=' ')
     if rc.debug > 0:
         print("")
         print("output indices")
         print(bloch.hkl_output[:15])
-
     # = = = = = = = = = = = = = = = = = = = = = = = =
     # pixel by pixel calculations - parallelised over rows
     #
@@ -450,14 +461,15 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
         'min_strong_beams': rc.min_strong_beams,
         'n_hkl': bloch.n_hkl,
         'hkl_indices': bloch.hkl_indices,   # shape (n_hkl,3)
-        'atom_ug': atom_ug,  # per-atom U_g, [n_atoms, n_hkl, n_hkl]
+        'atom_ug_grad':     atom_ug_grad,      # {var_idx: (n_hkl, n_hkl)}
+        'grad_var_indices': grad_var_indices,  # sorted list of var_idx
         'atomic_sites': rc.atomic_sites,
         'compute_grad': compute_grad,
     }
 
     # Per-task arguments: one tuple per row, containing only small array slices
     intensity = np.zeros((n_pix, n_pix, rc.n_thickness, rc.n_out))
-    grad = (np.zeros((n_pix, n_pix, rc.n_thickness, 3, n_refined, rc.n_out))
+    grad = (np.zeros((n_pix, n_pix, rc.n_thickness, n_grad_vars, rc.n_out))
             if compute_grad else None)
 
     row_tasks = [(bloch.s_g[pix_x, :, :], bloch.k_dot_n[pix_x, :])
@@ -494,15 +506,35 @@ def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
             cbed.lacbed_sim[:, n_pix - 1 - pix_y, pix_x, :] = \
                 intensity[pix_x, pix_y, :, :]
 
-    # assemble cbed.lacbed_grad from grad accumulator.
-    # grad axes:        (pix_x, pix_y,   n_thickness, 3,     n_refined, n_out)
-    # lacbed_grad axes: (3,     n_refined, n_thickness, imgX,  imgY,     n_out)
+    # Assemble cbed.lacbed_grad from the grad accumulator.
+    #
+    # grad axes:        (pix_x, pix_y, n_thickness, n_grad_vars, n_out)
+    # lacbed_grad axes: (n_grad_vars, n_thickness, imgX, imgY, n_out)
+    #
     # imgX = n_pix - 1 - pix_y  =>  flip axis 1 of grad
-    # imgY = pix_x               =>  axis 0 of grad becomes axis 4
-    # Achieved in one vectorised step: flip then transpose (3,4,2,1,0,5)
-    if compute_grad and grad is not None:
-        cbed.lacbed_grad[:] = grad[:, ::-1, :, :, :, :].transpose(3, 4, 2, 1, 0, 5)
+    # imgY = pix_x               =>  axis 0 of grad becomes axis 3
+    #
+    # After flip:  (pix_x, pix_y[::-1], n_thickness, n_grad_vars, n_out)
+    # Transpose permutation (3, 2, 1, 0, 4):
+    #   new 0 = old 3 (n_grad_vars)
+    #   new 1 = old 2 (n_thickness)
+    #   new 2 = old 1 (imgX = pix_y[::-1])
+    #   new 3 = old 0 (imgY = pix_x)
+    #   new 4 = old 4 (n_out)
+    if compute_grad and grad is not None and n_grad_vars > 0:
+        cbed.lacbed_grad[:] = grad[:, ::-1, :, :, :].transpose(3, 2, 1, 0, 4)
         print("   Gradient images calculated")
+        # Populate lacbed_sig and lacbed_mask from the analytical gradient.
+        # This is done only when lacbed_sig[var_idx] is still zero, mirroring
+        # the fallback in refine_multi_variable but using the correct dI/dp
+        # rather than simulation differences.
+        for g_idx, var_idx in enumerate(grad_var_indices):
+            if np.sum(np.abs(cbed.lacbed_sig[var_idx])) < eps:
+                sig = cbed.lacbed_grad[g_idx, rc.best_t]   # (imgX, imgY, n_out)
+                cbed.lacbed_sig[var_idx] = sig
+                if cbed.lacbed_mask is not None:
+                    thresh = np.mean(np.abs(sig), axis=(0, 1), keepdims=True)
+                    cbed.lacbed_mask[var_idx] = sig * (np.abs(sig) > thresh)
     # = = = = = = = = = = = = = = = = = = = = = = = =
 
     # timings
