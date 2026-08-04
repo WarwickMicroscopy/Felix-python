@@ -119,10 +119,9 @@ debug                     = 0
 # Refinement specific flags
 refine_mode               = 'B'
 refine_method             = 0
-refinement_scale          = 0.05
+refinement_scale          = -1
 correlation_type          = 2
 atomic_sites              = [0,1,2]
 precision                 = -0.00002
 weighting_flag            = 0
 no_of_ugs                 = 40
-n_jobs                    = 1

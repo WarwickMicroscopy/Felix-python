@@ -48,7 +48,28 @@ def _init_worker(shared_data):
     Stores read-only Bloch/run-control data in each worker process so that it
     does not need to be pickled and sent with every individual row task.
     Called once per worker process at pool start-up.
+    
+    thread-count cap
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Each worker process calls scipy.linalg.eig which uses multithreaded BLAS
+    (Intel MKL or OpenBLAS).  With n_workers == os.cpu_count() you otherwise
+    get n_workers x N_BLAS_threads >> n_logical_cores threads simultaneously.
+    On hybrid P-core/E-core CPUs (e.g. Intel Alder Lake i7-1260P) MKL's
+    internal scheduler can deadlock when it tries to assign AVX-heavy LAPACK
+    work to Efficiency cores.  threadpool_limits(1) caps each spawned process
+    to a single BLAS thread, eliminating oversubscription.
     """
+    try:
+        from threadpoolctl import threadpool_limits
+        threadpool_limits(limits=1)   # one BLAS thread per worker process
+    except ImportError:
+        # fallback: environment variables (only reliable if BLAS reads them
+        # before initialisation; threadpoolctl is the safe path)
+        import os as _os
+        _os.environ["OMP_NUM_THREADS"]      = "1"
+        _os.environ["MKL_NUM_THREADS"]      = "1"
+        _os.environ["OPENBLAS_NUM_THREADS"] = "1"
+        _os.environ["NUMEXPR_NUM_THREADS"]  = "1"
     global _worker_shared
     _worker_shared = shared_data
 
@@ -152,7 +173,6 @@ def _pixel_row_worker(row_args):
         row_intensity[pix_y] = np.abs(wave_funct[:, :n_out])**2
 
     return row_intensity
-# ---------------------------------------------------------------------------
 
 
 def simulate(xtal, basis, cell, hkl, bloch, cbed, rc):
@@ -710,6 +730,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
         cbed.lacbed_mask[j] = sig * (np.abs(sig) > thresh)
     
         # temporary plot to show it's working
+        print("        Showing signature image")
         img = cbed.lacbed_mask[j, :, :, 1]
         cmap = LinearSegmentedColormap.from_list(
             "two_color_black_center",
