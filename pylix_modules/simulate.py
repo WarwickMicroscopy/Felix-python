@@ -829,11 +829,6 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
             refined_variable_hkl_fom[i] = 1 - np.mean(ex * re)
         rc.refined_variable_fom[j] = np.mean(refined_variable_hkl_fom)
 
-
-
-
-
-
     # check for no effect or parameter out of range
     if abs(improvement) < 0.1*abs(rc.precision):
         # we leave best_var unchanged and go on to the next
