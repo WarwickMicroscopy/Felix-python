@@ -606,9 +606,21 @@ def change_origin(basis, space_group):
 
 def preferred_basis(basis, space_group):
     """
-    Change to the preferred origin for a given space group, depending on each
-    atom's wyckoff symbol.  This is necesaary for coordinate refinement to work
-    correctly
+    1)  *** NOT YET IMPLEMENTED ***
+    If the space group is in a non-standard setting we switch to the
+    standard setting here.  We assume input g-vectors match the .cif so this
+    also requires a change of them to the new setting.
+    [Q- should we change their names back at the end to match the input?
+     or just let the user know the change of basis?]
+    
+    2) *** PARTIALLY IMPLEMENTED ***
+    Change to the preferred origin for a given space group, depending on
+    each atom's wyckoff symbol.  This is necessary for coordinate refinement
+    to work correctly.  Only affects Wyckoff sites with multiple possible
+    symops, e.g.if a site could be on an x-mirror OR y-mirror we have to choose
+    the one that matches the displacement vector in the atom_move subroutine.
+    The fix to the problem is to apply a symmetry operation of the space group
+    to choose an equivalent position that satisfies atom_move
 
     Parameters:
     space_group (int): The space group number.
@@ -618,6 +630,12 @@ def preferred_basis(basis, space_group):
     """
 
     change_origin(basis, space_group)
+
+    def z4(coord):  # 4+ along [001] at [0,0,0]
+        temp = coord[1]
+        coord[1] = coord[0]
+        coord[0] = 1.0 - temp
+        return coord
 
     # Loop over basis atoms
     for i in range(basis.n_atoms):
@@ -695,16 +713,22 @@ def preferred_basis(basis, space_group):
 # 60
 # 61
 # 62
+        elif space_group == 62:  # Pnma
+            if wyckoff_symbol in ['a', 'b', 'c', 'd']:
+                pass  # no reassignment needed
+            else:
+                raise ValueError("Wyckoff Symbol for #62 Pnma not recognised")
+
         elif space_group == 63:  # C m c m
             if wyckoff_symbol in ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']:
                 pass  # no reassignment needed
             else:
-                raise ValueError("Wyckoff Symbol for C m c m not recognised")
+                raise ValueError("Wyckoff Symbol for #63 Cmcm not recognised")
         elif space_group == 64:  # C m c a
             if wyckoff_symbol in ['a', 'b', 'c', 'd', 'e', 'f', 'g']:
                 pass  # no reassignment needed
             else:
-                raise ValueError("Wyckoff Symbol for C m c a not recognised")
+                raise ValueError("Wyckoff Symbol for #64 Cmca not recognised")
 # 65
 # 66
 # 67
@@ -712,7 +736,7 @@ def preferred_basis(basis, space_group):
             if wyckoff_symbol in ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i']:
                 pass  # no reassignment needed
             else:
-                raise ValueError("Wyckoff Symbol for Ccca not recognised")
+                raise ValueError("Wyckoff Symbol for #68 Ccca not recognised")
 # 69
 # 70
 # 71
@@ -829,7 +853,30 @@ def preferred_basis(basis, space_group):
                     basis.atom_position[i, 1] = 0.0
             else:
                 raise ValueError("Wyckoff Symbol for I4/m m m not recognised")
-# 140
+
+        elif space_group == 140:  # I4/mcm
+            xxp = basis.atom_position[i, 0] + basis.atom_position[i, 1]
+            if wyckoff_symbol in ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'k', 'm']:
+                pass  # no reassignment needed
+            # all others change with 4+[001] at [0,0,0]
+            elif wyckoff_symbol == 'h':  # on a {110} mirror and (001) mirror
+                # Change [x,1/2-x,0] to [x,1/2+x,0]
+                if abs(xxp - 0.5) % 1.0 < 1e-10:
+                    basis.atom_position[i,:] = z4(basis.atom_position[i,:])
+            elif wyckoff_symbol == 'i':   # i on a {110} glide plane
+                if abs(xxp - 0.5) % 1.0 < 1e-10:
+                # Change [x,-x,z] to [x,x,z]
+                    basis.atom_position[i,:] = z4(basis.atom_position[i,:])
+            elif wyckoff_symbol == 'j':  # on a {100} glide plane
+                # Change [0,x,z] to [x,0,z]
+                if abs(basis.atom_position[i, 0]) < 1e-10:
+                    basis.atom_position[i,:] = z4(basis.atom_position[i,:])
+            elif wyckoff_symbol == 'l':  # on a {110} mirror
+                # Change [x,1/2-x,z] to [x,1/2+x,z]
+                if abs(xxp) % 1.0 - 0.5 < 1e-10:
+                    basis.atom_position[i,:] = z4(basis.atom_position[i,:])
+            else:
+                raise ValueError("Wyckoff Symbol for #140, I4/mcm not recognised")                    
 # 141
         elif space_group == 142:  # I41/acd
             if wyckoff_symbol in ['a', 'b', 'c', 'd', 'g']:
@@ -852,7 +899,7 @@ def preferred_basis(basis, space_group):
                     basis.atom_position[i, 1] = basis.atom_position[i, 0] + 0.25
                     basis.atom_position[i, 2] = 0.125
             else:
-                raise ValueError("Wyckoff Symbol for 142, I41/a c d not recognised")
+                raise ValueError("Wyckoff Symbol for #142, I41/acd not recognised")
 # 143
 # 144
 # 145
@@ -983,7 +1030,8 @@ def preferred_basis(basis, space_group):
         elif space_group == 221:  # Pm-3m
             if wyckoff_symbol in ['a', 'b', 'c', 'd', 'e', 'f', 'm']:
                 pass  # no reassignment needed
-            elif wyckoff_symbol == 'g':
+            elif wyckoff_symbol == 'g':  # *** suspect this is wrong ***
+                # probaby if abs(basis.atom_position[i, 0]) > 1e-10:
                 basis.atom_position[i, 1] = basis.atom_position[i, 0]
                 basis.atom_position[i, 2] = 0.0
             elif wyckoff_symbol == 'h':
@@ -1023,7 +1071,7 @@ def preferred_basis(basis, space_group):
 # 229
 # 230
         else:
-            raise ValueError("Space group not implemented")
+            raise ValueError(f"Space group {space_group} not implemented")
 
         return
 
@@ -2475,7 +2523,7 @@ def atom_move(space_group_number, wyckoff):
             moves[1, :] = ([0.0, 1.0, 0.0])
             moves[2, :] = ([0.0, 0.0, 1.0])
         else:
-            raise ValueError("Wyckoff Symbol for space group P1 not recognised")   
+            raise ValueError(f"Wyckoff Symbol '{wyckoff}' not valid for P1")   
     # if space_group_number == 2:
     # if space_group_number == 3:
     # if space_group_number == 4:
@@ -2497,8 +2545,8 @@ def atom_move(space_group_number, wyckoff):
             moves[0, :] = ([1.0, 0.0, 0.0])
             moves[1, :] = ([0.0, 1.0, 0.0])
             moves[2, :] = ([0.0, 0.0, 1.0])
-        elif ('a' or 'b' or 'c' or 'd') not in wyckoff:  # point symmetry -1
-            raise ValueError("Wyckoff Symbol for space group C2/c, not recognised")
+        elif wyckoff not in ('a', 'b', 'c', 'd'):
+            raise ValueError(f"Wyckoff Symbol '{wyckoff}' not valid for C2/c")
     # if space_group_number == 16:
     # if space_group_number == 17:
     # if space_group_number == 18:
@@ -2529,7 +2577,7 @@ def atom_move(space_group_number, wyckoff):
           moves[1, :] = ([0.0, 1.0, 0.0])
           moves[2, :] = ([0.0, 0.0, 1.0])
         else:
-            raise ValueError("Wyckoff Symbol for space group Cmc21 not recognised")
+            raise ValueError(f"Wyckoff Symbol '{wyckoff}' not valid for Cmc21")
     # if space_group_number == 37:
     # if space_group_number == 38:
     # if space_group_number == 39:
@@ -2555,7 +2603,18 @@ def atom_move(space_group_number, wyckoff):
     # if space_group_number == 59:
     # if space_group_number == 60:
     # if space_group_number == 61:
-    # if space_group_number == 62:
+    if space_group_number == 62:  # Pnma
+        # a: point symmetry -1, coordinate [0,0,0] & eq, no movement
+        # b: point symmetry -1, coordinate [0,0,1/2] & eq, no movement
+        if ('c') in wyckoff:  # point symmetry m, coordinate [x,1/4,z] & eq
+            moves[0, :] = ([1.0, 0.0, 0.0])
+            moves[1, :] = ([0.0, 0.0, 1.0])
+        elif ('d') in wyckoff:  # point symmetry 1, coordinate [x,y,z] & eq
+            moves[0, :] = ([1.0, 0.0, 0.0])
+            moves[1, :] = ([0.0, 1.0, 0.0])
+            moves[2, :] = ([0.0, 0.0, 1.0])
+        elif wyckoff not in ('a', 'b'):
+            raise ValueError(f"Wyckoff Symbol '{wyckoff}' not valid for Pnma")
     if space_group_number == 63:  # Cmcm
         # a: point symmetry 2/m, coordinate [0,0,0] & eq, no movement
         # b: point symmetry 2/m, coordinate [0,1/2,0] & eq, no movement
@@ -2574,8 +2633,8 @@ def atom_move(space_group_number, wyckoff):
             moves[0, :] = ([1.0, 0.0, 0.0])
             moves[1, :] = ([0.0, 1.0, 0.0])
             moves[2, :] = ([0.0, 0.0, 1.0])
-        elif ('a' or 'b' or 'd') not in wyckoff:
-            raise ValueError("Wyckoff Symbol for space group Cmc2m not recognised")
+        elif wyckoff not in ('a', 'b', 'd'):
+            raise ValueError(f"Wyckoff Symbol '{wyckoff}' not valid for Cmcm")
     if space_group_number == 64:  # Cmca
         # a: point symmetry 2/m, coordinate [0,0,0] & eq, no movement
         # b: point symmetry 2/m, coordinate [1/2,0,0] & eq, no movement
@@ -2591,8 +2650,8 @@ def atom_move(space_group_number, wyckoff):
             moves[0, :] = ([1.0, 0.0, 0.0])
             moves[1, :] = ([0.0, 1.0, 0.0])
             moves[2, :] = ([0.0, 0.0, 1.0])
-        elif ('a' or 'b' or 'c') not in wyckoff:
-            raise ValueError("Wyckoff Symbol for space group Cmca not recognised")
+        elif wyckoff not in ('a', 'b', 'c'):
+            raise ValueError(f"Wyckoff Symbol '{wyckoff}' not valid for Cmca")
     # if space_group_number == 65:
     # if space_group_number == 66:
     # if space_group_number == 67:
@@ -2614,8 +2673,8 @@ def atom_move(space_group_number, wyckoff):
             moves[0, :] = ([1.0, 0.0, 0.0])
             moves[1, :] = ([0.0, 1.0, 0.0])
             moves[2, :] = ([0.0, 0.0, 1.0])
-        elif ('a' or 'b' or 'c' or 'd') not in wyckoff:
-            raise ValueError("Wyckoff Symbol for space group Ccca not recognised")
+        elif wyckoff not in ('a', 'b', 'c', 'd'):
+            raise ValueError(f"Wyckoff Symbol '{wyckoff}' not valid for Ccca")
     # if space_group_number == 69:
     # if space_group_number == 70:
     # if space_group_number == 71:
@@ -2667,7 +2726,7 @@ def atom_move(space_group_number, wyckoff):
             moves[1, :] = ([0.0, 1.0, 0.0])
             moves[2, :] = ([0.0, 0.0, 1.0])
         else:
-            raise ValueError("Wyckoff Symbol for space group P4mm not recognised")
+            raise ValueError(f"Wyckoff Symbol '{wyckoff}' not valid for P4mm")
     # if space_group_number == 100:
     # if space_group_number == 101:
     # if space_group_number == 102:
@@ -2738,9 +2797,39 @@ def atom_move(space_group_number, wyckoff):
             moves[0, :] = ([1.0, 0.0, 0.0])
             moves[1, :] = ([0.0, 1.0, 0.0])
             moves[2, :] = ([0.0, 0.0, 1.0])
-        elif ('a' or 'b' or 'c' or 'd' or 'f') not in wyckoff:
-            raise ValueError("Wyckoff Symbol for space group I4/mmm not recognised")
-    # if space_group_number == 140:
+        elif wyckoff not in ('a', 'b', 'c', 'd', 'f'):
+            raise ValueError(f"Wyckoff Symbol '{wyckoff}' not valid for I4/mmm")
+
+    if space_group_number == 140:  # I4/m c m
+        # a: point symmetry 42, coordinate [0,0,1/4], no allowed movements
+        # b: point symmetry -42m, coordinate [0,1/2,1/4], no allowed movements
+        # c: point symmetry 4/m, coordinate [0,0,0], no allowed movements
+        # d: point symmetry mmm, coordinate [0,1/2,0], no allowed movements
+        # e: point symmetry 2/m, coordinate [1/4,1/4,1/4] & eq, no allowed movements
+        if ('f') in wyckoff:  # point symmetry 4, coordinate [0,0,z] allowed movement along z
+            moves[0, :] = ([0.0, 0.0, 1.0])
+        elif ('g') in wyckoff:  # point symmetry mm, coordinate [0,1/2,z] & eq, allowed movement along z
+            moves[0, :] = ([0.0, 0.0, 1.0])
+        elif ('h') in wyckoff:  # point symmetry mm, coordinate [x,1/2+x,0] & eq, allowed movement along [110]
+            print("Spoink")
+            moves[0, :] = ([1/np.sqrt(2), 1/np.sqrt(2), 0.0])
+        elif ('i') in wyckoff:  # point symmetry 2, coordinate [x,x,1/4] & eq, allowed movement along [110]
+            moves[0, :] = ([1/np.sqrt(2), 1/np.sqrt(2), 0.0])
+        elif ('j') in wyckoff:  # point symmetry 2, coordinate [x,0,1/4] & eq, allowed movement along [100]
+            moves[0, :] = ([1.0, 0.0, 0.0])
+        elif ('k') in wyckoff:  # point symmetry m, coordinate [x,y,0] & eq, allowed movement along [100] & [010]
+            moves[0, :] = ([1.0, 0.0, 0.0])
+            moves[1, :] = ([0.0, 1.0, 0.0])
+        elif ('l') in wyckoff:  # point symmetry m, coordinate [x,1/2+x,,z] & eq, allowed movement along [110] & [001]
+            moves[0, :] = ([1/np.sqrt(2), 1/np.sqrt(2), 0.0])
+            moves[1, :] = ([0.0, 0.0, 1.0])
+        elif ('m') in wyckoff:  # point symmetry 1, coordinate [x,y,z] & eq, allowed movement along [100], [010] & [001]
+            moves[0, :] = ([1.0, 0.0, 0.0])
+            moves[1, :] = ([0.0, 1.0, 0.0])
+            moves[2, :] = ([0.0, 0.0, 1.0])
+        elif wyckoff not in ('a', 'b', 'c', 'd', 'e', 'f'):
+            raise ValueError(f"Wyckoff Symbol '{wyckoff}' not valid for I4/mcm")
+
     # if space_group_number == 141:
     if space_group_number == 142:  # I41/acd
         # a: point symmetry -4, no allowed movements
@@ -2756,8 +2845,8 @@ def atom_move(space_group_number, wyckoff):
             moves[0, :] = ([1.0, 0.0, 0.0])
             moves[1, :] = ([0.0, 1.0, 0.0])
             moves[2, :] = ([0.0, 0.0, 1.0])
-        elif ('a' or 'b' or 'c') not in wyckoff:
-            raise ValueError("Wyckoff Symbol for space group I41/acd not recognised")
+        elif wyckoff not in ('a', 'b', 'c'):
+            raise ValueError(f"Wyckoff Symbol '{wyckoff}' not valid for I41/acd")
     # if space_group_number == 143:
     # if space_group_number == 144:
     # if space_group_number == 145:
@@ -2784,8 +2873,8 @@ def atom_move(space_group_number, wyckoff):
             moves[0, :] = ([1.0, 0.0, 0.0])
             moves[1, :] = ([0.0, 1.0, 0.0])
             moves[2, :] = ([0.0, 0.0, 1.0])
-        elif ('a' or 'b') not in wyckoff:
-            raise ValueError("Wyckoff Symbol for space group R-3c not recognised")
+        elif wyckoff not in ('a', 'b'):
+            raise ValueError(f"Wyckoff Symbol '{wyckoff}' not valid for R3c")
 
     # if space_group_number == 162:
     # if space_group_number == 163:
@@ -2805,8 +2894,8 @@ def atom_move(space_group_number, wyckoff):
             moves[0, :] = ([1.0, 0.0, 0.0])
             moves[1, :] = ([0.0, 1.0, 0.0])
             moves[2, :] = ([0.0, 0.0, 1.0])
-        elif ('a' or 'b' or 'd') not in wyckoff:
-            raise ValueError("Wyckoff Symbol for space group R-3c not recognised")
+        elif wyckoff not in ('a', 'b', 'd'):
+            raise ValueError(f"Wyckoff Symbol '{wyckoff}' not valid for R-3c")
     # if space_group_number == 168:
     # if space_group_number == 169:
     # if space_group_number == 170:
@@ -2873,8 +2962,8 @@ def atom_move(space_group_number, wyckoff):
             moves[0, :] = ([1.0, 0.0, 0.0])
             moves[1, :] = ([0.0, 1.0, 0.0])
             moves[2, :] = ([0.0, 0.0, 1.0])
-        elif ('a' or 'b' or 'c' or 'd') not in wyckoff:
-            raise ValueError("Wyckoff Symbol for space group F-43m not recognised")
+        elif wyckoff not in ('a', 'b', 'c', 'd'):
+            raise ValueError(f"Wyckoff Symbol '{wyckoff}' not valid for F-43m")
     # if space_group_number == 217:
     # if space_group_number == 218:
     # if space_group_number == 219:
@@ -2889,5 +2978,4 @@ def atom_move(space_group_number, wyckoff):
     # if space_group_number == 228:
     # if space_group_number == 229:
     # if space_group_number == 230:
-    
     return moves
