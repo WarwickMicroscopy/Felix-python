@@ -459,8 +459,7 @@ if __name__ == '__main__':
                                         basis.wyckoff[rc.atomic_sites[i]])
                 degrees_of_freedom = np.sum(np.any(rc.moves, axis=1))
                 if degrees_of_freedom == 0:
-                    raise ValueError(f"Coordinate refinement of atom \
-                                     {rc.atomic_sites[i]} not possible")
+                    raise ValueError(f"Coordinate refinement of atom {rc.atomic_sites[i]} not possible")
                 else:
                     for j in range(degrees_of_freedom):
                         # the vector of movement

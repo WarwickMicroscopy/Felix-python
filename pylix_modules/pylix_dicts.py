@@ -67,7 +67,7 @@ space_groups = {
     "Pbcm": 57, "Pnnm": 58, "Pmmn": 59, "Pbcn": 6, "Pbca": 61,
     "Pnma": 62, "Cmcm": 63, "Cmca": 64, "Cmmm": 65, "Cccm": 66,
     "Cmma": 67, "Ccca": 68, "Fmmm": 69, "Fddd": 7,
-    "Immm": 71, "Ibam": 72, "Ibca": 73, "Imma": 74, "P4": 75,
+    "Immm": 71, "Ibam": 72, "Ibca": 73, "Imma": 74, "Ibmm": 74, "P4": 75,
     "P41": 76, "P42": 77, "P43": 78, "I4": 79, "I41": 8,
     "P-4": 81, "I-4": 82, "P4/m": 83, "P42/m": 84, "P4/n": 85,
     "P42/n": 86, "I4/m": 87, "I41/a": 88, "P422": 89, "P4212": 9,

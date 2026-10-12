@@ -742,7 +742,11 @@ def preferred_basis(basis, space_group):
 # 71
 # 72
 # 73
-# 74
+        elif space_group == 74:  # I m m a
+            if wyckoff_symbol in ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l']:
+                pass  # no reassignment needed
+            else:
+                raise ValueError("Wyckoff Symbol for #68 Ccca not recognised")
 # 75
 # 76
 # 77
@@ -2409,7 +2413,7 @@ def convex(x, y, dy):
     # parabolic fit to a minimum is possible.  If so, returns the predicted
     # minimum. If not, returns the next x to check (both cases, minny=False).
     # Looks to see if we have captured a minimum (minny=True).
-
+    
     # default values to return
     dx = 0
     minny = False
@@ -2680,7 +2684,30 @@ def atom_move(space_group_number, wyckoff):
     # if space_group_number == 71:
     # if space_group_number == 72:
     # if space_group_number == 73:
-    # if space_group_number == 74:
+    if space_group_number == 74:  # Imma
+        # N.B. multiple origin choices allowed, here origin at centre (2/m) at 2/m 21/n b
+        # a: point symmetry 2/m, coordinate [0,0,0] & eq, no movement
+        # b: point symmetry 2/m, coordinate [0,0,1/2] & eq, no movement
+        # c: point symmetry 2/m, coordinate [1/4,1/4,1/4] & eq, no movement
+        # d: point symmetry 2/m, coordinate [1/4,1/4,3/4] & eq, no movement
+        if ('e') in wyckoff:  # point symmetry mm2(z), coordinate [0,1/4,z] & eq
+            moves[0, :] = ([0.0, 0.0, 1.0])
+        elif ('f') in wyckoff:  # point symmetry 2(x), coordinate [x,0,0] & eq
+            moves[0, :] = ([1.0, 0.0, 0.0])
+        elif ('g') in wyckoff:  # point symmetry 2(y), coordinate [1/4,y,1/4] & eq
+            moves[0, :] = ([0.0, 1.0, 0.0])
+        elif ('h') in wyckoff:  # point symmetry m(x), coordinate [0,y,z] & eq
+            moves[0, :] = ([0.0, 1.0, 0.0])
+            moves[1, :] = ([0.0, 0.0, 1.0])
+        elif ('i') in wyckoff:  # point symmetry m(y), coordinate [x,1/4,z] & eq
+            moves[0, :] = ([1.0, 0.0, 0.0])
+            moves[1, :] = ([0.0, 0.0, 1.0])
+        elif ('j') in wyckoff:  # point symmetry 1, coordinate [x,y,z] & eq
+            moves[0, :] = ([1.0, 0.0, 0.0])
+            moves[1, :] = ([0.0, 1.0, 0.0])
+            moves[2, :] = ([0.0, 0.0, 1.0])
+        elif wyckoff not in ('a', 'b', 'c', 'd'):
+            raise ValueError(f"Wyckoff Symbol '{wyckoff}' not valid for Ccca")
     # if space_group_number == 75:
     # if space_group_number == 76:
     # if space_group_number == 77:
