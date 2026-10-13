@@ -773,7 +773,7 @@ def refine_multi_variable(xtal, basis, cell, hkl, bloch, cbed,
 
     # make the difference 'signature' image dI/dx, if none exists
     # cbed.lacbed_sig, size [n_variables, imgX, imgY, n_out]
-    if np.sum(abs(cbed.lacbed_sig[j])) < eps:
+    if rc.correlation_type == 6 and np.sum(abs(cbed.lacbed_sig[j])) < eps:
         # we need a better message here!
         print(f"  Making mask for {variable_message(t)}")
         sim = np.copy(cbed.lacbed_sim[rc.best_t, :, :, :])
