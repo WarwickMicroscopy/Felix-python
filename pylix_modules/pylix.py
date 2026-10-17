@@ -2516,7 +2516,23 @@ def hkl_string(hkl):
     return string
 
 
-def atom_move(space_group_number, wyckoff):
+def atom_move(hm, space_group_number, wyckoff):
+    """
+    hm : string, Hermann-Maugin symbol
+    space_group_number : integer
+    wyckoff : string, wyckoff symbol
+
+    Raises
+    ------
+    ValueError
+        DESCRIPTION.
+
+    Returns
+    -------
+    moves : TYPE
+        DESCRIPTION.
+
+    """
     moves = np.zeros([3, 3])
     if space_group_number == 1:  # P1
         if ('x') in wyckoff:
@@ -2611,8 +2627,18 @@ def atom_move(space_group_number, wyckoff):
         # a: point symmetry -1, coordinate [0,0,0] & eq, no movement
         # b: point symmetry -1, coordinate [0,0,1/2] & eq, no movement
         if ('c') in wyckoff:  # point symmetry m, coordinate [x,1/4,z] & eq
-            moves[0, :] = ([1.0, 0.0, 0.0])
-            moves[1, :] = ([0.0, 0.0, 1.0])
+            # x, y or z mirror
+            if 'nma' in hm or 'cmn' in hm:
+                moves[0, :] = ([1.0, 0.0, 0.0])
+                moves[1, :] = ([0.0, 0.0, 1.0])
+            elif 'bnm' in hm or 'nam' in hm:
+                moves[0, :] = ([1.0, 0.0, 0.0])
+                moves[1, :] = ([0.0, 1.0, 0.0])
+            elif 'mnb' in hm or 'mcn' in hm:
+                moves[0, :] = ([0.0, 1.0, 0.0])
+                moves[1, :] = ([0.0, 0.0, 1.0])
+            else:
+                raise ValueError(f"{hm} not recognised as Pnma")
         elif ('d') in wyckoff:  # point symmetry 1, coordinate [x,y,z] & eq
             moves[0, :] = ([1.0, 0.0, 0.0])
             moves[1, :] = ([0.0, 1.0, 0.0])

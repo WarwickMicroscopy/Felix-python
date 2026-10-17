@@ -74,7 +74,6 @@ if __name__ == '__main__':
     cif_dict = px.read_cif('felix.cif')
     cif.update_from_dict(cif_dict)
     # ====== extract cif data into working variables
-    xtal.space_group = cif.symmetry_space_group_name_h_m
     if cif.chemical_formula_structural is not None:
         xtal.chemical_formula = cif.chemical_formula_structural
     elif cif.chemical_formula_sum is not None:
@@ -455,7 +454,8 @@ if __name__ == '__main__':
                 # allowed movements for an atom (depending on its Wyckoff
                 # symbol and space group) as row vectors with magnitude 1.
                 # ***NB NOT ALL SPACE GROUPS IMPLEMENTED ***
-                rc.moves = px.atom_move(xtal.space_group_number,
+                rc.moves = px.atom_move(xtal.space_group,
+                                        xtal.space_group_number,
                                         basis.wyckoff[rc.atomic_sites[i]])
                 degrees_of_freedom = np.sum(np.any(rc.moves, axis=1))
                 if degrees_of_freedom == 0:

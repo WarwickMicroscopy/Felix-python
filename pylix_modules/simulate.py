@@ -1698,7 +1698,7 @@ def update_variables(xtal, basis, rc):
         var = np.copy(rc.refined_variable[i])
 
         if typ[i] == 0:
-            # Structure factor refinement (handled elsewhere)
+            # Structure factor refinement (to be handled elsewhere)
             variable_check = 1
 
         elif typ[i] == 2:
@@ -1707,9 +1707,18 @@ def update_variables(xtal, basis, rc):
                 # Update position: r' = r - v*(r.v) + v*current_var
                 r_dot_v = np.dot(basis.atom_position[atom_id],
                                  rc.atom_refine_vec[i])
-                basis.atom_position[atom_id, :] = np.mod(
+                newpos = np.mod(
                     basis.atom_position[atom_id, :] + rc.atom_refine_vec[i] *
                     (var - r_dot_v), 1)
+                basis.atom_position[atom_id, :] = newpos
+
+                # ***
+                # hack for CaSrTiO3 keeping Ca & Sr together
+                # if atom_id == 0:
+                #     basis.atom_position[atom_id + 1, :] = newpos
+                #     # print('      hack: basis atom positions')
+                #     # print(basis.atom_position)
+                # ***
 
                 # error estimate - needs work
                 # Update uncertainty if independent_delta is non-zero
